@@ -1,0 +1,11 @@
+# API et services externes
+anthropic==0.40.0
+apify-client==2.4.0
+requests==2.32.3
+
+# Google Sheets (VERSION MODERNE)
+gspread==6.1.4
+google-auth==2.36.0
+
+# Configuration
+python-dotenv==1.0.1
