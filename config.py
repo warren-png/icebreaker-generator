@@ -40,11 +40,40 @@ GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "google-credentia
 # ========================================
 # 6. INFORMATIONS ENTREPRISE
 # ========================================
+
 COMPANY_INFO = {
-    "name": "Entourage Recrutement",
-    "description": "Nous aidons les entreprises à recruter les talents dans le domaine de la finance",
-    "value_proposition": "Notre expertise permet d'identifier votre future recrue avec précision"
+    # Identité
+    'name': 'Entourage Recrutement',
+    
+    # Positionnement (essence de votre différence)
+    'positioning': 'Cabinet de chasse spécialisé en recrutements critiques de profils finance à fort impact business',
+    
+    # Notre rôle unique
+    'mission': 'Sécuriser les décisions de recrutement sur des postes où une erreur est coûteuse en temps, organisation et crédibilité managériale',
+    
+    # Différenciateurs clés (3 points max)
+    'differentiators': [
+        'Approche 100% chasse ciblée et confidentielle (pas de diffusion d\'annonces)',
+        'Évaluation orientée contexte : capacité à réussir CHEZ VOUS, pas juste "savoir faire le métier"',
+        'Compréhension fine du besoin réel : priorités opérationnelles, irritants équipes, critères d\'échec'
+    ],
+    
+    # Profils recrutés (synthèse)
+    'profiles': 'DAF/CFO/RAF, Contrôle de gestion/FP&A, M&A/Corporate Dev, Transformation Finance, BI/Data Finance, MOA Finance',
+    
+    # Clients types
+    'clients': 'Groupes, ETI, filiales. Secteurs : assurance, banque, services financiers. Contextes : transformation, structuration finance, croissance externe',
+    
+    # Ce que vous NE faites PAS
+    'not_us': 'Pas de recrutement de masse, pas de start-ups early stage, pas de logiques de volume',
+    
+    # Valeur client (ce qu'ils gagnent)
+    'client_value': 'Moins d\'entretiens non pertinents, profils réellement comparables, décision plus rapide et sécurisée, meilleure tenue dans le temps',
+    
+    # Philosophie icebreaker
+    'icebreaker_philosophy': 'L\'icebreaker doit démontrer qu\'on comprend LEURS enjeux business/finance spécifiques. Notre expertise doit transparaître dans la qualité de l\'analyse, pas dans l\'auto-promotion.'
 }
+
 
 # ========================================
 # 7. PARAMÈTRES
