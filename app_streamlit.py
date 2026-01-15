@@ -378,7 +378,37 @@ with tab2:
 
 with tab3:
     st.header("📈 Historique des générations")
-    st.info("🚧 Fonctionnalité à venir : historique des générations précédentes")
+    
+    try:
+        # Connexion Google Sheets
+        sheet = connect_to_google_sheet()
+        
+        # Récupérer tous les prospects avec icebreaker
+        all_data = sheet.get_all_records()
+        
+        # Filtrer ceux qui ont un icebreaker
+        history = [row for row in all_data if row.get('icebreaker')]
+        
+        if not history:
+            st.info("📭 Aucun icebreaker généré pour le moment")
+        else:
+            st.success(f"✅ {len(history)} icebreaker(s) dans l'historique")
+            
+            # Afficher chaque entrée
+            for i, row in enumerate(reversed(history[-20:])):  # 20 derniers
+                with st.expander(f"{row.get('first_name', '')} {row.get('last_name', '')} - {row.get('company', '')}"):
+                    st.markdown("**🎯 Icebreaker :**")
+                    st.info(row.get('icebreaker', ''))
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.caption(f"🔗 [LinkedIn]({row.get('linkedin_url', '#')})")
+                    with col2:
+                        if st.button(f"📋 Copier", key=f"history_copy_{i}"):
+                            st.toast("✅ Copié !")
+    
+    except Exception as e:
+        st.error(f"❌ Erreur de chargement : {e}")
 
 # ========================================
 # FOOTER
