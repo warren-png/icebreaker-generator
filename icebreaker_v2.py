@@ -110,14 +110,14 @@ def scrape_linkedin_profile(apify_client, linkedin_url):
         return None
 
 
-def scrape_linkedin_posts(apify_client, linkedin_url):
-    """Scrape les 10 derniers posts LinkedIn du profil"""
-    print(f"📝 Scraping des posts LinkedIn...")
+def scrape_linkedin_posts(apify_client, linkedin_url, limit=5):
+    """Scrape les posts LinkedIn du profil avec limite paramétrable"""
+    print(f"📝 Scraping de {limit} posts LinkedIn...")
     
     try:
         run_input = {
             "urls": [linkedin_url],
-            "limit": 5
+            "limit": limit
         }
         
         print(f"   Scraping posts de : {linkedin_url}")
@@ -132,7 +132,7 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
                 "likes": item.get("numReactions", 0)
             })
             
-            if len(posts) >= 5:
+            if len(posts) >= limit:
                 break
         
         print(f"   ✅ {len(posts)} post(s) récupéré(s)")
@@ -142,10 +142,9 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
         print(f"   ⚠️ Erreur scraping posts : {e}")
         return []
 
-
-def scrape_company_posts(apify_client, company_name):
-    """Scrape les 10 derniers posts de l'entreprise"""
-    print(f"🏢 Scraping des posts de l'entreprise...")
+def scrape_company_posts(apify_client, company_name, limit=5):
+    """Scrape les posts de l'entreprise avec limite paramétrable"""
+    print(f"🏢 Scraping de {limit} posts de l'entreprise...")
     
     try:
         company_slug = company_name.lower().replace(' ', '-')
@@ -153,7 +152,7 @@ def scrape_company_posts(apify_client, company_name):
         
         run_input = {
             "urls": [company_url],
-            "limit": 5
+            "limit": limit
         }
         
         print(f"   Scraping posts de : {company_url}")
@@ -167,7 +166,7 @@ def scrape_company_posts(apify_client, company_name):
                 "date": item.get("date", "")
             })
             
-            if len(posts) >= 5:
+            if len(posts) >= limit:
                 break
         
         print(f"   ✅ {len(posts)} post(s) entreprise récupéré(s)")
@@ -176,7 +175,6 @@ def scrape_company_posts(apify_client, company_name):
     except Exception as e:
         print(f"   ⚠️ Erreur scraping entreprise : {e}")
         return []
-
 
 def scrape_company_profile(apify_client, company_name):
     """Scrape le profil complet de l'entreprise"""
@@ -724,14 +722,14 @@ def main():
                 linkedin_url = prospect['linkedin_url']
                 print(f"🔗 URL LinkedIn fourni : {linkedin_url}\n")
             
-            # 2. Scraping LinkedIn
+            # 2. Scraping LinkedIn - PHASE 1 : 5 posts
             profile_data = scrape_linkedin_profile(apify_client, linkedin_url)
             time.sleep(3)
             
-            posts_data = scrape_linkedin_posts(apify_client, linkedin_url)
+            posts_data = scrape_linkedin_posts(apify_client, linkedin_url, limit=5)
             time.sleep(3)
             
-            company_posts = scrape_company_posts(apify_client, prospect['company'])
+            company_posts = scrape_company_posts(apify_client, prospect['company'], limit=5)
             time.sleep(3)
             
             company_profile = scrape_company_profile(apify_client, prospect['company'])
@@ -750,7 +748,8 @@ def main():
             )
             time.sleep(2)
             
-            # 4. Extraction des hooks
+            # 4. Extraction des hooks - TENTATIVE 1 avec 5 posts
+            print(f"🎯 Tentative 1 : Extraction hooks avec 5 posts...")
             hooks_json = extract_hooks_with_claude(
                 profile_data, 
                 posts_data, 
@@ -762,7 +761,32 @@ def main():
             )
             time.sleep(2)
             
-            # 5. Génération icebreaker
+            # 5. SI AUCUN HOOK TROUVÉ → Scraper 5 posts supplémentaires
+            if hooks_json == "NOT_FOUND":
+                print(f"⚠️  Aucun hook trouvé avec 5 posts")
+                print(f"🔄 Tentative 2 : Scraping de 5 posts supplémentaires...")
+                
+                # Scraper 5 posts supplémentaires (total = 10)
+                additional_posts = scrape_linkedin_posts(apify_client, linkedin_url, limit=10)
+                time.sleep(3)
+                
+                additional_company_posts = scrape_company_posts(apify_client, prospect['company'], limit=10)
+                time.sleep(3)
+                
+                # Réessayer l'extraction avec 10 posts
+                print(f"🎯 Tentative 2 : Extraction hooks avec 10 posts...")
+                hooks_json = extract_hooks_with_claude(
+                    profile_data, 
+                    additional_posts,  # 10 posts au lieu de 5
+                    additional_company_posts,  # 10 posts au lieu de 5
+                    company_profile,
+                    web_results,
+                    f"{prospect['first_name']} {prospect['last_name']}",
+                    prospect['company']
+                )
+                time.sleep(2)
+            
+            # 6. Génération icebreaker
             icebreaker = generate_advanced_icebreaker(prospect, hooks_json)
             
             # 6. Mise à jour Google Sheet
