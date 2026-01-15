@@ -117,7 +117,7 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
     try:
         run_input = {
             "urls": [linkedin_url],
-            "limit": 10
+            "limit": 5
         }
         
         print(f"   Scraping posts de : {linkedin_url}")
@@ -132,7 +132,7 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
                 "likes": item.get("numReactions", 0)
             })
             
-            if len(posts) >= 10:
+            if len(posts) >= 5:
                 break
         
         print(f"   ✅ {len(posts)} post(s) récupéré(s)")
@@ -167,7 +167,7 @@ def scrape_company_posts(apify_client, company_name):
                 "date": item.get("date", "")
             })
             
-            if len(posts) >= 10:
+            if len(posts) >= 5:
                 break
         
         print(f"   ✅ {len(posts)} post(s) entreprise récupéré(s)")
