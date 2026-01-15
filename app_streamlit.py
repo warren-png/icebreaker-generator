@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 from icebreaker_v2 import *
 import time
+import json
 
 # Configuration de la page
 st.set_page_config(
@@ -358,20 +359,52 @@ with tab2:
                 try:
                     sheet = connect_to_google_sheet()
                     
-                    for result in st.session_state.results:
-                        if result['status'] == 'success' and 'row_number' in result:
-                            update_sheet(
-                                sheet,
-                                result['row_number'],
-                                result['linkedin_url'],
-                                result['hooks'],
-                                result['icebreaker']
-                            )
+                    # Trouver la première ligne vide
+                    all_values = sheet.get_all_values()
+                    next_row = len(all_values) + 1
                     
-                    st.success("✅ Sauvegardé dans Google Sheet !")
+                    saved_count = 0
+                    for result in st.session_state.results:
+                        if result['status'] == 'success':
+                            # Préparer les données
+                            try:
+                                if result['hooks'] != 'NOT_FOUND':
+                                    hooks_data = json.loads(result['hooks'])
+                                    notable = json.dumps(hooks_data, ensure_ascii=False)[:1500]
+                                else:
+                                    notable = "Aucun hook pertinent trouvé"
+                            except:
+                                notable = str(result['hooks'])[:1500]
+                            
+                            # Sauvegarder dans la ligne suivante
+                            values = [[
+                                result['first_name'],      # A
+                                result['last_name'],       # B
+                                result['company'],         # C
+                                result['linkedin_url'],    # D
+                                "",                        # E (company_sector)
+                                "",                        # F (joined_date)
+                                notable,                   # G (hook)
+                                "",                        # H (certifications)
+                                "",                        # I (partners)
+                                "",                        # J (events)
+                                result['icebreaker']       # K (icebreaker)
+                            ]]
+                            
+                            # Écrire la ligne
+                            range_name = f'A{next_row}:K{next_row}'
+                            sheet.update(range_name, values)
+                            
+                            next_row += 1
+                            saved_count += 1
+                            time.sleep(1)  # Éviter les rate limits
+                    
+                    st.success(f"✅ {saved_count} icebreaker(s) sauvegardé(s) dans Google Sheet !")
+                    
                 except Exception as e:
                     st.error(f"❌ Erreur : {e}")
-
+                    import traceback
+                    st.error(traceback.format_exc())
 # ========================================
 # TAB 3 : HISTORIQUE
 # ========================================
