@@ -380,6 +380,20 @@ with tab3:
     st.header("📈 Historique des générations")
     
     try:
+        # Vérifier et créer les credentials si on est sur Streamlit Cloud
+        try:
+            import streamlit as st
+            if "gcp_service_account" in st.secrets:
+                import json
+                import os
+                
+                # Créer le fichier credentials s'il n'existe pas
+                if not os.path.exists("google-credentials.json"):
+                    with open("google-credentials.json", "w") as f:
+                        json.dump(dict(st.secrets["gcp_service_account"]), f)
+        except:
+            pass
+        
         # Connexion Google Sheets
         sheet = connect_to_google_sheet()
         
