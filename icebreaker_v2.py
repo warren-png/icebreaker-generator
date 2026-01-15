@@ -85,7 +85,7 @@ def scrape_linkedin_profile(apify_client, linkedin_url):
     
     try:
         run_input = {
-            "profileUrls": [linkedin_url],  # ✅ CORRIGÉ
+            "profileUrls": [linkedin_url],
             "searchForEmail": False
         }
         
@@ -132,7 +132,6 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
                 "likes": item.get("numReactions", 0)
             })
             
-            # ✅ CORRIGÉ : Limiter à 10 posts maximum
             if len(posts) >= 10:
                 break
         
@@ -168,7 +167,6 @@ def scrape_company_posts(apify_client, company_name):
                 "date": item.get("date", "")
             })
             
-            # ✅ CORRIGÉ : Limiter à 10 posts maximum
             if len(posts) >= 10:
                 break
         
@@ -189,7 +187,7 @@ def scrape_company_profile(apify_client, company_name):
         company_url = f"https://www.linkedin.com/company/{company_slug}"
         
         run_input = {
-            "profileUrls": [company_url]  # ✅ CORRIGÉ
+            "profileUrls": [company_url]
         }
         
         print(f"   Scraping profil : {company_url}")
@@ -226,17 +224,13 @@ def web_search_prospect(first_name, last_name, company, title=""):
         return []
     
     try:
-        # Construire une requête stricte pour éviter les homonymes
         query = f'"{first_name} {last_name}" "{company}"'
         if title:
             query += f' "{title}"'
-        
-        # Limiter aux 2 dernières années
         query += ' after:2023'
         
         print(f"   Requête : {query}")
         
-        # Appel API Serper
         url = "https://google.serper.dev/search"
         headers = {
             'X-API-KEY': SERPER_API_KEY,
@@ -252,10 +246,8 @@ def web_search_prospect(first_name, last_name, company, title=""):
         if response.status_code == 200:
             results = response.json()
             
-            # Filtrer les résultats pour validation anti-homonymes
             filtered_results = []
             for item in results.get('organic', [])[:MAX_SEARCH_RESULTS]:
-                # Vérifier que l'entreprise est mentionnée dans le résultat
                 snippet = (item.get('snippet', '') + ' ' + item.get('title', '')).lower()
                 if company.lower() in snippet:
                     filtered_results.append({
@@ -393,8 +385,6 @@ Réponds UNIQUEMENT avec le JSON ou "NOT_FOUND"."""
         )
         
         hooks_response = message.content[0].text.strip()
-        
-        # Nettoyer la réponse (enlever les ```json si présents)
         hooks_response = hooks_response.replace('```json', '').replace('```', '').strip()
         
         print(f"   ✅ Hooks extraits")
@@ -424,7 +414,7 @@ def generate_advanced_icebreaker(prospect_data, hooks_json):
     except:
         hooks_data = {"status": "NOT_FOUND"}
     
-    # ✅ PROMPT OPTIMISÉ - Avec insight, profondeur ET courtoisie professionnelle
+    # ✅ PROMPT CORRIGÉ ET COMPLET
     prompt = f"""Tu es un expert en prospection B2B avec 15 ans d'expérience. Tu dois rédiger un message LinkedIn qui démontre une VRAIE compréhension des enjeux business du prospect, avec un ton PROFESSIONNEL et COURTOIS.
 
 CONTEXTE PROSPECT :
@@ -435,13 +425,38 @@ CONTEXTE PROSPECT :
 HOOKS IDENTIFIÉS :
 {json.dumps(hooks_data, indent=2, ensure_ascii=False)}
 
-NOTRE EXPERTISE :
-- {COMPANY_INFO['name']} : spécialistes du recrutement finance
-- Notre valeur : identifier LES bons profils financiers pour chaque contexte
+NOTRE POSITIONNEMENT ET EXPERTISE :
+
+Cabinet : {COMPANY_INFO['name']}
+Mission : {COMPANY_INFO['mission']}
+
+NOS DIFFÉRENCIATEURS (ce qui nous rend uniques) :
+{chr(10).join(f"• {d}" for d in COMPANY_INFO['differentiators'])}
+
+PROFILS QUE NOUS RECRUTONS :
+{COMPANY_INFO['profiles']}
+
+CLIENTS TYPES :
+{COMPANY_INFO['clients']}
+
+VALEUR CLIENT :
+{COMPANY_INFO['client_value']}
 
 ═══════════════════════════════════════════════════════════════════
 
-🎯 OBJECTIF : Expert courtois qui comprend les enjeux (pas un pote ni un vendeur)
+🎯 RÈGLE D'OR POUR L'ICEBREAKER :
+
+{COMPANY_INFO['icebreaker_philosophy']}
+
+Le message doit parler de LEURS enjeux (transformation, structuration, 
+performance, gouvernance), PAS de notre processus de recrutement.
+
+Notre expertise en recrutement finance critique doit transparaître dans :
+✅ La QUALITÉ de notre compréhension de leurs défis
+✅ La PERTINENCE de notre analyse de leur contexte
+✅ L'INTELLIGENCE de notre question finale
+
+❌ PAS dans une présentation de nos services
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -460,6 +475,89 @@ TON REQUIS :
 
 ═══════════════════════════════════════════════════════════════════
 
+🎯 TECHNIQUES AVANCÉES D'ICEBREAKERS (Finance)
+
+═══════════════════════════════════════════════════════════════════
+
+ANATOMIE D'UN BON ICEBREAKER :
+
+Un excellent icebreaker suit toujours cette logique :
+→ OBSERVATION (fait précis et incontestable)
+→ IMPLICATION (pourquoi c'est important pour EUX)
+→ TRANSITION (lien avec leur besoin de recrutement)
+
+Exemple :
+❌ Faible : "J'ai vu que vous recrutez un consolideur."
+✅ Fort : "J'ai vu que vous recrutez un consolideur en pleine période de clôture annuelle, ce qui doit mettre une pression énorme sur vos équipes actuelles."
+
+═══════════════════════════════════════════════════════════════════
+
+3 APPROCHES STRATÉGIQUES À UTILISER :
+
+═══════════════════════════════════════════════════════════════════
+
+📊 APPROCHE 1 : "PEER INSIGHT" (Preuve sociale masquée)
+
+Principe : Montrer qu'on voit ce que font leurs pairs du marché
+Position : Informateur, pas vendeur
+
+Structure : "En discutant avec plusieurs [Fonction] dans [Secteur], je note que [Tendance], ce qui rend [Situation] complexe."
+
+Exemple :
+"Bonjour Marc, en discutant avec plusieurs DAF dans le secteur de l'assurance, je note une tension forte sur les profils IFRS 17 depuis l'entrée en vigueur. Est-ce un frein que vous rencontrez aussi pour votre recherche actuelle ?"
+
+Quand l'utiliser : Quand le hook parle d'un poste difficile à pourvoir ou d'un contexte de pénurie
+
+═══════════════════════════════════════════════════════════════════
+
+🔬 APPROCHE 2 : "SPÉCIFICITÉ RADICALE" (Anti-généraliste)
+
+Principe : Démontrer qu'on parle leur langage technique
+Mécanique : Utiliser un terme technique TRÈS précis dès le début
+
+Structure : "La double compétence [Compétence A] + [Compétence B] est rare sur le marché, mais souvent critique pour [Objectif Business]."
+
+Exemple :
+"Bonjour Sophie, trouver quelqu'un qui maîtrise à la fois SAP S/4HANA et la consolidation statutaire est un vrai casse-tête. J'imagine que ce double filtre rallonge significativement vos délais de recrutement ?"
+
+Quand l'utiliser : Quand le hook mentionne un projet technique, une transformation ERP, une compétence rare
+
+═══════════════════════════════════════════════════════════════════
+
+💡 APPROCHE 3 : "CHALLENGER" (Contre-intuitif)
+
+Principe : Soulever une hypothèse contre-intuitive (avec tact)
+Mécanique : "Vous cherchez X, mais le marché suggère Y"
+
+Structure : "Souvent, [Situation] vient du fait que [Raison], plutôt que de [Idée reçue]."
+
+Exemple :
+"Bonjour Pierre, votre recherche de Contrôleur de Gestion Industriel est ouverte depuis 6 semaines. Sur ce type de profil très pénurique, attendre le 'candidat parfait' coûte souvent plus cher en perte de productivité que de former un profil junior à fort potentiel. Avez-vous envisagé cette seconde option ?"
+
+Quand l'utiliser : Quand le hook montre une recherche qui dure, un profil introuvable, ou un contexte d'urgence
+
+⚠️ ATTENTION : Approche risquée, à utiliser UNIQUEMENT si :
+- Le prospect est senior (CFO, DAF)
+- Le ton reste respectueux ("Avez-vous envisagé" pas "Vous devriez")
+- L'hypothèse est crédible et basée sur une vraie tension de marché
+
+═══════════════════════════════════════════════════════════════════
+
+📋 CHECKLIST : QUELLE APPROCHE UTILISER ?
+
+Analysez le hook et choisissez LA MEILLEURE approche :
+
+Si le hook mentionne :
+→ Un poste ouvert / difficile à pourvoir → PEER INSIGHT
+→ Une compétence technique rare / transformation → SPÉCIFICITÉ RADICALE
+→ Une recherche qui dure / profil introuvable → CHALLENGER (avec prudence)
+→ Un projet / contexte business → PEER INSIGHT ou SPÉCIFICITÉ
+
+Ne forcez JAMAIS une approche si elle ne colle pas au hook.
+Privilégiez toujours la cohérence sur la "technique".
+
+═══════════════════════════════════════════════════════════════════
+
 STRUCTURE OBLIGATOIRE (70-80 mots) :
 
 **PARTIE 1 : Salutation + Accroche avec insight [25-30 mots]**
@@ -467,24 +565,15 @@ STRUCTURE OBLIGATOIRE (70-80 mots) :
 → Utiliser le hook + ajouter un INSIGHT sur ce que cela implique
 → Ton professionnel mais pas pompeux
 
-❌ "300 communes partenaires, ça veut dire gérer la scalabilité des process tout en gardant la proximité terrain..."
-✅ "Bonjour Julien, 300 communes partenaires représente un beau défi de scalabilité tout en maintenant la proximité opérationnelle."
-
 **PARTIE 2 : Défi business spécifique [30-35 mots]**
 → Identifier UN défi concret et réaliste lié au hook
 → Être SPÉCIFIQUE avec vocabulaire métier précis
 → Formuler avec politesse ("j'imagine", "je suppose")
 
-❌ "Entre la gestion multi-sites et les cycles de facturation publics, je suppose que le profil du DAF/RAF est crucial pour structurer tout ça ?"
-✅ "J'imagine qu'entre la gestion multi-sites et les spécificités des cycles de facturation publics, le rôle du DAF/RAF devient structurant."
-
 **PARTIE 3 : Question d'expert courtoise [15-20 mots]**
 → Question qui montre notre expertise
 → Formulée avec respect ("Pourriez-vous", "Vous privilégiez", "Comment")
 → Sur leur APPROCHE, pas leurs besoins
-
-❌ "Vous privilégiez plutôt un profil cabinet conseil ou quelqu'un du public ?"
-✅ "Privilégiez-vous plutôt un profil issu du conseil ou du secteur public ?"
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -510,28 +599,13 @@ RÈGLES IMPÉRATIVES :
 
 EXEMPLES EXCELLENTS (ton professionnel et courtois) :
 
-📌 Contexte : Scale-up tech qui lève 20M€
-
-❌ Version trop décontractée : 
-"20M€ levés, ça change la donne côté reporting investisseurs... Vous partez plutôt sur un profil scale-up ou grand groupe ?"
-
-✅ Version professionnelle : 
+📌 Scale-up tech qui lève 20M€ :
 "Bonjour Marc, une levée de 20M€ implique naturellement un renforcement du reporting investisseurs et une structuration du FP&A en vue d'une prochaine levée. J'imagine que le profil du VP Finance devient stratégique dans ce contexte. Privilégiez-vous plutôt une expertise scale-up ou grande entreprise ?"
 
-📌 Contexte : Ouverture de 50 nouvelles agences
-
-❌ Version trop décontractée :
-"50 agences en 18 mois, le sujet n'est plus juste le recrutement mais l'industrialisation du modèle financier. Vous privilégiez quel type de profil pour piloter ça ?"
-
-✅ Version professionnelle :
+📌 Ouverture de 50 nouvelles agences :
 "Bonjour Sarah, 50 agences en 18 mois suppose une industrialisation du modèle financier bien au-delà des enjeux de recrutement classiques. Entre la gestion de trésorerie multi-sites et la consolidation comptable, j'imagine que le profil pour piloter ces sujets est clé. Comment orientez-vous vos recherches sur ce type de poste ?"
 
-📌 Contexte : Certification obtenue / nouveau partenariat
-
-❌ Version trop décontractée :
-"La certif ISO change souvent la donne niveau contrôle de gestion. Entre la traçabilité renforcée et les nouveaux KPIs à monitorer, vous avez renforcé l'équipe finance ou c'est géré en interne ?"
-
-✅ Version professionnelle :
+📌 Certification obtenue / nouveau partenariat :
 "Bonjour Pierre, une certification ISO implique généralement un renforcement du contrôle de gestion, notamment sur les aspects de traçabilité et de suivi des KPIs. J'imagine que cela a pu vous amener à revoir l'organisation de l'équipe finance. Avez-vous privilégié un renforcement interne ou des recrutements externes ?"
 
 ═══════════════════════════════════════════════════════════════════
@@ -590,21 +664,18 @@ def update_sheet(sheet, row_number, linkedin_url, hooks_json, icebreaker):
         except:
             notable = str(hooks_json)[:1500]
         
-        # ✅ CORRIGÉ : Mise à jour en BATCH (1 seul appel API au lieu de 3)
-        # Colonnes D, E, F, G, H, I, J, K
-        # On met à jour D (linkedin), G (hooks), K (icebreaker)
+        # Mise à jour en BATCH
         values = [[
             linkedin_url,  # D
-            "",            # E (vide)
-            "",            # F (vide)
+            "",            # E
+            "",            # F
             notable,       # G
-            "",            # H (vide)
-            "",            # I (vide)
-            "",            # J (vide)
+            "",            # H
+            "",            # I
+            "",            # J
             icebreaker     # K
         ]]
         
-        # Mise à jour en une fois
         range_name = f'D{row_number}:K{row_number}'
         sheet.update(range_name, values)
         
@@ -612,7 +683,6 @@ def update_sheet(sheet, row_number, linkedin_url, hooks_json, icebreaker):
         
     except Exception as e:
         print(f"   ❌ Erreur mise à jour : {e}\n")
-        # Logger l'erreur pour debug
         import traceback
         traceback.print_exc()
 
