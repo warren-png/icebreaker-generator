@@ -9,3 +9,6 @@ google-auth==2.36.0
 
 # Configuration
 python-dotenv==1.0.1
+
+# Web scraping
+beautifulsoup4==4.12.3

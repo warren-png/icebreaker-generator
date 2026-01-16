@@ -1,10 +1,12 @@
 """
 Application Web Streamlit pour Icebreaker Generator
+VERSION MODIFIÉE - Avec support des annonces de poste
 """
 
 import streamlit as st
 import pandas as pd
 from icebreaker_v2 import *
+from scraper_job_posting import scrape_job_posting, format_job_data_for_prompt
 import time
 import json
 
@@ -41,6 +43,7 @@ with st.sidebar:
     st.subheader("Options de scraping")
     enable_web_search = st.checkbox("Recherche Web", value=True)
     enable_company_scraping = st.checkbox("Scraper l'entreprise", value=True)
+    enable_job_scraping = st.checkbox("🆕 Scraper l'annonce", value=True, help="Active le scraping des annonces de poste")
     
     st.divider()
     
@@ -58,6 +61,7 @@ with st.sidebar:
     st.subheader("ℹ️ Informations")
     st.info("💰 Coût estimé : ~0.05€ par prospect")
     st.info("⏱️ Temps moyen : ~50s par prospect")
+    st.success("🆕 Support HelloWork, Apec, LinkedIn Jobs")
 
 # ========================================
 # MAIN CONTENT
@@ -110,6 +114,14 @@ with tab1:
             placeholder="https://www.linkedin.com/in/jean-dupont/\nhttps://www.linkedin.com/in/marie-martin/"
         )
         
+        # 🆕 NOUVEAU CHAMP
+        job_posting_urls = st.text_area(
+            "🆕 URLs Annonces de poste (une par ligne) - Optionnel",
+            height=150,
+            placeholder="https://www.hellowork.com/...\nhttps://www.apec.fr/...\nhttps://www.linkedin.com/jobs/...",
+            help="Ajoutez les URLs des annonces HelloWork, Apec ou LinkedIn Jobs pour enrichir l'icebreaker"
+        )
+        
     else:
         # Import Google Sheet
         st.info("🔗 L'outil va se connecter à votre Google Sheet configuré dans config.py")
@@ -129,6 +141,7 @@ with tab1:
                 last_names_list = [x.strip() for x in last_names.split('\n') if x.strip()]
                 companies_list = [x.strip() for x in companies.split('\n') if x.strip()]
                 urls_list = [x.strip() for x in linkedin_urls.split('\n') if x.strip()] if linkedin_urls else []
+                job_urls_list = [x.strip() for x in job_posting_urls.split('\n') if x.strip()] if job_posting_urls else []
                 
                 # Validation
                 if not first_names_list or not last_names_list or not companies_list:
@@ -146,7 +159,8 @@ with tab1:
                         'first_name': first_names_list[i],
                         'last_name': last_names_list[i],
                         'company': companies_list[i],
-                        'linkedin_url': urls_list[i] if i < len(urls_list) else ''
+                        'linkedin_url': urls_list[i] if i < len(urls_list) else '',
+                        'job_posting_url': job_urls_list[i] if i < len(job_urls_list) else ''
                     })
             
             else:
@@ -180,7 +194,7 @@ with tab1:
                 start_time = time.time()
                 
                 try:
-                    # URL LinkedIn
+                    # 1. URL LinkedIn
                     if not prospect.get('linkedin_url'):
                         linkedin_url = search_linkedin_profile(
                             prospect['first_name'],
@@ -190,7 +204,13 @@ with tab1:
                     else:
                         linkedin_url = prospect['linkedin_url']
                     
-                    # Scraping
+                    # 2. Scraping annonce (si URL fournie et option activée)
+                    job_posting_data = None
+                    if enable_job_scraping and prospect.get('job_posting_url'):
+                        job_posting_data = scrape_job_posting(prospect['job_posting_url'])
+                        time.sleep(2)
+                    
+                    # 3. Scraping LinkedIn
                     profile_data = scrape_linkedin_profile(apify_client, linkedin_url)
                     time.sleep(2)
                     
@@ -206,7 +226,7 @@ with tab1:
                         company_posts = []
                         company_profile = None
                     
-                    # Recherche web
+                    # 4. Recherche web
                     if enable_web_search:
                         title = ""
                         if profile_data and profile_data.get('experiences'):
@@ -222,7 +242,7 @@ with tab1:
                     else:
                         web_results = []
                     
-                    # Extraction hooks
+                    # 5. Extraction hooks
                     hooks_json = extract_hooks_with_claude(
                         profile_data,
                         posts_data,
@@ -234,8 +254,8 @@ with tab1:
                     )
                     time.sleep(2)
                     
-                    # Génération icebreaker
-                    icebreaker = generate_advanced_icebreaker(prospect, hooks_json)
+                    # 6. Génération icebreaker (avec données annonce si disponibles)
+                    icebreaker = generate_advanced_icebreaker(prospect, hooks_json, job_posting_data)
                     
                     # Calculer le temps
                     elapsed_time = time.time() - start_time
@@ -246,6 +266,8 @@ with tab1:
                         'last_name': prospect['last_name'],
                         'company': prospect['company'],
                         'linkedin_url': linkedin_url,
+                        'job_posting_url': prospect.get('job_posting_url', ''),
+                        'job_posting_data': job_posting_data,
                         'hooks': hooks_json,
                         'icebreaker': icebreaker,
                         'time': elapsed_time,
@@ -258,6 +280,8 @@ with tab1:
                         'last_name': prospect['last_name'],
                         'company': prospect['company'],
                         'linkedin_url': prospect.get('linkedin_url', ''),
+                        'job_posting_url': prospect.get('job_posting_url', ''),
+                        'job_posting_data': None,
                         'hooks': '',
                         'icebreaker': f"Erreur : {str(e)}",
                         'time': 0,
@@ -306,13 +330,22 @@ with tab2:
                     st.markdown("**🎯 Icebreaker généré :**")
                     st.info(result['icebreaker'])
                     
-                    col1, col2 = st.columns(2)
+                    col1, col2, col3 = st.columns(3)
                     with col1:
                         if st.button(f"📋 Copier", key=f"copy_{i}"):
                             st.toast("✅ Copié dans le presse-papier !")
                     
                     with col2:
                         st.markdown(f"🔗 [Voir le profil LinkedIn]({result['linkedin_url']})")
+                    
+                    with col3:
+                        if result.get('job_posting_url'):
+                            st.markdown(f"📄 [Voir l'annonce]({result['job_posting_url']})")
+                    
+                    # Annonce extraite
+                    if result.get('job_posting_data'):
+                        with st.expander("📋 Données de l'annonce extraites"):
+                            st.json(result['job_posting_data'])
                     
                     # Hooks
                     if result['hooks'] and result['hooks'] != 'NOT_FOUND':
@@ -339,6 +372,7 @@ with tab2:
                     'Nom': r['last_name'],
                     'Entreprise': r['company'],
                     'LinkedIn': r['linkedin_url'],
+                    'Annonce': r.get('job_posting_url', ''),
                     'Icebreaker': r['icebreaker'],
                     'Statut': r['status']
                 }
@@ -405,6 +439,7 @@ with tab2:
                     st.error(f"❌ Erreur : {e}")
                     import traceback
                     st.error(traceback.format_exc())
+
 # ========================================
 # TAB 3 : HISTORIQUE
 # ========================================
@@ -462,4 +497,4 @@ with tab3:
 # ========================================
 
 st.divider()
-st.caption("🎯 Icebreaker Generator v1.0 - Propulsé par Claude Sonnet 4")
+st.caption("🎯 Icebreaker Generator v2.0 - Propulsé par Claude Sonnet 4 | 🆕 Support Annonces de poste")

@@ -11,6 +11,8 @@ from config import *
 import time
 import json
 import requests
+from scraper_job_posting import scrape_job_posting, format_job_data_for_prompt
+
 
 # ========================================
 # PARTIE 1 : CONNEXION À GOOGLE SHEETS
@@ -493,8 +495,8 @@ Réponds UNIQUEMENT avec le JSON ou "NOT_FOUND"."""
 # PARTIE 5 : GÉNÉRATION ICEBREAKER
 # ========================================
 
-def generate_advanced_icebreaker(prospect_data, hooks_json):
-    """Génère un icebreaker ultra-personnalisé basé sur les hooks"""
+def generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data=None):
+    """Génère un icebreaker ultra-personnalisé basé sur les hooks ET l'annonce"""
     print(f"✍️  Génération de l'icebreaker...")
     
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -508,6 +510,12 @@ def generate_advanced_icebreaker(prospect_data, hooks_json):
     except:
         hooks_data = {"status": "NOT_FOUND"}
     
+    # 🆕 Préparer les données de l'annonce
+    job_posting_context = ""
+    if job_posting_data:
+        job_posting_context = format_job_data_for_prompt(job_posting_data)
+        print(f"   ✅ Annonce intégrée : {job_posting_data.get('title', 'N/A')[:50]}...")
+    
     # ✅ PROMPT CORRIGÉ ET COMPLET
     prompt = f"""Tu es un expert en prospection B2B avec 15 ans d'expérience. Tu dois rédiger un message LinkedIn qui démontre une VRAIE compréhension des enjeux business du prospect, avec un ton PROFESSIONNEL et COURTOIS.
 
@@ -515,6 +523,14 @@ CONTEXTE PROSPECT :
 - Prénom : {prospect_data['first_name']}
 - Nom : {prospect_data['last_name']}
 - Entreprise : {prospect_data['company']}
+{f'''
+🆕 ANNONCE DE POSTE DISPONIBLE :
+{job_posting_context}
+
+RÈGLE IMPORTANTE : Cette annonce révèle le BESOIN EXPLICITE de l'entreprise.
+Si l'annonce est présente, utilisez-la comme BASE pour identifier les enjeux business.
+Exemple : Si l'annonce mentionne "transformation ERP SAP", l'icebreaker doit parler de transformation digitale finance.
+''' if job_posting_data else ''}
 
 HOOKS IDENTIFIÉS :
 {json.dumps(hooks_data, indent=2, ensure_ascii=False)}
@@ -656,8 +672,88 @@ STRUCTURE OBLIGATOIRE (70-80 mots) :
 
 **PARTIE 1 : Salutation + Accroche avec insight [25-30 mots]**
 → Toujours commencer par "Bonjour [Prénom],"
-→ Utiliser le hook + ajouter un INSIGHT sur ce que cela implique
-→ Ton professionnel mais pas pompeux
+
+SI UN HOOK PERTINENT EXISTE :
+→ Utiliser le hook + ajouter un INSIGHT BUSINESS LOGIQUE
+→ Le lien hook → insight doit être ÉVIDENT et NATUREL
+→ NE JAMAIS forcer un lien artificiel
+
+SI AUCUN HOOK OU HOOK TROP FAIBLE :
+→ Partir directement du CONTEXTE ENTREPRISE/POSTE
+→ Identifier un défi business réel lié à leur fonction
+→ Exemple : "En tant que [Poste] chez [Entreprise], j'imagine que [Défi business spécifique]..."
+
+⚠️ GESTION DES HOOKS FAIBLES OU ABSENTS
+
+═══════════════════════════════════════════════════════════════════
+
+SI le hook est :
+- Un événement spectateur (TEDx, conférence écoutée, livre lu)
+- Un accomplissement vague ou ancien (> 1 an)
+- Une information sans lien logique avec la fonction finance
+
+ALORS → IGNORER LE HOOK et construire l'icebreaker sur :
+
+1. **Le contexte entreprise** : transformation, expansion, levée, acquisition
+2. **Le poste/fonction** : défis spécifiques du rôle
+3. **Le secteur** : enjeux métier (finance, tech, industrie, etc.)
+
+═══════════════════════════════════════════════════════════════════
+
+EXEMPLES DE HOOKS À IGNORER :
+
+❌ "A assisté au TEDx sur les rêves"
+→ Pas pertinent pour la finance, spectateur
+
+❌ "A partagé un article sur l'IA"
+→ Trop vague, pas son contenu
+
+❌ "A félicité son équipe pour un projet"
+→ Pas son accomplissement direct
+
+DANS CES CAS → Construire sur le contexte :
+
+✅ "En tant qu'Internal Audit Manager chez CFAO, j'imagine que 
+l'expansion africaine du groupe complexifie vos enjeux de gouvernance 
+multi-pays..."
+
+✅ "Chez CFAO, l'équilibre entre contrôle central et autonomie des 
+filiales africaines suppose des profils audit capables de..."
+
+═══════════════════════════════════════════════════════════════════
+
+EXEMPLES DE BONS ICEBREAKERS SANS HOOK :
+
+📌 Internal Audit Manager, groupe en expansion :
+"Bonjour Philippe, en tant qu'Internal Audit Manager chez CFAO, 
+j'imagine que l'expansion du groupe en Afrique complexifie 
+significativement vos enjeux de gouvernance et de contrôle interne 
+multi-pays. Entre harmonisation des process et adaptation aux 
+spécificités locales, les profils doivent allier rigueur technique 
+et compréhension des contextes culturels. Privilégiez-vous des 
+profils avec expérience Big 4 Afrique ou grands groupes internationaux ?"
+
+📌 DAF, scale-up tech :
+"Bonjour Marie, en tant que DAF d'une scale-up tech en hyper-croissance, 
+j'imagine que l'équilibre entre structuration finance et agilité 
+opérationnelle est un défi quotidien. Entre mise en place des process 
+et préservation de la vitesse d'exécution, les profils finance doivent 
+maîtriser à la fois la rigueur et le pragmatisme startup. Privilégiez-vous 
+des profils issus de scale-ups similaires ou de cabinets conseil ?"
+
+📌 VP Finance, groupe industriel :
+"Bonjour Jean, chez [Entreprise industrielle], la transformation digitale 
+de la supply chain suppose une refonte complète du pilotage financier, 
+notamment sur la modélisation des coûts et le suivi de la performance 
+opérationnelle. J'imagine que les profils contrôle de gestion doivent 
+allier expertise industrielle et appétence pour les outils data. 
+Privilégiez-vous des profils sectoriels ou plus transverses avec 
+forte capacité d'adaptation ?"
+
+❌ INTERDICTIONS ABSOLUES :
+- Forcer un lien entre un hook faible et le contexte entreprise
+- Utiliser "résonne particulièrement" quand le lien n'est pas évident
+- Mentionner un événement spectateur (TEDx, conférence) comme s'il était pertinent
 
 **PARTIE 2 : Défi business spécifique [30-35 mots]**
 → Identifier UN défi concret et réaliste lié au hook
