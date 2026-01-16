@@ -318,7 +318,14 @@ Tu dois scanner et analyser les éléments suivants :
 4. **Engagement personnel :** Bénévolat, causes associatives, intérêts marqués (écologie, tech, social, etc.)
 
 # CRITÈRES DE SÉLECTION (STRICT)
-1. **Récence :** Le fait doit dater de MOINS D'UN AN. Priorité absolue aux événements des 3 derniers mois.
+1. **Récence ABSOLUE :** Le fait doit dater de MAXIMUM 6 MOIS (180 jours). 
+   - Changement de poste : UNIQUEMENT si < 6 mois
+   - Certification : UNIQUEMENT si < 6 mois
+   - Post LinkedIn : UNIQUEMENT si < 6 mois
+   - Article/Podcast : UNIQUEMENT si < 6 mois
+   
+   ⚠️ UN POSTE PRIS IL Y A 1 AN OU PLUS = PAS UN HOOK VALIDE
+   ⚠️ Si aucun fait < 6 mois → Répondre "NOT_FOUND"
 2. **Véracité :** NE RIEN INVENTER. Si l'information n'est pas explicitement présente dans les données, ne l'utilise pas.
 3. **Pertinence :** Choisis l'information qui offre le meilleur prétexte pour une conversation business ou humaine.
 4. **Validation anti-homonymes :** Pour les infos web, vérifie que l'entreprise "{company_name}" est bien mentionnée et que le contexte correspond au profil LinkedIn.
@@ -632,6 +639,10 @@ SI UNE ANNONCE EST DISPONIBLE :
 → Exemple : "recruter un [Profil] capable de [Compétence rare] suppose..."
 
 SI UN HOOK PERTINENT EXISTE (mais pas d'annonce) :
+→ ⚠️ VÉRIFIER D'ABORD LA DATE DU HOOK
+→ Si le hook date de + de 6 mois : L'IGNORER COMPLÈTEMENT
+→ Exemple : "A pris son poste il y a 2 ans" = TROP VIEUX, ignorer
+→ Si hook valide : Utiliser + ajouter un INSIGHT BUSINESS LOGIQUE
 → Utiliser le hook + ajouter un INSIGHT BUSINESS LOGIQUE
 → Le lien hook → insight doit être ÉVIDENT et NATUREL
 → NE JAMAIS forcer un lien artificiel
@@ -695,6 +706,22 @@ EXEMPLES À REJETER (Auto-promotion) :
 - Closing commercial ("Voyez-vous un inconvénient")
 - Pas de question stratégique
 - Violation GRAVE de l'interdiction N°1
+
+❌ Exemple : Hook obsolète utilisé
+"Bonjour Thomas, félicitations pour votre nomination en tant que Directeur 
+adjoint il y a 3 ans..."
+
+🚫 Pourquoi c'est MAUVAIS :
+- Le poste date de 3 ANS (pas récent)
+- "Félicitations" pour un événement de 2022 en 2026 = ridicule
+- Le hook aurait dû être rejeté par l'extraction
+- RÈGLE : Ignorer tout hook de + de 6 mois
+
+✅ VERSION CORRECTE (sans le hook obsolète) :
+"Bonjour Thomas, en tant que Directeur adjoint comptabilité chez FUNECAP GROUPE, 
+j'imagine que la spécificité du secteur funéraire (gestion des contrats obsèques, 
+réglementation sectorielle) complexifie vos recrutements finance. Privilégiez-vous 
+des profils avec une expérience sectorielle ou une expertise comptable transverse ?"
 
 ═══════════════════════════════════════════════════════════════════
 
