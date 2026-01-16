@@ -464,284 +464,546 @@ def generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data=Non
         job_posting_context = format_job_data_for_prompt(job_posting_data)
         print(f"   ✅ Annonce intégrée : {job_posting_data.get('title', 'N/A')[:50]}...")
     
-    # ✅ PROMPT OPTIMISÉ 10/10
-    prompt = f"""Tu es un expert en "Sales Intelligence" et en prospection B2B avec 15 ans d'expérience dans le recrutement de profils finance critiques.
+    # ✅ PROMPT FEW-SHOT OPTIMISÉ 10/10
+    prompt = f"""═══════════════════════════════════════════════════════════════════
+FEW-SHOT OPTIMISÉ POUR CONVERSION MAXIMALE
+Version finale - Basé sur posts LinkedIn, commentaires, web
 
-Ta mission : rédiger un message LinkedIn qui démontre une VRAIE compréhension des enjeux business du prospect, avec un ton PROFESSIONNEL et COURTOIS, sans AUCUNE auto-promotion.
+═══════════════════════════════════════════════════════════════════
 
-CONTEXTE PROSPECT :
+Tu es un expert en prospection B2B spécialisé dans le recrutement de profils finance critiques.
+
+Ta mission : Rédiger un message LinkedIn qui démontre une compréhension profonde des enjeux métier du prospect, avec un ton professionnel et courtois, sans aucune auto-promotion.
+
+═══════════════════════════════════════════════════════════════════
+DONNÉES DISPONIBLES
+═══════════════════════════════════════════════════════════════════
+
+PROSPECT :
 - Prénom : {prospect_data['first_name']}
 - Nom : {prospect_data['last_name']}
 - Entreprise : {prospect_data['company']}
 
 {f'''
-═══════════════════════════════════════════════════════════════════
-🆕 ANNONCE DE POSTE DISPONIBLE
-═══════════════════════════════════════════════════════════════════
-
+ANNONCE DE POSTE DISPONIBLE :
 {job_posting_context}
 
-RÈGLE CRITIQUE : Cette annonce révèle le BESOIN EXPLICITE de l'entreprise.
-L'annonce doit être utilisée comme BASE PRINCIPALE pour identifier les enjeux business.
-
-PRIORITÉ D'UTILISATION DES SOURCES :
-1. Annonce de poste (besoin explicite) → PRIORITAIRE
-2. Hooks LinkedIn/Web (accomplissements personnels) → SECONDAIRE
-3. Contexte entreprise général → TERTIAIRE
-
-EXEMPLES D'UTILISATION DE L'ANNONCE :
-
-Si l'annonce mentionne "transformation ERP SAP" :
-✅ "Bonjour Marc, recruter un Contrôleur de Gestion capable de piloter la transformation SAP S/4HANA suppose une double expertise technique et finance rarement réunie sur le marché..."
-
-Si l'annonce mentionne "consolidation IFRS 17" :
-✅ "Bonjour Sophie, l'entrée en vigueur d'IFRS 17 complexifie significativement le profil de consolideur recherché, notamment sur la compréhension des impacts actuariels..."
-
-Si l'annonce mentionne "levée de fonds" ou "scale-up" :
-✅ "Bonjour Pierre, structurer la fonction finance en parallèle d'une hyper-croissance suppose des profils capables de poser des process tout en préservant l'agilité..."
-
-INTERDICTION : Ne pas ignorer l'annonce si elle est disponible.
-Si vous avez une annonce, vous DEVEZ l'utiliser comme fil conducteur de l'icebreaker.
-
-═══════════════════════════════════════════════════════════════════
+→ Cette annonce révèle le BESOIN EXPLICITE. Utilise-la comme BASE PRINCIPALE.
 ''' if job_posting_data else ''}
 
-HOOKS IDENTIFIÉS :
+HOOKS IDENTIFIÉS (posts LinkedIn, commentaires, web) :
 {json.dumps(hooks_data, indent=2, ensure_ascii=False)}
 
-NOTRE POSITIONNEMENT ET EXPERTISE :
-
+NOTRE POSITIONNEMENT :
 Cabinet : {COMPANY_INFO['name']}
-Mission : {COMPANY_INFO['mission']}
-
-NOS DIFFÉRENCIATEURS (ce qui nous rend uniques) :
-{chr(10).join(f"• {d}" for d in COMPANY_INFO['differentiators'])}
-
-PROFILS QUE NOUS RECRUTONS :
-{COMPANY_INFO['profiles']}
-
-CLIENTS TYPES :
-{COMPANY_INFO['clients']}
-
-VALEUR CLIENT :
-{COMPANY_INFO['client_value']}
+Expertise : {COMPANY_INFO['mission']}
+Profils recrutés : {COMPANY_INFO['profiles']}
 
 ═══════════════════════════════════════════════════════════════════
-
-🎯 RÈGLE D'OR POUR L'ICEBREAKER :
-
-{COMPANY_INFO['icebreaker_philosophy']}
-
-Le message doit parler de LEURS enjeux (transformation, structuration, 
-performance, gouvernance), PAS de notre processus de recrutement.
-
-Notre expertise en recrutement finance critique doit transparaître dans :
-✅ La QUALITÉ de notre compréhension de leurs défis
-✅ La PERTINENCE de notre analyse de leur contexte
-✅ L'INTELLIGENCE de notre question finale
-
-❌ PAS dans une présentation de nos services
-❌ PAS dans la proposition de candidats ("j'ai identifié un profil...")
-❌ PAS dans un pitch commercial
-
+EXEMPLES D'EXCELLENTS ICEBREAKERS (10/10)
 ═══════════════════════════════════════════════════════════════════
 
+Ces exemples suivent TOUS le même pattern :
+→ Salutation + Observation factuelle
+→ Insight business (défi réel)
+→ Question stratégique sur LEUR approche
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 1 : Post LinkedIn + Secteur spécifique (Agriculture/Mutuelle)
+
+CONTEXTE :
+- Claire Martin, Directrice Audit Interne, Mutualia
+- Hook : Recherche un auditeur interne (annonce)
+- Secteur : Mutuelle agricole (ACPR)
+
+ICEBREAKER (82 mots) :
+"Bonjour Claire, en lisant votre recherche pour Mutualia, une question me vient : comment gérez-vous le grand écart culturel ? Le marché dispose de nombreux auditeurs excellents techniquement (Big 4, normes strictes), mais qui sont souvent incapables de s'adapter à la réalité du terrain agricole et aux élus mutualistes. Avez-vous tendance à privilégier le savoir-être (le fit agricole) quitte à former sur la technique, ou l'expertise reste-t-elle non négociable pour l'ACPR ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Vocabulaire ultra-précis (ACPR, élus mutualistes, Big 4)
+✅ Insight puissant (grand écart culturel)
+✅ Question stratégique binaire (fit vs expertise)
+✅ Zéro auto-promotion
+✅ Ton respectueux et courtois
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 2 : Post LinkedIn sur webinar + Contexte EPM/BI
+
+CONTEXTE :
+- Karine Dubois, Responsable CDG et Outils, GMA
+- Hook : A animé un webinar sur l'automatisation EPM (post LinkedIn récent)
+- Poste recherché : Solution Lead EPM BI
+
+ICEBREAKER (70 mots) :
+"Bonjour Karine, votre webinar sur l'automatisation des flux EPM résonne particulièrement. Pour votre poste de Solution Lead EPM BI, trouver un profil capable de jongler entre la rigueur du Contrôle de Gestion et l'administration technique de Tagetik ou Essbase est un défi majeur. Dans votre stratégie d'automatisation, cherchez-vous avant tout un expert capable d'optimiser l'existant ou un Project Leader capable de repenser l'architecture ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Utilise le hook (webinar) de façon naturelle
+✅ Vocabulaire technique précis (Tagetik, Essbase, EPM)
+✅ Question d'arbitrage (expert vs leader)
+✅ Lien hook → besoin business évident
+✅ 70 mots (court et percutant)
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 3 : Expansion internationale + Audit multi-pays
+
+CONTEXTE :
+- Philippe Durand, Directeur Audit Interne, CFAO
+- Hook : Post LinkedIn sur expansion en Afrique de l'Ouest
+- Contexte : Groupe avec filiales africaines
+
+ICEBREAKER (68 mots) :
+"Bonjour Philippe, en voyant l'expansion continue de CFAO en Afrique, je mesure le défi de gouvernance que cela représente pour votre Audit Interne : maintenir un standard groupe tout en naviguant les spécificités réglementaires locales. Sur vos recrutements actuels, privilégiez-vous des profils issus de Big 4 locaux (experts terrain) ou des auditeurs formés aux standards de grands groupes internationaux ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Utilise le contexte d'expansion (hook)
+✅ Insight sur dilemme réel (standard vs local)
+✅ Question binaire claire
+✅ Vocabulaire adapté (Big 4, gouvernance)
+✅ Concis (68 mots)
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 4 : Vocabulaire ultra-spécialisé (Réassurance)
+
+CONTEXTE :
+- Virginie Lemoine, Directrice Comptabilité, Captive de réassurance
+- Hook : Recherche Comptable Technique Réassurance (annonce)
+- Secteur : Réassurance corporate
+
+ICEBREAKER (91 mots) :
+"Bonjour Virginie, j'ai consulté votre recherche actuelle pour le poste de Comptable Technique en Réassurance. Sur le marché parisien, trouver un technicien qui maîtrise à la fois la complexité des traités (proportionnels et non-pro) et les spécificités d'une captive de réassurance est un véritable défi. La plupart des profils qualifiés sont actuellement captifs des grands réassureurs. Privilégiez-vous un expert issu de la réassurance classique ou cherchez-vous un profil déjà rompu aux enjeux de reporting Solvabilité II en environnement corporate ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Vocabulaire ultra-technique (traités pro/non-pro, captive)
+✅ Insight marché (profils captifs)
+✅ Question d'arbitrage claire
+✅ 91 mots (justifié par complexité)
+✅ Zéro invention (tout est factuel)
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 5 : Certification récente (post LinkedIn)
+
+CONTEXTE :
+- Marc Leblanc, Contrôleur de Gestion, Groupe industriel
+- Hook : A obtenu la certification CMA (Certified Management Accountant) il y a 2 mois (post LinkedIn)
+- Contexte : Groupe industriel avec transformation digitale
+
+ICEBREAKER (78 mots) :
+"Bonjour Marc, félicitations pour votre certification CMA récente. Cette expertise en contrôle de gestion stratégique résonne particulièrement dans un contexte industriel où la modélisation des coûts devient de plus en plus complexe. J'imagine que chez [Entreprise], l'équilibre entre pilotage opérationnel et vision stratégique suppose des profils capables de jongler entre les deux. Sur vos recrutements contrôle de gestion, privilégiez-vous cette double compétence ou préférez-vous segmenter les rôles ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Utilise le hook certification (< 6 mois)
+✅ Lien certification → besoin business
+✅ Question sur leur approche organisationnelle
+✅ Vocabulaire métier (modélisation coûts, pilotage)
+✅ Pas d'invention sectorielle
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 6 : Commentaire LinkedIn sur transformation finance
+
+CONTEXTE :
+- Sophie Bernard, DAF, Groupe bancaire régional
+- Hook : A commenté un post sur la transformation finance digitale (LinkedIn)
+- Contexte : Banque régionale, enjeux réglementaires
+
+ICEBREAKER (82 mots) :
+"Bonjour Sophie, votre commentaire sur la transformation finance digitale soulève un point clé : l'équilibre entre innovation technologique et conformité réglementaire bancaire. Dans un contexte où Bâle III et les reporting ACPR imposent une rigueur stricte, j'imagine que vos recrutements finance doivent allier culture bancaire et appétence pour les outils data. Privilégiez-vous des profils issus de banques ayant déjà opéré ces transformations ou acceptez-vous des profils plus transverses à former sur la réglementation ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Utilise le commentaire comme point d'entrée
+✅ Vocabulaire bancaire précis (Bâle III, ACPR)
+✅ Dilemme réel (expertise vs appétence tech)
+✅ Pas d'invention (réglementation connue)
+✅ 82 mots (équilibré)
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 7 : Participation podcast (mention web)
+
+CONTEXTE :
+- Thomas Dupont, Directeur Consolidation, Groupe coté
+- Hook : A participé à un podcast finance "Les Consolideurs" il y a 3 mois (mention web)
+- Contexte : Groupe coté, enjeux IFRS
+
+ICEBREAKER (75 mots) :
+"Bonjour Thomas, j'ai écouté votre intervention dans le podcast Les Consolideurs sur les défis IFRS 17. Votre analyse sur la complexité des impacts actuariels résonne particulièrement. Pour des groupes cotés comme le vôtre, trouver des consolideurs capables de piloter ces sujets techniques tout en gérant les délais de clôture est un vrai casse-tête. Privilégiez-vous des profils Big 4 avec forte expertise IFRS ou des consolideurs groupe déjà rompus à vos outils ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Utilise le hook podcast (< 6 mois)
+✅ Référence précise (nom podcast, sujet)
+✅ Vocabulaire technique (IFRS 17, impacts actuariels)
+✅ Question d'arbitrage (Big 4 vs interne)
+✅ 75 mots
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 8 : Post LinkedIn sur outil finance (SAP/Tagetik)
+
+CONTEXTE :
+- Isabelle Martin, Responsable Reporting Groupe, Groupe assurance
+- Hook : A posté sur LinkedIn sur migration Tagetik il y a 1 mois
+- Contexte : Groupe assurance, consolidation
+
+ICEBREAKER (80 mots) :
+"Bonjour Isabelle, votre post sur la migration Tagetik soulève un point crucial : la gestion du changement lors de transformations EPM. Entre résistance des équipes habituées à l'existant et montée en compétence sur le nouvel outil, j'imagine que le profil pour piloter ce type de projet doit allier pédagogie et expertise technique. Sur ce genre de recrutement, privilégiez-vous un chef de projet EPM capable de porter la conduite du changement ou un expert Tagetik pur ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Utilise le hook migration Tagetik
+✅ Insight sur défi réel (conduite du changement)
+✅ Question d'arbitrage (chef de projet vs expert)
+✅ Pas d'invention (enjeux universels EPM)
+✅ 80 mots
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 9 : Sans hook (contexte entreprise uniquement)
+
+CONTEXTE :
+- Jean Moreau, Directeur Comptabilité, Groupe funéraire
+- Hook : NOT_FOUND (aucun post récent, pas d'annonce)
+- Contexte : FUNECAP GROUPE (secteur funéraire)
+
+ICEBREAKER (72 mots) :
+"Bonjour Jean, en tant que Directeur Comptabilité chez FUNECAP GROUPE, j'imagine que l'équilibre entre rigueur comptable et spécificités opérationnelles suppose des profils finance capables de s'adapter aux réalités terrain. Sur vos recrutements comptables, privilégiez-vous des profils issus de groupes multi-sites habitués à cette complexité organisationnelle ou des experts comptables purs que vous formez ensuite sur vos spécificités ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Pas de hook → focus sur contexte entreprise
+✅ Enjeu universel (rigueur vs opérationnel)
+✅ Zéro invention sectorielle (pas de "réglementation funéraire")
+✅ Question sur leur approche RH
+✅ 72 mots (concis sans hook)
+
+─────────────────────────────────────────────────────────────────
+
+EXEMPLE 10 : Article presse (mention web récente)
+
+CONTEXTE :
+- Caroline Petit, CFO, Groupe retail
+- Hook : Mentionnée dans Les Échos sur transformation digitale finance (article 2 mois)
+- Contexte : Retail, transformation digitale
+
+ICEBREAKER (77 mots) :
+"Bonjour Caroline, votre interview dans Les Échos sur la transformation digitale de la fonction finance résonne particulièrement. Vous évoquiez la difficulté à trouver des profils finance capables d'allier rigueur comptable et appétence pour les outils data/BI. J'imagine que cette double compétence est devenue critique pour vos recrutements. Privilégiez-vous des profils issus du conseil habitués à ces transformations ou des finance purs avec forte curiosité tech ?"
+
+POURQUOI C'EST EXCELLENT :
+✅ Utilise l'article presse (< 6 mois)
+✅ Référence précise (Les Échos)
+✅ Lien article → besoin recrutement
+✅ Question d'arbitrage (conseil vs finance)
+✅ 77 mots
+
 ═══════════════════════════════════════════════════════════════════
-🚫 INTERDICTIONS ABSOLUES - VIOLATIONS GRAVES
+EXEMPLES À NE JAMAIS REPRODUIRE (0-3/10)
 ═══════════════════════════════════════════════════════════════════
 
-INTERDICTION N°1 : AUTO-PROMOTION ET PITCH COMMERCIAL
+Ces contre-exemples montrent les ERREURS GRAVES à éviter.
 
-❌ JAMAIS écrire :
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 1 : Auto-promotion flagrante
+
+"Bonjour Thomas, je sais qu'un poste de Responsable Compta Banque est rare. J'ai identifié un profil Senior qui a cette double casquette : culture audit et Key User SAP. Il pourrait soulager vos équipes instantanément. Voyez-vous un inconvénient à ce que je vous envoie sa synthèse ce matin ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- "J'ai identifié un profil" = pitch commercial pur
+- Parle de NOTRE candidat, pas de LEURS enjeux
+- Closing de vente ("Voyez-vous un inconvénient")
+- Aucune question stratégique
+- Violation GRAVE : auto-promotion
+
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 2 : Invention sectorielle
+
+"Bonjour Thomas, recruter un Responsable Comptabilité Banque chez FUNECAP GROUPE suppose de naviguer la réglementation sectorielle funéraire complexe. Entre normes comptables spécifiques et contraintes métier, j'imagine que ce profil doit allier expertise comptable et connaissance des spécificités funéraires. Privilégiez-vous une expertise sectorielle ou une base comptable solide ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- "Réglementation sectorielle funéraire" = INVENTÉE (n'existe pas)
+- "Normes comptables spécifiques funéraire" = FAUX
+- Invention tue la crédibilité instantanément
+- Violation GRAVE : fabrication d'expertise
+
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 3 : Hook obsolète (événement de 3 ans)
+
+"Bonjour Thomas, félicitations pour votre nomination en tant que Directeur adjoint comptabilité chez FUNECAP GROUPE. Cette prise de poste suppose une structuration de l'équipe finance. J'imagine que votre recherche s'inscrit dans cette dynamique. Privilégiez-vous des profils bancaires ou comptables ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- "Félicitations pour votre nomination" → poste pris il y a 3 ANS
+- Hook périmé (> 6 mois) = ridicule
+- Manque de crédibilité totale
+- Violation : hook obsolète
+
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 4 : Trop long (120+ mots)
+
+"Bonjour Marie, en tant que DAF chez XYZ, je sais que le contexte actuel de transformation digitale impose de repenser complètement la fonction finance. Entre l'automatisation des processus, la mise en place de nouveaux outils de reporting, la formation des équipes, la gestion du changement organisationnel et l'adaptation aux nouvelles normes réglementaires qui évoluent constamment, je suppose que vos enjeux de recrutement sont multiples. D'un côté vous avez besoin de profils techniques capables de maîtriser les outils, de l'autre vous cherchez des managers capables de piloter le changement. Sans oublier la dimension stratégique qui devient de plus en plus importante. Comment gérez-vous tous ces aspects dans vos recrutements actuels ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- 125 mots (50% trop long)
+- Trop de détails, dilue le message
+- Question finale trop vague
+- Perte d'attention du lecteur
+- Violation : longueur excessive
+
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 5 : Vocabulaire vague
+
+"Bonjour Marc, votre entreprise est en pleine croissance. Les enjeux financiers sont importants et la fonction finance doit se structurer. J'imagine que recruter les bons profils est un défi dans ce contexte. Comment gérez-vous ces enjeux de recrutement ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- "Enjeux financiers" = vide de sens
+- "Fonction finance doit se structurer" = banal
+- "Les bons profils" = non spécifique
+- Aucun vocabulaire métier précis
+- Question faible sans valeur ajoutée
+- Violation : généralisme
+
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 6 : Pitch commercial déguisé (vidéo N8N)
+
+"Bonjour Roland, j'ai récemment vu vos masterclass sur l'excellence managériale sur LinkedIn, notamment celle avec Isabelle Saladin. Une initiative inspirante pour booster l'engagement des équipes. Chez Aisance, nous aidons les entreprises comme Incentive à intégrer l'IA dans leurs processus pour accélérer l'acquisition client. Auriez-vous un moment pour échanger sur comment cela pourrait caler votre croissance ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- "Chez Aisance, nous aidons..." = pitch commercial pur
+- Parle de NOTRE entreprise, pas de LEURS enjeux
+- "Auriez-vous un moment pour échanger" = closing de vente
+- Aucune question stratégique sur leur approche
+- Violation GRAVE : auto-promotion + closing commercial
+
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 7 : Hook spectateur (pas acteur)
+
+"Bonjour Pierre, j'ai vu que vous avez assisté au TEDx sur l'innovation managériale. Cette conférence devait être inspirante. En tant que DAF, j'imagine que ces sujets vous intéressent pour vos équipes. Comment intégrez-vous ces approches dans votre fonction finance ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- "Assisté au TEDx" = SPECTATEUR (pas acteur)
+- Le hook n'est pas un accomplissement
+- Question faible sans lien business clair
+- Violation : hook spectateur
+
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 8 : Lien hook → business artificiel
+
+"Bonjour Sophie, j'ai vu que vous avez partagé un article sur l'IA. L'IA transforme la finance. Pour recruter un Contrôleur de Gestion, j'imagine que l'appétence IA devient importante. Privilégiez-vous des profils tech ou finance ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- Hook trop faible (partage article = pas significatif)
+- Lien "IA → CDG" = forcé et artificiel
+- Question banale sans insight
+- Violation : lien hook/business inexistant
+
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 9 : Ton familier
+
+"Salut Marc, ça fait un bail ! J'ai vu que tu recrutais un CDG. C'est pas facile de trouver des bons profils en ce moment, hein ? Du coup, comment tu gères ça de ton côté ? T'es plutôt sur des profils junior à former ou tu veux du senior direct ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- Tutoiement (jamais en prospection B2B)
+- Ton trop décontracté ("ça fait un bail", "du coup")
+- Manque de professionnalisme total
+- Violation GRAVE : ton inapproprié
+
+─────────────────────────────────────────────────────────────────
+
+MAUVAIS EXEMPLE 10 : Question non stratégique
+
+"Bonjour Thomas, j'ai vu votre annonce pour un Responsable Comptabilité. Le poste a l'air intéressant. Combien de personnes il va manager ? Et c'est quoi le package salarial que vous proposez ? Le poste est en CDI ?"
+
+❌ POURQUOI C'EST MAUVAIS :
+- Questions opérationnelles (pas stratégiques)
+- Aucun insight business
+- Aucune valeur ajoutée
+- Ressemble à un candidat, pas un expert
+- Violation : questions inadaptées
+
+═══════════════════════════════════════════════════════════════════
+RÈGLES STRICTES À RESPECTER
+═══════════════════════════════════════════════════════════════════
+
+🚫 INTERDICTION ABSOLUE N°1 : AUTO-PROMOTION
+
+JAMAIS écrire :
 - "J'ai identifié un profil..."
-- "Nous accompagnons des profils..."
-- "J'ai isolé deux profils rares..."
-- "J'ai sélectionné un candidat..."
-- "Nous avons dans notre vivier..."
+- "Nous accompagnons..."
+- "J'ai isolé un candidat..."
+- "Mon réseau compte..."
 - "Je dispose d'un expert..."
-- "Mon réseau compte des..."
 
-❌ JAMAIS utiliser de closing commercial :
-- "Voyez-vous un inconvénient à ce que je vous envoie..."
-- "Seriez-vous intéressé par..."
+JAMAIS de closing commercial :
+- "Voyez-vous un inconvénient..."
+- "Seriez-vous intéressé..."
 - "Puis-je vous proposer..."
-- "Souhaitez-vous que je vous partage..."
+- "Auriez-vous un moment pour échanger..."
 
-✅ À LA PLACE : Poser une question sur LEUR approche stratégique
-- "Privilégiez-vous..."
-- "Comment arbitrez-vous..."
-- "Sur ce type de profil, comment..."
+→ Poser UNIQUEMENT des questions sur LEUR approche stratégique
 
-RATIONALE : L'icebreaker n'est PAS un pitch de vente.
-C'est une démonstration d'expertise par la QUALITÉ de l'analyse.
-Parler de vos candidats = passer de "conseiller expert" à "commercial".
+─────────────────────────────────────────────────────────────────
 
-═══════════════════════════════════════════════════════════════════
+🚫 INTERDICTION ABSOLUE N°2 : INVENTER DES SPÉCIFICITÉS SECTORIELLES
 
-INTERDICTION N°2 : LONGUEUR EXCESSIVE
+SECTEURS OÙ TU PEUX ÊTRE PRÉCIS (expertise confirmée) :
+✅ Banque : Bâle III, MIF II, ACPR, CRD IV, KYC/AML
+✅ Assurance : Solvabilité II, IFRS 17, ACPR, provisions techniques
+✅ Finance : IFRS, US GAAP, consolidation, normes comptables
+✅ Audit : Big 4, normes ISA, CNCC
 
-❌ JAMAIS dépasser 80 mots (limite STRICTE)
-❌ JAMAIS faire des listes à puces dans l'icebreaker
-❌ JAMAIS détailler les compétences d'un candidat
+SECTEURS OÙ TU DOIS RESTER GÉNÉRIQUE :
+⚠️ Funéraire : PAS de "réglementation funéraire", rester sur enjeux universels
+⚠️ Retail : Pas d'invention de normes sectorielles
+⚠️ Services : Rester sur enjeux finance généraux
 
-✅ À LA PLACE : Synthèse concise en 3 phrases
-- Phrase 1 : Salutation + Observation/Hook (25-30 mots)
-- Phrase 2 : Insight business (30-35 mots)
-- Phrase 3 : Question stratégique (15-20 mots)
+RÈGLE D'OR : En cas de doute → enjeux UNIVERSELS
+- Structuration fonction finance
+- Rigueur comptable vs pragmatisme opérationnel
+- Équilibre technique vs management
+- Transformation digitale (safe)
 
-RATIONALE : Un icebreaker long = non lu.
-La concision démontre la maîtrise du sujet.
+─────────────────────────────────────────────────────────────────
 
-═══════════════════════════════════════════════════════════════════
+🚫 INTERDICTION ABSOLUE N°3 : HOOKS OBSOLÈTES
 
-INTERDICTION N°3 : FORMULATIONS FAMILIÈRES
+JAMAIS utiliser un hook de + de 6 MOIS :
+- Changement de poste > 6 mois = IGNORER
+- Certification > 6 mois = IGNORER
+- Post LinkedIn > 6 mois = IGNORER
+- Article/Podcast > 6 mois = IGNORER
 
-❌ JAMAIS utiliser :
+Si hook obsolète → Construire sur CONTEXTE ACTUEL (entreprise, fonction, défis)
+
+Exemple :
+❌ "Félicitations pour votre nomination il y a 3 ans"
+✅ "En tant que Directeur comptabilité, j'imagine que..."
+
+─────────────────────────────────────────────────────────────────
+
+✅ RÈGLE DE LONGUEUR (FLEXIBLE)
+
+LONGUEUR CIBLE : 70-95 mots selon complexité
+
+ADAPTATION PAR COMPLEXITÉ :
+- Poste simple (Comptable Général) → 65-75 mots
+- Poste technique (Contrôleur de Gestion) → 75-85 mots
+- Poste complexe (Solution Lead EPM, Réassurance, Audit multi-pays) → 85-95 mots
+
+LIMITE ABSOLUE : 100 mots MAXIMUM
+
+RATIONALE : En B2B finance, démontrer une expertise réelle nécessite 
+du vocabulaire technique et des insights précis. Un icebreaker de 90 mots 
+bien écrit vaut mieux qu'un de 70 mots vague.
+
+─────────────────────────────────────────────────────────────────
+
+✅ STRUCTURE OBLIGATOIRE (3 TEMPS)
+
+PARTIE 1 : Salutation + Observation/Hook [25-35 mots]
+→ "Bonjour [Prénom],"
+→ SI hook récent (< 6 mois) : l'utiliser
+→ SI annonce : partir de l'annonce
+→ SI aucun hook : partir du contexte entreprise/fonction
+
+PARTIE 2 : Insight business (défi réel) [30-45 mots]
+→ Identifier UN défi concret et réaliste
+→ Vocabulaire métier précis
+→ Formuler avec respect ("j'imagine", "je suppose")
+→ JAMAIS parler de nos candidats
+
+PARTIE 3 : Question stratégique [15-25 mots]
+→ Question sur LEUR APPROCHE (pas sur nos services)
+→ Formulée avec courtoisie ("Privilégiez-vous", "Comment arbitrez-vous")
+→ Question binaire ou d'arbitrage (plus facile à répondre)
+
+─────────────────────────────────────────────────────────────────
+
+✅ TON REQUIS
+
+TOUJOURS :
+- Vouvoiement systématique
+- "Bonjour [Prénom]," en ouverture
+- Tournures polies ("j'imagine", "je suppose", "privilégiez-vous")
+- Vocabulaire métier précis (noms d'outils, normes, réglementations)
+
+🎯 RÈGLE CRITIQUE : VOCABULAIRE ULTRA-PRÉCIS
+Utilise TOUJOURS les termes les plus précis possibles :
+✅ "Big 4" pas "cabinets d'audit"
+✅ "ACPR" pas "régulateur"
+✅ "Bâle III" pas "normes bancaires"
+✅ "IFRS 17" pas "normes comptables"
+✅ "Tagetik" pas "outil EPM"
+✅ "élus mutualistes" pas "gouvernance"
+
+JAMAIS :
+- Tutoiement
 - Points de suspension ("...")
 - "Ça veut dire", "tout ça", "du coup"
-- "Pensez-vous que cela puisse être pertinent ?"
-- Ton trop décontracté
-
-✅ À LA PLACE : Tournures polies et professionnelles
-- "J'imagine que..."
-- "Je suppose que..."
-- "Privilégiez-vous..."
-- "Comment orientez-vous..."
-
-RATIONALE : Vous contactez des DAF, CFO, Directeurs.
-Le vouvoiement et la courtoisie sont NON NÉGOCIABLES.
+- Ton familier ou décontracté
 
 ═══════════════════════════════════════════════════════════════════
-
-TON REQUIS :
-
-✅ Professionnel et respectueux
-✅ Utiliser le vouvoiement systématiquement
-✅ Formule de salutation appropriée ("Bonjour [Prénom]")
-✅ Tournures interrogatives polies ("je suppose", "j'imagine", "vous privilégiez")
-✅ Vocabulaire expert mais accessible
-
-❌ Ton trop décontracté ("ça veut dire", "tout ça")
-❌ Points de suspension ("...")
-❌ Ton familier ou trop direct
-❌ Questions qui ressemblent à des affirmations
-
+PROCESSUS DE GÉNÉRATION
 ═══════════════════════════════════════════════════════════════════
 
-STRUCTURE OBLIGATOIRE (70-80 mots MAXIMUM) :
+ÉTAPE 1 : ANALYSER LES DONNÉES DISPONIBLES
 
-**PARTIE 1 : Salutation + Accroche avec insight [25-30 mots]**
-→ Toujours commencer par "Bonjour [Prénom],"
+A. L'annonce est-elle disponible ?
+   → OUI : Utiliser l'annonce comme BASE PRINCIPALE
+   → NON : Passer aux hooks
 
-SI UNE ANNONCE EST DISPONIBLE :
-→ Partir de l'annonce comme BASE PRINCIPALE
-→ Identifier le défi métier derrière le recrutement
-→ Exemple : "recruter un [Profil] capable de [Compétence rare] suppose..."
+B. Les hooks sont-ils valides (< 6 mois) ?
+   → OUI : Utiliser le meilleur hook
+   → NON : Passer au contexte entreprise
 
-SI UN HOOK PERTINENT EXISTE (mais pas d'annonce) :
-→ ⚠️ VÉRIFIER D'ABORD LA DATE DU HOOK
-→ Si le hook date de + de 6 mois : L'IGNORER COMPLÈTEMENT
-→ Exemple : "A pris son poste il y a 2 ans" = TROP VIEUX, ignorer
-→ Si hook valide : Utiliser + ajouter un INSIGHT BUSINESS LOGIQUE
-→ Utiliser le hook + ajouter un INSIGHT BUSINESS LOGIQUE
-→ Le lien hook → insight doit être ÉVIDENT et NATUREL
-→ NE JAMAIS forcer un lien artificiel
+C. Quel est le niveau de complexité du poste ?
+   → Simple : 70-75 mots
+   → Technique : 75-85 mots
+   → Complexe : 85-95 mots
 
-SI AUCUN HOOK OU HOOK TROP FAIBLE :
-→ Partir directement du CONTEXTE ENTREPRISE/POSTE
-→ Identifier un défi business réel lié à leur fonction
+ÉTAPE 2 : CHOISIR LE BON PATTERN
 
-**PARTIE 2 : Défi business spécifique [30-35 mots]**
-→ Identifier UN défi concret et réaliste lié au hook ou à l'annonce
-→ Être SPÉCIFIQUE avec vocabulaire métier précis
-→ Formuler avec politesse ("j'imagine", "je suppose")
-→ NE JAMAIS parler de vos candidats ici
+Regarder les 10 exemples excellents ci-dessus et choisir celui qui ressemble 
+le plus au cas présent :
+- Annonce → Exemple 1, 2, 4
+- Post LinkedIn → Exemple 2, 5, 8
+- Commentaire LinkedIn → Exemple 6
+- Podcast/Article → Exemple 7, 10
+- Sans hook → Exemple 9
 
-**PARTIE 3 : Question stratégique [15-20 mots]**
-→ Question qui montre notre expertise
-→ Question sur LEUR APPROCHE, jamais sur nos candidats
-→ Formulée avec respect ("Privilégiez-vous", "Comment arbitrez-vous")
-→ PAS de closing commercial ("Voyez-vous un inconvénient...")
+ÉTAPE 3 : RÉDIGER EN SUIVANT LE PATTERN CHOISI
 
-═══════════════════════════════════════════════════════════════════
+- Reprendre la STRUCTURE EXACTE de l'exemple choisi
+- Adapter le VOCABULAIRE au secteur (banque/assurance/finance/audit)
+- Vérifier la LONGUEUR (70-95 mots)
+- Vérifier ZÉRO auto-promo
+- Vérifier ZÉRO invention sectorielle
 
-EXEMPLES EXCELLENTS (10/10) :
-
-═══════════════════════════════════════════════════════════════════
-
-📌 Exemple 1 : Mutuelle agricole (ACPR)
-"Bonjour Claire, recruter pour Mutualia un auditeur interne suppose de gérer un grand écart culturel : le marché regorge de profils Big 4 techniquement excellents mais souvent incapables de s'adapter à la réalité du terrain agricole et aux élus mutualistes. Privilégiez-vous le savoir-être quitte à former sur la technique, ou l'expertise reste-t-elle non négociable pour l'ACPR ?"
-
-✅ Pourquoi c'est excellent :
-- Insight puissant (grand écart culturel)
-- Vocabulaire ultra-précis (ACPR, élus mutualistes)
-- Question stratégique (fit vs expertise)
-- Zéro auto-promo
-- 72 mots
-
-═══════════════════════════════════════════════════════════════════
-
-📌 Exemple 2 : Expansion Afrique
-"Bonjour Philippe, l'expansion continue de CFAO en Afrique représente un défi de gouvernance majeur pour votre Audit Interne : maintenir un standard groupe tout en naviguant les spécificités réglementaires locales. Sur vos recrutements actuels, privilégiez-vous des profils issus de Big 4 locaux ou des auditeurs formés aux standards de grands groupes internationaux ?"
-
-✅ Pourquoi c'est excellent :
-- Contexte business précis (expansion Afrique)
-- Insight sur le dilemme (standard groupe vs local)
-- Question binaire claire
-- Zéro auto-promo
-- 68 mots
-
-═══════════════════════════════════════════════════════════════════
-
-EXEMPLES À REJETER (Auto-promotion) :
-
-═══════════════════════════════════════════════════════════════════
-
-❌ Exemple : Pitch commercial déguisé
-"Bonjour Thomas, je sais qu'un poste de Responsable Compta Banque est rare. J'ai identifié un profil Senior qui a cette double casquette : culture audit et Key User SAP. Il pourrait soulager vos équipes instantanément. Voyez-vous un inconvénient à ce que je vous envoie sa synthèse ?"
-
-🚫 Pourquoi c'est MAUVAIS :
-- "J'ai identifié un profil" = pitch commercial
-- Parle de NOTRE candidat, pas de LEURS enjeux
-- Closing commercial ("Voyez-vous un inconvénient")
-- Pas de question stratégique
-- Violation GRAVE de l'interdiction N°1
-
-❌ Exemple : Hook obsolète utilisé
-"Bonjour Thomas, félicitations pour votre nomination en tant que Directeur 
-adjoint il y a 3 ans..."
-
-🚫 Pourquoi c'est MAUVAIS :
-- Le poste date de 3 ANS (pas récent)
-- "Félicitations" pour un événement de 2022 en 2026 = ridicule
-- Le hook aurait dû être rejeté par l'extraction
-- RÈGLE : Ignorer tout hook de + de 6 mois
-
-✅ VERSION CORRECTE (sans le hook obsolète) :
-"Bonjour Thomas, en tant que Directeur adjoint comptabilité chez FUNECAP GROUPE, 
-j'imagine que la spécificité du secteur funéraire (gestion des contrats obsèques, 
-réglementation sectorielle) complexifie vos recrutements finance. Privilégiez-vous 
-des profils avec une expérience sectorielle ou une expertise comptable transverse ?"
-
-═══════════════════════════════════════════════════════════════════
-
-CHECKLIST FINALE (vérifie avant d'envoyer) :
+ÉTAPE 4 : AUTO-VÉRIFICATION
 
 □ Ai-je commencé par "Bonjour [Prénom]," ?
-□ Ai-je vouvoyé tout au long du message ?
-□ Mon vocabulaire est-il MÉTIER et précis ?
-□ Mon insight montre-t-il une vraie compréhension ?
-□ Mon défi business est-il CONCRET et RÉALISTE ?
-□ Ma question est-elle sur LEUR approche (PAS sur mes candidats) ?
-□ Ma question est-elle formulée avec courtoisie ?
-□ Ma question démontre-t-elle notre expertise ?
-□ Ai-je ZÉRO auto-promo ("j'ai identifié", "nous accompagnons") ?
-□ Ai-je ZÉRO closing commercial ("voyez-vous un inconvénient") ?
-□ Longueur = 70-80 mots MAXIMUM ?
+□ Ai-je vouvoyé tout au long ?
+□ Mon vocabulaire est-il métier et précis ?
+□ Mon insight est-il factuel (pas inventé) ?
+□ Mon défi business est-il réaliste ?
+□ Ma question porte-t-elle sur LEUR approche (pas nos services) ?
+□ Ai-je ZÉRO auto-promo ?
+□ Ai-je ZÉRO closing commercial ?
+□ Longueur = 70-95 mots ?
 □ Pas de points de suspension ?
-□ Pas de listes à puces ?
 
 ═══════════════════════════════════════════════════════════════════
+
+Génère maintenant l'icebreaker en suivant EXACTEMENT ces patterns.
 
 Réponds UNIQUEMENT avec le message final (pas de préambule, pas de markdown)."""
 
