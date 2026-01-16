@@ -1,6 +1,6 @@
 """
 Script d'automatisation pour générer des icebreakers personnalisés
-VERSION CORRIGÉE - Scraping LinkedIn + Recherche Web + Extraction Hooks Optimisée
+VERSION OPTIMISÉE 10/10 - Scraping LinkedIn + Recherche Web + Annonces + Extraction Hooks Optimisée
 """
 
 import gspread
@@ -8,11 +8,10 @@ from google.oauth2.service_account import Credentials
 import anthropic
 from apify_client import ApifyClient
 from config import *
+from scraper_job_posting import scrape_job_posting, format_job_data_for_prompt
 import time
 import json
 import requests
-from scraper_job_posting import scrape_job_posting, format_job_data_for_prompt
-
 
 # ========================================
 # PARTIE 1 : CONNEXION À GOOGLE SHEETS
@@ -55,7 +54,8 @@ def get_prospects(sheet):
                 'first_name': row.get('first_name', ''),
                 'last_name': row.get('last_name', ''),
                 'company': row.get('company', ''),
-                'linkedin_url': row.get('linkedin_url', '')
+                'linkedin_url': row.get('linkedin_url', ''),
+                'job_posting_url': row.get('job_posting_url', '')
             })
     
     print(f"📋 {len(prospects_to_process)} prospect(s) à traiter\n")
@@ -345,7 +345,7 @@ Tu dois scanner et analyser les éléments suivants :
    - Ai-je vérifié la cohérence des sources web avec le profil LinkedIn ?
    - Y a-t-il un risque d'homonyme sur les infos web ?
 
-   # RÈGLE CRITIQUE : VÉRIFIER LE RÔLE DE LA PERSONNE
+# RÈGLE CRITIQUE : VÉRIFIER LE RÔLE DE LA PERSONNE
 
 Avant de valider un hook, VÉRIFIEZ TOUJOURS :
 
@@ -381,65 +381,6 @@ Avant de valider un hook, VÉRIFIEZ TOUJOURS :
    
    Mieux vaut dire "NOT_FOUND" que de faire une erreur d'interprétation.
    Une erreur = crédibilité perdue instantanément.
-
-# EXEMPLES DE HOOKS À REJETER
-
-❌ Post : "Enchanté par ce second TEDx"
-→ REJETER : Il a assisté, pas animé
-
-❌ Post : "Belle conférence sur l'IA hier"
-→ REJETER : Il a écouté, pas présenté
-
-❌ Post : "Bravo à notre équipe pour la levée de fonds"
-→ REJETER : Il félicite, ce n'est pas son accomplissement direct
-
-❌ Post : "Intéressant article de Jean Dupont sur la finance"
-→ REJETER : Il a lu, pas écrit
-
-✅ Post : "Ravi d'avoir animé un webinar sur la transformation finance"
-→ VALIDER : Il est clairement acteur
-
-✅ Post : "Fier d'annoncer que j'ai obtenu la certification IFRS"
-→ VALIDER : C'est son accomplissement
-
-# ═══════════════════════════════════════════════════════════════════
-# RÈGLE CRITIQUE : VÉRIFIER LE RÔLE (ACTEUR VS. SPECTATEUR)
-# ═══════════════════════════════════════════════════════════════════
-
-AVANT de valider un hook, tu DOIS vérifier :
-
-**La personne est-elle ACTEUR ou SPECTATEUR de l'événement ?**
-
-✅ ACTEUR (hook valide) :
-- Verbes d'action : "j'ai animé", "j'ai présenté", "j'ai obtenu"
-- Annonces : "ravi d'annoncer", "fier de partager", "heureux de rejoindre"
-- Réalisations : "nous avons signé", "j'ai contribué à", "mon équipe a livré"
-
-❌ SPECTATEUR (hook à REJETER) :
-- Émotions passives : "enchanté par", "inspiré par", "intéressant"
-- Compliments : "bravo à", "félicitations à", "belle conférence"
-- Consommation : "j'ai assisté à", "j'ai lu", "j'ai vu"
-
-**EXEMPLES DE CONFUSION À ÉVITER :**
-
-❌ Post : "Enchanté par ce second TEDx. Bon format dynamique."
-Interprétation ERRONÉE : "Il a animé son second TEDx"
-Réalité : Il a ASSISTÉ au TEDx en tant que spectateur
-→ REJETER ce hook
-
-❌ Post : "Belle présentation de Marie sur l'IA"
-Interprétation ERRONÉE : "Il a présenté sur l'IA"
-Réalité : Il a ÉCOUTÉ la présentation de Marie
-→ REJETER ce hook
-
-✅ Post : "Ravi d'avoir animé un webinar sur la transformation finance hier"
-Interprétation CORRECTE : Il a bien animé le webinar
-→ VALIDER ce hook
-
-**EN CAS DE DOUTE → REJETER LE HOOK**
-
-Une erreur d'interprétation = crédibilité perdue.
-Mieux vaut répondre "NOT_FOUND" que de se tromper sur le rôle.
 
 # FORMAT DE SORTIE (JSON UNIQUEMENT)
 Si aucune information pertinente de moins d'un an n'est trouvée, réponds UNIQUEMENT avec la chaîne :
@@ -492,7 +433,7 @@ Réponds UNIQUEMENT avec le JSON ou "NOT_FOUND"."""
 
 
 # ========================================
-# PARTIE 5 : GÉNÉRATION ICEBREAKER
+# PARTIE 5 : GÉNÉRATION ICEBREAKER OPTIMISÉE 10/10
 # ========================================
 
 def generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data=None):
@@ -516,20 +457,46 @@ def generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data=Non
         job_posting_context = format_job_data_for_prompt(job_posting_data)
         print(f"   ✅ Annonce intégrée : {job_posting_data.get('title', 'N/A')[:50]}...")
     
-    # ✅ PROMPT CORRIGÉ ET COMPLET
-    prompt = f"""Tu es un expert en prospection B2B avec 15 ans d'expérience. Tu dois rédiger un message LinkedIn qui démontre une VRAIE compréhension des enjeux business du prospect, avec un ton PROFESSIONNEL et COURTOIS.
+    # ✅ PROMPT OPTIMISÉ 10/10
+    prompt = f"""Tu es un expert en "Sales Intelligence" et en prospection B2B avec 15 ans d'expérience dans le recrutement de profils finance critiques.
+
+Ta mission : rédiger un message LinkedIn qui démontre une VRAIE compréhension des enjeux business du prospect, avec un ton PROFESSIONNEL et COURTOIS, sans AUCUNE auto-promotion.
 
 CONTEXTE PROSPECT :
 - Prénom : {prospect_data['first_name']}
 - Nom : {prospect_data['last_name']}
 - Entreprise : {prospect_data['company']}
+
 {f'''
-🆕 ANNONCE DE POSTE DISPONIBLE :
+═══════════════════════════════════════════════════════════════════
+🆕 ANNONCE DE POSTE DISPONIBLE
+═══════════════════════════════════════════════════════════════════
+
 {job_posting_context}
 
-RÈGLE IMPORTANTE : Cette annonce révèle le BESOIN EXPLICITE de l'entreprise.
-Si l'annonce est présente, utilisez-la comme BASE pour identifier les enjeux business.
-Exemple : Si l'annonce mentionne "transformation ERP SAP", l'icebreaker doit parler de transformation digitale finance.
+RÈGLE CRITIQUE : Cette annonce révèle le BESOIN EXPLICITE de l'entreprise.
+L'annonce doit être utilisée comme BASE PRINCIPALE pour identifier les enjeux business.
+
+PRIORITÉ D'UTILISATION DES SOURCES :
+1. Annonce de poste (besoin explicite) → PRIORITAIRE
+2. Hooks LinkedIn/Web (accomplissements personnels) → SECONDAIRE
+3. Contexte entreprise général → TERTIAIRE
+
+EXEMPLES D'UTILISATION DE L'ANNONCE :
+
+Si l'annonce mentionne "transformation ERP SAP" :
+✅ "Bonjour Marc, recruter un Contrôleur de Gestion capable de piloter la transformation SAP S/4HANA suppose une double expertise technique et finance rarement réunie sur le marché..."
+
+Si l'annonce mentionne "consolidation IFRS 17" :
+✅ "Bonjour Sophie, l'entrée en vigueur d'IFRS 17 complexifie significativement le profil de consolideur recherché, notamment sur la compréhension des impacts actuariels..."
+
+Si l'annonce mentionne "levée de fonds" ou "scale-up" :
+✅ "Bonjour Pierre, structurer la fonction finance en parallèle d'une hyper-croissance suppose des profils capables de poser des process tout en préservant l'agilité..."
+
+INTERDICTION : Ne pas ignorer l'annonce si elle est disponible.
+Si vous avez une annonce, vous DEVEZ l'utiliser comme fil conducteur de l'icebreaker.
+
+═══════════════════════════════════════════════════════════════════
 ''' if job_posting_data else ''}
 
 HOOKS IDENTIFIÉS :
@@ -567,6 +534,75 @@ Notre expertise en recrutement finance critique doit transparaître dans :
 ✅ L'INTELLIGENCE de notre question finale
 
 ❌ PAS dans une présentation de nos services
+❌ PAS dans la proposition de candidats ("j'ai identifié un profil...")
+❌ PAS dans un pitch commercial
+
+═══════════════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════════
+🚫 INTERDICTIONS ABSOLUES - VIOLATIONS GRAVES
+═══════════════════════════════════════════════════════════════════
+
+INTERDICTION N°1 : AUTO-PROMOTION ET PITCH COMMERCIAL
+
+❌ JAMAIS écrire :
+- "J'ai identifié un profil..."
+- "Nous accompagnons des profils..."
+- "J'ai isolé deux profils rares..."
+- "J'ai sélectionné un candidat..."
+- "Nous avons dans notre vivier..."
+- "Je dispose d'un expert..."
+- "Mon réseau compte des..."
+
+❌ JAMAIS utiliser de closing commercial :
+- "Voyez-vous un inconvénient à ce que je vous envoie..."
+- "Seriez-vous intéressé par..."
+- "Puis-je vous proposer..."
+- "Souhaitez-vous que je vous partage..."
+
+✅ À LA PLACE : Poser une question sur LEUR approche stratégique
+- "Privilégiez-vous..."
+- "Comment arbitrez-vous..."
+- "Sur ce type de profil, comment..."
+
+RATIONALE : L'icebreaker n'est PAS un pitch de vente.
+C'est une démonstration d'expertise par la QUALITÉ de l'analyse.
+Parler de vos candidats = passer de "conseiller expert" à "commercial".
+
+═══════════════════════════════════════════════════════════════════
+
+INTERDICTION N°2 : LONGUEUR EXCESSIVE
+
+❌ JAMAIS dépasser 80 mots (limite STRICTE)
+❌ JAMAIS faire des listes à puces dans l'icebreaker
+❌ JAMAIS détailler les compétences d'un candidat
+
+✅ À LA PLACE : Synthèse concise en 3 phrases
+- Phrase 1 : Salutation + Observation/Hook (25-30 mots)
+- Phrase 2 : Insight business (30-35 mots)
+- Phrase 3 : Question stratégique (15-20 mots)
+
+RATIONALE : Un icebreaker long = non lu.
+La concision démontre la maîtrise du sujet.
+
+═══════════════════════════════════════════════════════════════════
+
+INTERDICTION N°3 : FORMULATIONS FAMILIÈRES
+
+❌ JAMAIS utiliser :
+- Points de suspension ("...")
+- "Ça veut dire", "tout ça", "du coup"
+- "Pensez-vous que cela puisse être pertinent ?"
+- Ton trop décontracté
+
+✅ À LA PLACE : Tournures polies et professionnelles
+- "J'imagine que..."
+- "Je suppose que..."
+- "Privilégiez-vous..."
+- "Comment orientez-vous..."
+
+RATIONALE : Vous contactez des DAF, CFO, Directeurs.
+Le vouvoiement et la courtoisie sont NON NÉGOCIABLES.
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -585,95 +621,17 @@ TON REQUIS :
 
 ═══════════════════════════════════════════════════════════════════
 
-🎯 TECHNIQUES AVANCÉES D'ICEBREAKERS (Finance)
-
-═══════════════════════════════════════════════════════════════════
-
-ANATOMIE D'UN BON ICEBREAKER :
-
-Un excellent icebreaker suit toujours cette logique :
-→ OBSERVATION (fait précis et incontestable)
-→ IMPLICATION (pourquoi c'est important pour EUX)
-→ TRANSITION (lien avec leur besoin de recrutement)
-
-Exemple :
-❌ Faible : "J'ai vu que vous recrutez un consolideur."
-✅ Fort : "J'ai vu que vous recrutez un consolideur en pleine période de clôture annuelle, ce qui doit mettre une pression énorme sur vos équipes actuelles."
-
-═══════════════════════════════════════════════════════════════════
-
-3 APPROCHES STRATÉGIQUES À UTILISER :
-
-═══════════════════════════════════════════════════════════════════
-
-📊 APPROCHE 1 : "PEER INSIGHT" (Preuve sociale masquée)
-
-Principe : Montrer qu'on voit ce que font leurs pairs du marché
-Position : Informateur, pas vendeur
-
-Structure : "En discutant avec plusieurs [Fonction] dans [Secteur], je note que [Tendance], ce qui rend [Situation] complexe."
-
-Exemple :
-"Bonjour Marc, en discutant avec plusieurs DAF dans le secteur de l'assurance, je note une tension forte sur les profils IFRS 17 depuis l'entrée en vigueur. Est-ce un frein que vous rencontrez aussi pour votre recherche actuelle ?"
-
-Quand l'utiliser : Quand le hook parle d'un poste difficile à pourvoir ou d'un contexte de pénurie
-
-═══════════════════════════════════════════════════════════════════
-
-🔬 APPROCHE 2 : "SPÉCIFICITÉ RADICALE" (Anti-généraliste)
-
-Principe : Démontrer qu'on parle leur langage technique
-Mécanique : Utiliser un terme technique TRÈS précis dès le début
-
-Structure : "La double compétence [Compétence A] + [Compétence B] est rare sur le marché, mais souvent critique pour [Objectif Business]."
-
-Exemple :
-"Bonjour Sophie, trouver quelqu'un qui maîtrise à la fois SAP S/4HANA et la consolidation statutaire est un vrai casse-tête. J'imagine que ce double filtre rallonge significativement vos délais de recrutement ?"
-
-Quand l'utiliser : Quand le hook mentionne un projet technique, une transformation ERP, une compétence rare
-
-═══════════════════════════════════════════════════════════════════
-
-💡 APPROCHE 3 : "CHALLENGER" (Contre-intuitif)
-
-Principe : Soulever une hypothèse contre-intuitive (avec tact)
-Mécanique : "Vous cherchez X, mais le marché suggère Y"
-
-Structure : "Souvent, [Situation] vient du fait que [Raison], plutôt que de [Idée reçue]."
-
-Exemple :
-"Bonjour Pierre, votre recherche de Contrôleur de Gestion Industriel est ouverte depuis 6 semaines. Sur ce type de profil très pénurique, attendre le 'candidat parfait' coûte souvent plus cher en perte de productivité que de former un profil junior à fort potentiel. Avez-vous envisagé cette seconde option ?"
-
-Quand l'utiliser : Quand le hook montre une recherche qui dure, un profil introuvable, ou un contexte d'urgence
-
-⚠️ ATTENTION : Approche risquée, à utiliser UNIQUEMENT si :
-- Le prospect est senior (CFO, DAF)
-- Le ton reste respectueux ("Avez-vous envisagé" pas "Vous devriez")
-- L'hypothèse est crédible et basée sur une vraie tension de marché
-
-═══════════════════════════════════════════════════════════════════
-
-📋 CHECKLIST : QUELLE APPROCHE UTILISER ?
-
-Analysez le hook et choisissez LA MEILLEURE approche :
-
-Si le hook mentionne :
-→ Un poste ouvert / difficile à pourvoir → PEER INSIGHT
-→ Une compétence technique rare / transformation → SPÉCIFICITÉ RADICALE
-→ Une recherche qui dure / profil introuvable → CHALLENGER (avec prudence)
-→ Un projet / contexte business → PEER INSIGHT ou SPÉCIFICITÉ
-
-Ne forcez JAMAIS une approche si elle ne colle pas au hook.
-Privilégiez toujours la cohérence sur la "technique".
-
-═══════════════════════════════════════════════════════════════════
-
-STRUCTURE OBLIGATOIRE (70-80 mots) :
+STRUCTURE OBLIGATOIRE (70-80 mots MAXIMUM) :
 
 **PARTIE 1 : Salutation + Accroche avec insight [25-30 mots]**
 → Toujours commencer par "Bonjour [Prénom],"
 
-SI UN HOOK PERTINENT EXISTE :
+SI UNE ANNONCE EST DISPONIBLE :
+→ Partir de l'annonce comme BASE PRINCIPALE
+→ Identifier le défi métier derrière le recrutement
+→ Exemple : "recruter un [Profil] capable de [Compétence rare] suppose..."
+
+SI UN HOOK PERTINENT EXISTE (mais pas d'annonce) :
 → Utiliser le hook + ajouter un INSIGHT BUSINESS LOGIQUE
 → Le lien hook → insight doit être ÉVIDENT et NATUREL
 → NE JAMAIS forcer un lien artificiel
@@ -681,122 +639,62 @@ SI UN HOOK PERTINENT EXISTE :
 SI AUCUN HOOK OU HOOK TROP FAIBLE :
 → Partir directement du CONTEXTE ENTREPRISE/POSTE
 → Identifier un défi business réel lié à leur fonction
-→ Exemple : "En tant que [Poste] chez [Entreprise], j'imagine que [Défi business spécifique]..."
-
-⚠️ GESTION DES HOOKS FAIBLES OU ABSENTS
-
-═══════════════════════════════════════════════════════════════════
-
-SI le hook est :
-- Un événement spectateur (TEDx, conférence écoutée, livre lu)
-- Un accomplissement vague ou ancien (> 1 an)
-- Une information sans lien logique avec la fonction finance
-
-ALORS → IGNORER LE HOOK et construire l'icebreaker sur :
-
-1. **Le contexte entreprise** : transformation, expansion, levée, acquisition
-2. **Le poste/fonction** : défis spécifiques du rôle
-3. **Le secteur** : enjeux métier (finance, tech, industrie, etc.)
-
-═══════════════════════════════════════════════════════════════════
-
-EXEMPLES DE HOOKS À IGNORER :
-
-❌ "A assisté au TEDx sur les rêves"
-→ Pas pertinent pour la finance, spectateur
-
-❌ "A partagé un article sur l'IA"
-→ Trop vague, pas son contenu
-
-❌ "A félicité son équipe pour un projet"
-→ Pas son accomplissement direct
-
-DANS CES CAS → Construire sur le contexte :
-
-✅ "En tant qu'Internal Audit Manager chez CFAO, j'imagine que 
-l'expansion africaine du groupe complexifie vos enjeux de gouvernance 
-multi-pays..."
-
-✅ "Chez CFAO, l'équilibre entre contrôle central et autonomie des 
-filiales africaines suppose des profils audit capables de..."
-
-═══════════════════════════════════════════════════════════════════
-
-EXEMPLES DE BONS ICEBREAKERS SANS HOOK :
-
-📌 Internal Audit Manager, groupe en expansion :
-"Bonjour Philippe, en tant qu'Internal Audit Manager chez CFAO, 
-j'imagine que l'expansion du groupe en Afrique complexifie 
-significativement vos enjeux de gouvernance et de contrôle interne 
-multi-pays. Entre harmonisation des process et adaptation aux 
-spécificités locales, les profils doivent allier rigueur technique 
-et compréhension des contextes culturels. Privilégiez-vous des 
-profils avec expérience Big 4 Afrique ou grands groupes internationaux ?"
-
-📌 DAF, scale-up tech :
-"Bonjour Marie, en tant que DAF d'une scale-up tech en hyper-croissance, 
-j'imagine que l'équilibre entre structuration finance et agilité 
-opérationnelle est un défi quotidien. Entre mise en place des process 
-et préservation de la vitesse d'exécution, les profils finance doivent 
-maîtriser à la fois la rigueur et le pragmatisme startup. Privilégiez-vous 
-des profils issus de scale-ups similaires ou de cabinets conseil ?"
-
-📌 VP Finance, groupe industriel :
-"Bonjour Jean, chez [Entreprise industrielle], la transformation digitale 
-de la supply chain suppose une refonte complète du pilotage financier, 
-notamment sur la modélisation des coûts et le suivi de la performance 
-opérationnelle. J'imagine que les profils contrôle de gestion doivent 
-allier expertise industrielle et appétence pour les outils data. 
-Privilégiez-vous des profils sectoriels ou plus transverses avec 
-forte capacité d'adaptation ?"
-
-❌ INTERDICTIONS ABSOLUES :
-- Forcer un lien entre un hook faible et le contexte entreprise
-- Utiliser "résonne particulièrement" quand le lien n'est pas évident
-- Mentionner un événement spectateur (TEDx, conférence) comme s'il était pertinent
 
 **PARTIE 2 : Défi business spécifique [30-35 mots]**
-→ Identifier UN défi concret et réaliste lié au hook
+→ Identifier UN défi concret et réaliste lié au hook ou à l'annonce
 → Être SPÉCIFIQUE avec vocabulaire métier précis
 → Formuler avec politesse ("j'imagine", "je suppose")
+→ NE JAMAIS parler de vos candidats ici
 
-**PARTIE 3 : Question d'expert courtoise [15-20 mots]**
+**PARTIE 3 : Question stratégique [15-20 mots]**
 → Question qui montre notre expertise
-→ Formulée avec respect ("Pourriez-vous", "Vous privilégiez", "Comment")
-→ Sur leur APPROCHE, pas leurs besoins
+→ Question sur LEUR APPROCHE, jamais sur nos candidats
+→ Formulée avec respect ("Privilégiez-vous", "Comment arbitrez-vous")
+→ PAS de closing commercial ("Voyez-vous un inconvénient...")
 
 ═══════════════════════════════════════════════════════════════════
 
-RÈGLES IMPÉRATIVES :
-
-✅ TOUJOURS vouvoyer
-✅ Utiliser "Bonjour [Prénom]," en ouverture
-✅ Vocabulaire MÉTIER précis (pas du jargon RH)
-✅ Tournures polies : "j'imagine", "je suppose", "privilégiez-vous"
-✅ Mentionner des défis RÉELS et CONCRETS
-✅ Poser une question qui démontre notre expertise
-✅ Ton = consultant expert et respectueux
-
-❌ Vocabulaire/formulations interdits :
-- Points de suspension ("...")
-- "Ça veut dire", "tout ça", "du coup"
-- "Nous accompagnons", "Notre expertise", "Nous aidons"
-- "Aspects financiers", "enjeux de croissance" (trop vague)
-- "Renforcer vos équipes", "gérez-vous ces enjeux"
-- Questions trop directes sans formule de politesse
+EXEMPLES EXCELLENTS (10/10) :
 
 ═══════════════════════════════════════════════════════════════════
 
-EXEMPLES EXCELLENTS (ton professionnel et courtois) :
+📌 Exemple 1 : Mutuelle agricole (ACPR)
+"Bonjour Claire, recruter pour Mutualia un auditeur interne suppose de gérer un grand écart culturel : le marché regorge de profils Big 4 techniquement excellents mais souvent incapables de s'adapter à la réalité du terrain agricole et aux élus mutualistes. Privilégiez-vous le savoir-être quitte à former sur la technique, ou l'expertise reste-t-elle non négociable pour l'ACPR ?"
 
-📌 Scale-up tech qui lève 20M€ :
-"Bonjour Marc, une levée de 20M€ implique naturellement un renforcement du reporting investisseurs et une structuration du FP&A en vue d'une prochaine levée. J'imagine que le profil du VP Finance devient stratégique dans ce contexte. Privilégiez-vous plutôt une expertise scale-up ou grande entreprise ?"
+✅ Pourquoi c'est excellent :
+- Insight puissant (grand écart culturel)
+- Vocabulaire ultra-précis (ACPR, élus mutualistes)
+- Question stratégique (fit vs expertise)
+- Zéro auto-promo
+- 72 mots
 
-📌 Ouverture de 50 nouvelles agences :
-"Bonjour Sarah, 50 agences en 18 mois suppose une industrialisation du modèle financier bien au-delà des enjeux de recrutement classiques. Entre la gestion de trésorerie multi-sites et la consolidation comptable, j'imagine que le profil pour piloter ces sujets est clé. Comment orientez-vous vos recherches sur ce type de poste ?"
+═══════════════════════════════════════════════════════════════════
 
-📌 Certification obtenue / nouveau partenariat :
-"Bonjour Pierre, une certification ISO implique généralement un renforcement du contrôle de gestion, notamment sur les aspects de traçabilité et de suivi des KPIs. J'imagine que cela a pu vous amener à revoir l'organisation de l'équipe finance. Avez-vous privilégié un renforcement interne ou des recrutements externes ?"
+📌 Exemple 2 : Expansion Afrique
+"Bonjour Philippe, l'expansion continue de CFAO en Afrique représente un défi de gouvernance majeur pour votre Audit Interne : maintenir un standard groupe tout en naviguant les spécificités réglementaires locales. Sur vos recrutements actuels, privilégiez-vous des profils issus de Big 4 locaux ou des auditeurs formés aux standards de grands groupes internationaux ?"
+
+✅ Pourquoi c'est excellent :
+- Contexte business précis (expansion Afrique)
+- Insight sur le dilemme (standard groupe vs local)
+- Question binaire claire
+- Zéro auto-promo
+- 68 mots
+
+═══════════════════════════════════════════════════════════════════
+
+EXEMPLES À REJETER (Auto-promotion) :
+
+═══════════════════════════════════════════════════════════════════
+
+❌ Exemple : Pitch commercial déguisé
+"Bonjour Thomas, je sais qu'un poste de Responsable Compta Banque est rare. J'ai identifié un profil Senior qui a cette double casquette : culture audit et Key User SAP. Il pourrait soulager vos équipes instantanément. Voyez-vous un inconvénient à ce que je vous envoie sa synthèse ?"
+
+🚫 Pourquoi c'est MAUVAIS :
+- "J'ai identifié un profil" = pitch commercial
+- Parle de NOTRE candidat, pas de LEURS enjeux
+- Closing commercial ("Voyez-vous un inconvénient")
+- Pas de question stratégique
+- Violation GRAVE de l'interdiction N°1
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -807,12 +705,14 @@ CHECKLIST FINALE (vérifie avant d'envoyer) :
 □ Mon vocabulaire est-il MÉTIER et précis ?
 □ Mon insight montre-t-il une vraie compréhension ?
 □ Mon défi business est-il CONCRET et RÉALISTE ?
+□ Ma question est-elle sur LEUR approche (PAS sur mes candidats) ?
 □ Ma question est-elle formulée avec courtoisie ?
 □ Ma question démontre-t-elle notre expertise ?
-□ Ai-je évité les tournures trop décontractées ?
-□ Est-ce que je parle de LEUR réalité (pas de nous) ?
-□ Longueur = 70-80 mots ?
+□ Ai-je ZÉRO auto-promo ("j'ai identifié", "nous accompagnons") ?
+□ Ai-je ZÉRO closing commercial ("voyez-vous un inconvénient") ?
+□ Longueur = 70-80 mots MAXIMUM ?
 □ Pas de points de suspension ?
+□ Pas de listes à puces ?
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -884,8 +784,8 @@ def update_sheet(sheet, row_number, linkedin_url, hooks_json, icebreaker):
 def main():
     """Fonction principale"""
     print("\n" + "="*80)
-    print("🚀 ICEBREAKER AUTOMATION - VERSION CORRIGÉE")
-    print("   LinkedIn Scraping + Web Search + Smart Hook Extraction")
+    print("🚀 ICEBREAKER AUTOMATION - VERSION OPTIMISÉE 10/10")
+    print("   LinkedIn + Web + Annonces + Smart Hook Extraction")
     print("="*80 + "\n")
     
     try:
@@ -914,7 +814,14 @@ def main():
                 linkedin_url = prospect['linkedin_url']
                 print(f"🔗 URL LinkedIn fourni : {linkedin_url}\n")
             
-            # 2. Scraping LinkedIn - PHASE 1 : 5 posts
+            # 2. Scraping annonce (si URL fournie)
+            job_posting_data = None
+            if prospect.get('job_posting_url'):
+                print(f"📋 Scraping de l'annonce de poste...")
+                job_posting_data = scrape_job_posting(prospect['job_posting_url'])
+                time.sleep(2)
+            
+            # 3. Scraping LinkedIn - PHASE 1 : 5 posts
             profile_data = scrape_linkedin_profile(apify_client, linkedin_url)
             time.sleep(3)
             
@@ -927,7 +834,7 @@ def main():
             company_profile = scrape_company_profile(apify_client, prospect['company'])
             time.sleep(3)
             
-            # 3. Recherche Web
+            # 4. Recherche Web
             title = ""
             if profile_data and profile_data.get('experiences'):
                 title = profile_data['experiences'][0].get('title', '')
@@ -940,7 +847,7 @@ def main():
             )
             time.sleep(2)
             
-            # 4. Extraction des hooks - TENTATIVE 1 avec 5 posts
+            # 5. Extraction des hooks - TENTATIVE 1 avec 5 posts
             print(f"🎯 Tentative 1 : Extraction hooks avec 5 posts...")
             hooks_json = extract_hooks_with_claude(
                 profile_data, 
@@ -953,7 +860,7 @@ def main():
             )
             time.sleep(2)
             
-            # 5. SI AUCUN HOOK TROUVÉ → Scraper 5 posts supplémentaires
+            # 6. SI AUCUN HOOK TROUVÉ → Scraper 5 posts supplémentaires
             if hooks_json == "NOT_FOUND":
                 print(f"⚠️  Aucun hook trouvé avec 5 posts")
                 print(f"🔄 Tentative 2 : Scraping de 5 posts supplémentaires...")
@@ -978,10 +885,10 @@ def main():
                 )
                 time.sleep(2)
             
-            # 6. Génération icebreaker
-            icebreaker = generate_advanced_icebreaker(prospect, hooks_json)
+            # 7. Génération icebreaker (avec annonce si disponible)
+            icebreaker = generate_advanced_icebreaker(prospect, hooks_json, job_posting_data)
             
-            # 6. Mise à jour Google Sheet
+            # 8. Mise à jour Google Sheet
             update_sheet(sheet, prospect['row_number'], linkedin_url, hooks_json, icebreaker)
             
             # Pause entre prospects
