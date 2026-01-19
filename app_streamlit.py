@@ -422,7 +422,7 @@ with tab1:
                     time.sleep(2)
                     
                     icebreaker = generate_advanced_icebreaker(prospect, hooks_json, job_posting_data)
-                    
+                    icebreaker = clean_message_format(icebreaker, prospect['first_name'])                    
                     elapsed_time = time.time() - start_time
                     
                     st.session_state.results.append({
@@ -857,6 +857,7 @@ with tab4:
                         
                         st.write(f"📝 {name} - Génération message 3...")
                         message_3 = generate_message_4(prospect_data, message_1)
+                        message_3 = clean_message_format(message_3, prospect_data['first_name'])  # ← AJOUTEZ CETTE LIGNE
                         time.sleep(5)
                         
                         # ========================================
