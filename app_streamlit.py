@@ -33,20 +33,15 @@ if 'leonar_prospects' not in st.session_state:
 
 # Configuration Leonar
 try:
-    # Sur Streamlit Cloud, utiliser st.secrets
-    LEONAR_EMAIL = st.secrets.get("LEONAR_EMAIL", os.getenv("LEONAR_EMAIL"))
-    LEONAR_PASSWORD = st.secrets.get("LEONAR_PASSWORD", os.getenv("LEONAR_PASSWORD"))
-    LEONAR_CAMPAIGN_ID = st.secrets.get("LEONAR_CAMPAIGN_ID", os.getenv("LEONAR_CAMPAIGN_ID"))
-except:
+    # Sur Streamlit Cloud, utiliser st.secrets (AVEC CROCHETS !)
+    LEONAR_EMAIL = st.secrets["LEONAR_EMAIL"]
+    LEONAR_PASSWORD = st.secrets["LEONAR_PASSWORD"]
+    LEONAR_CAMPAIGN_ID = st.secrets["LEONAR_CAMPAIGN_ID"]
+except (KeyError, AttributeError):
     # Fallback sur .env en local
     LEONAR_EMAIL = os.getenv("LEONAR_EMAIL")
     LEONAR_PASSWORD = os.getenv("LEONAR_PASSWORD")
     LEONAR_CAMPAIGN_ID = os.getenv("LEONAR_CAMPAIGN_ID")
-
-    st.write("DEBUG - Secrets chargés :")
-st.write(f"LEONAR_EMAIL: {LEONAR_EMAIL}")
-st.write(f"LEONAR_PASSWORD: {'***' if LEONAR_PASSWORD else 'VIDE'}")
-st.write(f"LEONAR_CAMPAIGN_ID: {LEONAR_CAMPAIGN_ID}")
 
 # Fichier de tracking (AJOUTEZ ICI)
 PROCESSED_FILE = "processed_prospects.txt"
