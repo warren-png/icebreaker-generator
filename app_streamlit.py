@@ -43,12 +43,6 @@ except (KeyError, AttributeError):
     LEONAR_PASSWORD = os.getenv("LEONAR_PASSWORD")
     LEONAR_CAMPAIGN_ID = os.getenv("LEONAR_CAMPAIGN_ID")
 
-    st.write("DEBUG - Secrets chargés :")
-st.write(f"LEONAR_EMAIL: {LEONAR_EMAIL}")
-st.write(f"LEONAR_PASSWORD: {'***' if LEONAR_PASSWORD else 'VIDE'}")
-st.write(f"LEONAR_CAMPAIGN_ID: {LEONAR_CAMPAIGN_ID}")
-
-st.write("TEST:", st.secrets.get("TEST_SECRET", "PAS TROUVÉ"))
 
 # Fichier de tracking (AJOUTEZ ICI)
 PROCESSED_FILE = "processed_prospects.txt"
