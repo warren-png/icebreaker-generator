@@ -97,23 +97,31 @@ COL_ICEBREAKER = 11       # Colonne K
 # ========================================
 def check_api_keys():
     """Vérifie que toutes les clés API sont configurées"""
+    
+    import streamlit as st
+    
+    required_keys = {
+        'ANTHROPIC_API_KEY': 'Clé API Anthropic',
+        'APIFY_API_KEY': 'Clé API Apify',
+        'SERPER_API_KEY': 'Clé API Serper'
+    }
+    
     missing_keys = []
     
-    if not ANTHROPIC_API_KEY:
-        missing_keys.append("ANTHROPIC_API_KEY")
-    if not APIFY_API_TOKEN:
-        missing_keys.append("APIFY_API_TOKEN")
-    if not SERPER_API_KEY:
-        missing_keys.append("SERPER_API_KEY")
+    for key, description in required_keys.items():
+        # Essayer d'abord st.secrets, puis os.getenv
+        try:
+            value = st.secrets.get(key, os.getenv(key))
+        except:
+            value = os.getenv(key)
+        
+        if not value:
+            missing_keys.append(f"{description} ({key})")
     
     if missing_keys:
         raise ValueError(
-            f"❌ Clés API manquantes dans le fichier .env : {', '.join(missing_keys)}\n"
-            f"Veuillez créer un fichier .env avec ces clés."
+            f"❌ Clés API manquantes : {', '.join(missing_keys)}\n"
+            "Veuillez les configurer dans .env ou Streamlit Cloud Secrets"
         )
     
     print("✅ Toutes les clés API sont configurées")
-
-# Vérifier au démarrage
-if __name__ != "__main__":
-    check_api_keys()
