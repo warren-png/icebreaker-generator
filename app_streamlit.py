@@ -55,26 +55,32 @@ def clean_message_format(message, first_name):
     """
     import re
     
-    # 1. Assurer ligne vide après salutation
-    message = re.sub(
-        r'(Bonjour ' + re.escape(first_name) + r',)\s*',
-        r'\1\n\n',
-        message,
-        count=1
-    )
+    # 1. Assurer ligne vide après salutation (VERSION AMÉLIORÉE)
+    # Gère TOUS les cas : avec ou sans espace, avec ou sans \n après la virgule
+    pattern = r'(Bonjour ' + re.escape(first_name) + r',)\s*'
+    message = re.sub(pattern, r'\1\n\n', message, count=1, flags=re.IGNORECASE)
     
-    # 2. Supprimer toutes les variations de signature
+    # 2. Nettoyer les doubles lignes vides en trop (si déjà présentes)
+    message = re.sub(r'(Bonjour ' + re.escape(first_name) + r',)\n\n\n+', r'\1\n\n', message, count=1, flags=re.IGNORECASE)
+    
+    # 3. Cas particulier : si le texte commence avec minuscule après salutation
+    # (comme "Bonjour Aurélie,\nj'ai" au lieu de "Bonjour Aurélie,\n\nj'ai")
+    # Forcer le double \n si la ligne suivante commence par minuscule
+    pattern_lowercase = r'(Bonjour ' + re.escape(first_name) + r',)\n([a-zéèêàù])'
+    message = re.sub(pattern_lowercase, r'\1\n\n\2', message, count=1, flags=re.IGNORECASE)
+    
+    # 4. Supprimer toutes les variations de signature
     patterns_to_remove = [
         r'\n\nBien cordialement,?\s*\n+\[Prénom\]',
         r'\nBien cordialement,\s*\[Prénom\]',
         r'\n\[Prénom\]\s*$',
-        r'Bien cordialement,\s*\[Prénom\]'
+        r'Cordialement,\s*\[Prénom\]'
     ]
     
     for pattern in patterns_to_remove:
         message = re.sub(pattern, '\n\nBien cordialement', message)
     
-    # 3. Nettoyer signature orpheline
+    # 5. Nettoyer signature orpheline
     message = re.sub(r'\n+\[Prénom\]\s*$', '', message)
     
     return message.strip()
