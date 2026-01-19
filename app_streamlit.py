@@ -533,9 +533,8 @@ with tab3:
     
     except Exception as e:
         st.error(f"❌ Erreur : {e}")
-
-# ========================================
-# TAB 4 : EXPORT LEONAR (NOUVEAU !)
+        # ========================================
+# TAB 4 : EXPORT LEONAR (VERSION FINALE)
 # ========================================
 
 with tab4:
@@ -544,14 +543,6 @@ with tab4:
     # Vérification config
     if not all([LEONAR_EMAIL, LEONAR_PASSWORD, LEONAR_CAMPAIGN_ID]):
         st.error("❌ Configuration Leonar manquante !")
-        st.info("""
-        **Ajoutez dans Streamlit Cloud → Settings → Secrets :**
-        ```
-        LEONAR_EMAIL = "votre_email@leonar.app"
-        LEONAR_PASSWORD = "votre_mot_de_passe"
-        LEONAR_CAMPAIGN_ID = "votre_campaign_id"
-        ```
-        """)
         st.stop()
     
     # Test connexion
@@ -564,11 +555,10 @@ with tab4:
     
     st.success("✅ Connecté à Leonar")
     st.caption(f"📧 {LEONAR_EMAIL}")
-    st.caption(f"📋 Campaign ID : {LEONAR_CAMPAIGN_ID[:20]}...")
     
     st.divider()
     
-    # OPTIONS DE SCRAPING (comme dans l'onglet Génération)
+    # OPTIONS DE SCRAPING
     st.subheader("⚙️ Options de scraping")
     
     col1, col2, col3 = st.columns(3)
@@ -579,6 +569,54 @@ with tab4:
         leonar_company_scraping = st.checkbox("🏢 Scraper entreprise", value=True, key="leonar_company")
     with col3:
         leonar_job_scraping = st.checkbox("📄 Scraper annonce", value=True, key="leonar_job")
+    
+    # ZONE DE TEXTE POUR LES URLs D'ANNONCES
+    job_urls_list = []
+    if leonar_job_scraping:
+        st.divider()
+        st.subheader("📄 URLs des fiches de poste")
+        
+        with st.expander("💡 Mode d'emploi", expanded=False):
+            st.markdown("""
+            **Comment ça marche :**
+            
+            1. Collez les URLs des annonces (une par ligne)
+            2. **DANS LE MÊME ORDRE** que vos prospects ci-dessous
+            3. Si un prospect n'a pas d'annonce, **laissez une ligne vide**
+            
+            **Exemple pour 3 prospects :**
+            ```
+            https://www.hellowork.com/fr-fr/emplois/12345.html
+            https://www.apec.fr/candidat/recherche-emploi.html/emploi/67890
+            
+            ```
+            ☝️ Ligne vide pour le 3ème prospect
+            
+            **Formats supportés :**
+            - HelloWork
+            - Apec
+            - LinkedIn Jobs
+            - Welcome to the Jungle
+            - Indeed
+            """)
+        
+        job_urls_input = st.text_area(
+            "Collez les URLs (une par ligne, dans l'ordre des prospects)",
+            height=150,
+            placeholder="https://www.hellowork.com/fr-fr/emplois/12345.html\nhttps://www.apec.fr/...\n\nhttps://www.linkedin.com/jobs/...",
+            key="leonar_job_urls",
+            help="Une URL par ligne. Ligne vide = pas d'annonce pour ce prospect."
+        )
+        
+        # Parser les URLs
+        if job_urls_input:
+            job_urls_list = [url.strip() for url in job_urls_input.split('\n')]
+            
+            # Compter les URLs valides
+            valid_urls = [url for url in job_urls_list if url and 'http' in url]
+            
+            if valid_urls:
+                st.success(f"✅ {len(valid_urls)} URL(s) d'annonce détectée(s) sur {len(job_urls_list)} ligne(s)")
     
     st.divider()
     
@@ -599,32 +637,47 @@ with tab4:
     if not st.session_state.leonar_prospects:
         st.success("✅ Aucun nouveau prospect à traiter !")
         st.info("""
-        **💡 Comment l'utiliser :**
+        **💡 Mode d'emploi complet :**
         
-        1. Ajoutez des prospects manuellement dans Leonar avec :
-           - Prénom, Nom, Entreprise (obligatoire)
-           - URL LinkedIn (fortement recommandé pour qualité)
-           - URL annonce de poste (optionnel, dans un champ personnalisé)
+        1. Ajoutez des prospects manuellement dans Leonar
+        2. Revenez ici et cliquez "Rafraîchir"
+        3. (Optionnel) Collez les URLs des annonces
+        4. Cliquez "Générer les messages"
+        5. Attendez 2-3 min par prospect
+        6. Les 3 messages apparaissent dans Leonar
         
-        2. Cliquez sur "Rafraîchir la liste"
-        3. Cliquez sur "Générer les messages"
-        4. Les 3 messages ultra-personnalisés seront ajoutés dans "Commentaires"
-        5. Copiez-collez dans votre séquence
-        
-        **⏱️ Temps de traitement :**
-        - Avec scraping complet : ~2-3 min par prospect
-        - Sans URL LinkedIn : ~40 sec (qualité basique)
-        
-        **💰 Coût : ~$0.065 par prospect**
+        **💰 Coût : ~$0.065/prospect | ⏱️ Temps : 2-3 min/prospect**
         """)
     else:
         st.warning(f"📊 **{len(st.session_state.leonar_prospects)} prospect(s)** en attente")
         
-        # Liste
-        with st.expander("👥 Voir la liste", expanded=True):
+        # Vérifier correspondance URLs / Prospects
+        if job_urls_list and len(job_urls_list) != len(st.session_state.leonar_prospects):
+            st.warning(f"""
+            ⚠️ **Nombre de lignes différent !**
+            
+            - Prospects : {len(st.session_state.leonar_prospects)}
+            - Lignes d'URLs : {len(job_urls_list)}
+            
+            Ajoutez des lignes vides si certains prospects n'ont pas d'annonce.
+            """)
+        
+        # Liste des prospects
+        with st.expander("👥 Voir la liste des prospects", expanded=True):
             for i, p in enumerate(st.session_state.leonar_prospects, 1):
-                linkedin = "✅ LinkedIn" if p.get('linkedin_url') else "⚠️ Pas de LinkedIn"
-                st.markdown(f"**{i}.** {p.get('user_full name', 'N/A')} - *{p.get('linkedin_company', 'N/A')}* - {linkedin}")
+                linkedin_icon = "✅" if p.get('linkedin_url') else "⚠️"
+                
+                # Vérifier si URL annonce correspond
+                job_icon = ""
+                if job_urls_list and i <= len(job_urls_list):
+                    if job_urls_list[i-1].strip() and 'http' in job_urls_list[i-1]:
+                        job_icon = " 📄"
+                
+                st.markdown(
+                    f"**{i}.** {p.get('user_full name', 'N/A')} - "
+                    f"*{p.get('linkedin_company', 'N/A')}* - "
+                    f"{linkedin_icon} LinkedIn{job_icon}"
+                )
         
         st.divider()
         
@@ -641,7 +694,7 @@ with tab4:
                 overall_progress = st.progress(0)
                 status_container = st.empty()
                 
-                # Initialiser Apify une seule fois
+                # Initialiser Apify
                 apify_client = init_apify_client()
                 
                 for i, prospect in enumerate(st.session_state.leonar_prospects):
@@ -654,7 +707,18 @@ with tab4:
                     
                     try:
                         # ========================================
-                        # ÉTAPE 1 : PRÉPARATION DES DONNÉES
+                        # RÉCUPÉRER L'URL DE L'ANNONCE
+                        # ========================================
+                        
+                        job_url = None
+                        if job_urls_list and i < len(job_urls_list):
+                            url_candidate = job_urls_list[i].strip()
+                            if url_candidate and 'http' in url_candidate:
+                                job_url = url_candidate
+                                st.info(f"📄 {name} - URL annonce : {job_url[:60]}...")
+                        
+                        # ========================================
+                        # PRÉPARATION DES DONNÉES
                         # ========================================
                         
                         prospect_data = {
@@ -662,11 +726,11 @@ with tab4:
                             'last_name': prospect.get('last_name', ''),
                             'company': prospect.get('linkedin_company', ''),
                             'linkedin_url': prospect.get('linkedin_url', ''),
-                            'job_posting_url': prospect.get('job_posting_url', '')  # Si vous avez ce champ
+                            'job_posting_url': job_url or ''
                         }
                         
                         # ========================================
-                        # ÉTAPE 2 : SCRAPING COMPLET (comme onglet Génération)
+                        # SCRAPING COMPLET
                         # ========================================
                         
                         linkedin_url = prospect.get('linkedin_url', '')
@@ -681,109 +745,94 @@ with tab4:
                             hooks_json = {'type': 'manual'}
                         
                         else:
-                            st.write(f"🔗 {name} - URL LinkedIn trouvée : {linkedin_url}")
+                            st.write(f"🔗 {name} - Scraping LinkedIn...")
                             
-                            # Scraping profil LinkedIn
-                            with st.spinner(f"📊 {name} - Scraping profil LinkedIn..."):
-                                profile_data = scrape_linkedin_profile(apify_client, linkedin_url)
-                                time.sleep(2)
-                            st.success(f"✅ {name} - Profil LinkedIn récupéré")
+                            # Profil
+                            profile_data = scrape_linkedin_profile(apify_client, linkedin_url)
+                            time.sleep(2)
                             
-                            # Scraping posts LinkedIn
-                            with st.spinner(f"📝 {name} - Scraping posts LinkedIn..."):
-                                posts_data = scrape_linkedin_posts(apify_client, linkedin_url)
-                                time.sleep(2)
-                            st.success(f"✅ {name} - Posts LinkedIn récupérés")
+                            # Posts
+                            posts_data = scrape_linkedin_posts(apify_client, linkedin_url)
+                            time.sleep(2)
                             
-                            # Scraping entreprise (optionnel)
+                            # Entreprise
                             if leonar_company_scraping and prospect_data['company']:
-                                with st.spinner(f"🏢 {name} - Scraping entreprise..."):
-                                    company_posts = scrape_company_posts(apify_client, prospect_data['company'])
-                                    time.sleep(2)
-                                    company_profile = scrape_company_profile(apify_client, prospect_data['company'])
-                                    time.sleep(2)
-                                st.success(f"✅ {name} - Entreprise scrapée")
+                                company_posts = scrape_company_posts(apify_client, prospect_data['company'])
+                                time.sleep(2)
+                                company_profile = scrape_company_profile(apify_client, prospect_data['company'])
+                                time.sleep(2)
                             else:
                                 company_posts = []
                                 company_profile = None
                             
-                            # Recherche web (optionnel)
+                            # Recherche web
                             if leonar_web_search:
-                                with st.spinner(f"🔍 {name} - Recherche web..."):
-                                    title = ""
-                                    if profile_data and profile_data.get('experiences'):
-                                        title = profile_data['experiences'][0].get('title', '')
-                                    
-                                    web_results = web_search_prospect(
-                                        prospect_data['first_name'],
-                                        prospect_data['last_name'],
-                                        prospect_data['company'],
-                                        title
-                                    )
-                                    time.sleep(2)
-                                st.success(f"✅ {name} - Recherche web effectuée")
+                                title = ""
+                                if profile_data and profile_data.get('experiences'):
+                                    title = profile_data['experiences'][0].get('title', '')
+                                
+                                web_results = web_search_prospect(
+                                    prospect_data['first_name'],
+                                    prospect_data['last_name'],
+                                    prospect_data['company'],
+                                    title
+                                )
+                                time.sleep(2)
                             else:
                                 web_results = []
                             
-                            # Extraction des hooks avec Claude
-                            with st.spinner(f"🎣 {name} - Extraction des hooks..."):
-                                hooks_json = extract_hooks_with_claude(
-                                    profile_data,
-                                    posts_data,
-                                    company_posts,
-                                    company_profile,
-                                    web_results,
-                                    f"{prospect_data['first_name']} {prospect_data['last_name']}",
-                                    prospect_data['company']
-                                )
-                                time.sleep(2)
-                            st.success(f"✅ {name} - Hooks extraits")
+                            # Extraction hooks
+                            st.write(f"🎣 {name} - Extraction des hooks...")
+                            hooks_json = extract_hooks_with_claude(
+                                profile_data,
+                                posts_data,
+                                company_posts,
+                                company_profile,
+                                web_results,
+                                f"{prospect_data['first_name']} {prospect_data['last_name']}",
+                                prospect_data['company']
+                            )
+                            time.sleep(2)
                         
                         # ========================================
-                        # ÉTAPE 3 : SCRAPING ANNONCE (optionnel)
+                        # SCRAPING ANNONCE
                         # ========================================
                         
                         job_posting_data = None
-                        if leonar_job_scraping and prospect_data.get('job_posting_url'):
-                            with st.spinner(f"📄 {name} - Scraping annonce..."):
-                                job_posting_data = scrape_job_posting(prospect_data['job_posting_url'])
-                                time.sleep(2)
-                            st.success(f"✅ {name} - Annonce scrapée")
+                        if job_url:
+                            st.write(f"📄 {name} - Scraping annonce...")
+                            job_posting_data = scrape_job_posting(job_url)
+                            time.sleep(2)
                         
                         # ========================================
-                        # ÉTAPE 4 : GÉNÉRATION DES 3 MESSAGES
+                        # GÉNÉRATION DES 3 MESSAGES
                         # ========================================
                         
-                        # Message 1 (Icebreaker)
-                        with st.spinner(f"📝 {name} - Génération message 1 (icebreaker)..."):
-                            message_1 = generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data)
-                            time.sleep(15)
-                        st.success(f"✅ {name} - Message 1 généré ({len(message_1.split())} mots)")
+                        st.write(f"📝 {name} - Génération message 1...")
+                        message_1 = generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data)
+                        time.sleep(15)
                         
-                        # Message 2 (Apport valeur)
-                        with st.spinner(f"📝 {name} - Génération message 2 (apport valeur)..."):
-                            message_2 = generate_message_2(prospect_data, hooks_json, job_posting_data, message_1)
-                            time.sleep(15)
-                        st.success(f"✅ {name} - Message 2 généré ({len(message_2.split())} mots)")
+                        st.write(f"📝 {name} - Génération message 2...")
+                        message_2 = generate_message_2(prospect_data, hooks_json, job_posting_data, message_1)
+                        time.sleep(15)
                         
-                        # Message 3 (Break-up)
-                        with st.spinner(f"📝 {name} - Génération message 3 (break-up)..."):
-                            message_3 = generate_message_4(prospect_data, message_1)
-                            time.sleep(5)
-                        st.success(f"✅ {name} - Message 3 généré ({len(message_3.split())} mots)")
+                        st.write(f"📝 {name} - Génération message 3...")
+                        message_3 = generate_message_4(prospect_data, message_1)
+                        time.sleep(5)
                         
                         # ========================================
-                        # ÉTAPE 5 : ENVOI VERS LEONAR
+                        # ENVOI VERS LEONAR
                         # ========================================
                         
-                        with st.spinner(f"📤 {name} - Envoi vers Leonar..."):
-                            messages = {
-                                'message_1': message_1,
-                                'message_2': message_2,
-                                'message_3': message_3
-                            }
-                            
-                            success = update_prospect_leonar(token, prospect['_id'], messages)
+                        st.write(f"📤 {name} - Envoi vers Leonar...")
+                        
+                        messages = {
+                            'message_1': message_1,
+                            'message_2': message_2,
+                            'message_3': message_3
+                        }
+                        
+                        success = update_prospect_leonar(token, prospect['_id'], messages)
                         
                         elapsed_time = time.time() - start_time
                         
@@ -796,36 +845,25 @@ with tab4:
                                 'len2': len(message_2.split()),
                                 'len3': len(message_3.split()),
                                 'time': elapsed_time,
-                                'had_linkedin': bool(linkedin_url)
+                                'had_linkedin': bool(linkedin_url),
+                                'had_job': bool(job_url)
                             })
                             st.success(f"🎉 {name} - Terminé en {elapsed_time:.0f}s !")
                         else:
-                            results.append({
-                                'name': name,
-                                'success': False,
-                                'time': elapsed_time,
-                                'had_linkedin': bool(linkedin_url)
-                            })
+                            results.append({'name': name, 'success': False, 'time': elapsed_time})
                             st.error(f"❌ {name} - Erreur mise à jour Leonar")
                         
                     except Exception as e:
                         elapsed_time = time.time() - start_time
-                        results.append({
-                            'name': name,
-                            'success': False,
-                            'time': elapsed_time,
-                            'had_linkedin': False
-                        })
+                        results.append({'name': name, 'success': False, 'time': elapsed_time})
                         st.error(f"❌ {name} - Erreur : {str(e)}")
                     
-                    # Pause entre prospects
-                    if i < len(st.session_state.leonar_prospects) - 1:
-                        time.sleep(2)
+                    time.sleep(2)
                 
                 overall_progress.progress(1.0)
                 
                 # ========================================
-                # RÉSULTATS FINAUX
+                # RÉSULTATS
                 # ========================================
                 
                 st.markdown("---")
@@ -833,6 +871,7 @@ with tab4:
                 
                 success_count = sum(1 for r in results if r.get('success'))
                 linkedin_count = sum(1 for r in results if r.get('had_linkedin'))
+                job_count = sum(1 for r in results if r.get('had_job'))
                 total_time = sum(r.get('time', 0) for r in results)
                 
                 col1, col2, col3, col4 = st.columns(4)
@@ -840,28 +879,29 @@ with tab4:
                 with col1:
                     st.metric("✅ Succès", success_count)
                 with col2:
-                    st.metric("❌ Erreurs", len(results) - success_count)
-                with col3:
                     st.metric("🔗 Avec LinkedIn", linkedin_count)
+                with col3:
+                    st.metric("📄 Avec annonce", job_count)
                 with col4:
                     st.metric("⏱️ Temps total", f"{total_time/60:.1f} min")
                 
-                # Détails par prospect
-                with st.expander("📋 Détails par prospect", expanded=True):
+                with st.expander("📋 Détails", expanded=True):
                     for r in results:
                         if r.get('success'):
-                            linkedin_icon = "🔗" if r.get('had_linkedin') else "⚠️"
+                            icons = []
+                            if r.get('had_linkedin'): icons.append("🔗")
+                            if r.get('had_job'): icons.append("📄")
+                            icon_str = "".join(icons) if icons else "⚠️"
+                            
                             st.success(
-                                f"{linkedin_icon} ✅ {r['name']} - "
+                                f"{icon_str} ✅ {r['name']} - "
                                 f"M1: {r.get('len1', 0)}w, M2: {r.get('len2', 0)}w, M3: {r.get('len3', 0)}w - "
                                 f"{r.get('time', 0):.0f}s"
                             )
                         else:
-                            st.error(f"❌ {r['name']} - Échec")
+                            st.error(f"❌ {r['name']}")
                 
-                # Coûts
-                cost = success_count * 0.065
-                st.metric("💰 Coût total", f"${cost:.2f}")
+                st.metric("💰 Coût total", f"${success_count * 0.065:.2f}")
                 
                 st.markdown("---")
                 st.success("🎉 **Génération terminée !**")
@@ -869,24 +909,12 @@ with tab4:
                 st.info("""
                 **📋 Prochaines étapes :**
                 
-                1. Ouvrez Leonar
-                2. Allez sur la fiche de chaque prospect
+                1. Ouvrez Leonar → Votre campagne
+                2. Ouvrez la fiche de chaque prospect
                 3. Onglet "Commentaires" ou "Notes"
-                4. Copiez les 3 messages séparément :
-                   
-                   **MESSAGE 1 (J+0) - ICEBREAKER**
-                   → Collez dans Étape 1 de votre séquence
-                   
-                   **MESSAGE 2 (J+5) - APPORT VALEUR**
-                   → Collez dans Étape 2 de votre séquence
-                   
-                   **MESSAGE 3 (J+12) - BREAK-UP**
-                   → Collez dans Étape 3 de votre séquence
-                
-                5. Lancez la séquence ! 🚀
-                
-                **💡 Astuce :** Les messages s'enchaînent logiquement et 
-                font référence aux précédents pour créer une vraie conversation.
+                4. Copiez les 3 messages séparément
+                5. Collez dans votre séquence Leonar
+                6. Lancez ! 🚀
                 """)
                 
                 st.balloons()
@@ -895,5 +923,6 @@ with tab4:
 # FOOTER
 # ========================================
 
-st.divider()
+st.divider(
 st.caption("🎯 Icebreaker Generator v2.1 + Leonar | Powered by Claude Sonnet 4")
+)
