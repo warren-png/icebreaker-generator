@@ -110,39 +110,26 @@ def get_new_prospects_leonar(token):
         return []
 
 def update_prospect_leonar(token, prospect_id, messages):
-    """Met à jour un prospect avec les 3 messages"""
+    """Met à jour un prospect avec les 3 messages dans les custom_variables"""
     try:
-        formatted_notes = f"""═══════════════════════════════════════════════════════════════
-MESSAGE 1 (J+0) - ICEBREAKER
-═══════════════════════════════════════════════════════════════
-
-{messages['message_1']}
-
-═══════════════════════════════════════════════════════════════
-MESSAGE 2 (J+5) - APPORT VALEUR
-═══════════════════════════════════════════════════════════════
-
-{messages['message_2']}
-
-═══════════════════════════════════════════════════════════════
-MESSAGE 3 (J+12) - BREAK-UP
-═══════════════════════════════════════════════════════════════
-
-{messages['message_3']}"""
-        
         response = requests.patch(
             f'https://dashboard.leonar.app/api/1.1/obj/matching/{prospect_id}',
             headers={
                 'Authorization': f'Bearer {token}',
                 'Content-Type': 'application/json'
             },
-            json={"notes": formatted_notes},
+            json={
+                "custom_variable_1": messages['message_1'],  # Message 1 (Icebreaker)
+                "custom_variable_2": messages['message_2'],  # Message 2 (Apport valeur)
+                "custom_variable_3": messages['message_3']   # Message 3 (Break-up)
+            },
             timeout=10
         )
         
         return response.status_code == 204
     except:
         return False
+        
 
 # ========================================
 # HEADER
