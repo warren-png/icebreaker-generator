@@ -119,7 +119,7 @@ def update_prospect_leonar(token, prospect_id, messages):
                 'Content-Type': 'application/json'
             },
             json={
-                "custom_variable_1": messages['message_1'],  # Message 1 (Icebreaker)
+                "custom_variable": messages['message_1'],  # Message 1 (Icebreaker)
                 "custom_variable_2": messages['message_2'],  # Message 2 (Apport valeur)
                 "custom_variable_3": messages['message_3']   # Message 3 (Break-up)
             },
