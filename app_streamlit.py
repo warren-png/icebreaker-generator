@@ -148,10 +148,16 @@ def get_new_prospects_leonar(token):
         return []
 
 def update_prospect_leonar(token, prospect_id, messages):
-    """Met à jour un prospect avec les 3 messages dans les notes (temporaire)"""
+    """Met à jour un prospect avec objet + 3 messages dans les notes"""
     try:
-        # Format avec séparateurs clairs
+        # Format avec OBJET en premier
         formatted_notes = f"""═══════════════════════════════════════════════════════════════
+OBJET (Mail/LinkedIn)
+═══════════════════════════════════════════════════════════════
+
+{messages.get('subject', 'Votre recherche et défis recrutement')}
+
+═══════════════════════════════════════════════════════════════
 MESSAGE 1 (J+0) - ICEBREAKER
 ═══════════════════════════════════════════════════════════════
 
@@ -184,6 +190,64 @@ MESSAGE 3 (J+12) - BREAK-UP
     except Exception as e:
         print(f"ERROR: {str(e)}")
         return False
+    
+def generate_subject_line(message_1, first_name, hooks_data):
+        """Génère un objet de mail/LinkedIn basé sur le message 1"""
+        import anthropic 
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    
+        prompt = f"""Tu es un expert en copywriting pour LinkedIn et email.
+
+            Ta mission : créer un OBJET de message percutant (30-50 caractères MAX).
+
+            ICEBREAKER COMPLET :
+            {message_1}
+
+            HOOKS DISPONIBLES :
+            {json.dumps(hooks_data, ensure_ascii=False)}
+
+            RÈGLES STRICTES :
+            1. LONGUEUR : 30-50 caractères MAX (pas plus !)
+            2. PAS de "Bonjour {first_name}" (c'est déjà dans le message)
+            3. PAS de ponctuation finale (!, ?, .)
+            4. Vocabulaire ultra-précis (Big 4, ACPR, Tagetik, EPM, etc.)
+            5. Doit donner envie d'ouvrir
+            6. Doit refléter le hook principal du message   
+            EXEMPLES EXCELLENTS (30-50 caractères) :
+            ✅ "Votre webinar EPM et les défis Tagetik"
+            ✅ "Votre certification CMA et pilotage opérationnel"
+            ✅ "Votre recherche Auditeur Interne SYSTRA"
+            ✅ "Podcast Les Consolideurs et IFRS 17"
+            ✅ "Expansion CFAO et gouvernance audit"
+            ✅ "Migration Tagetik et conduite du changement"    
+            EXEMPLES INTERDITS :
+            ❌ "Bonjour Karine - Webinar EPM" (pas de salutation)
+            ❌ "J'ai une question sur votre recherche de..." (trop long, pas percutant)
+            ❌ "Collaborons ensemble !" (vide de sens)
+            ❌ "Opportunité intéressante" (spam)
+
+            Réponds UNIQUEMENT avec l'objet (pas de guillemets, pas de préambule)."""
+
+        try:
+            response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=100,
+            temperature=0.3,
+            messages=[{"role": "user", "content": prompt}]
+            )
+        
+            subject = response.content[0].text.strip()
+            subject = subject.replace('"', '').replace("'", '').strip()
+            # Vérifier longueur
+            if len(subject) > 50:
+                subject = subject[:47] + "..."
+
+        
+            return subject
+        
+        except Exception as e:
+            # Fallback simple si erreur
+            return "Votre recherche et défis recrutement"
         
 
 # ========================================
@@ -854,6 +918,11 @@ with tab4:
                         message_1 = generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data)
                         message_1 = clean_message_format(message_1, prospect_data['first_name'])
                         time.sleep(15)
+
+                        # NOUVEAU : Générer l'objet
+                        st.write(f"📧 {name} - Génération objet...")
+                        subject_line = generate_subject_line (message_1, prospect_data['first_name'], hooks_json)
+                        time.sleep(2)
                         
                         st.write(f"📝 {name} - Génération message 2...")
                         message_2 = generate_message_2(prospect_data, hooks_json, job_posting_data, message_1)
@@ -873,9 +942,10 @@ with tab4:
                         st.write(f"📤 {name} - Envoi vers Leonar...")
                         
                         messages = {
-                            'message_1': message_1,
-                            'message_2': message_2,
-                            'message_3': message_3
+                        'subject': subject_line,  # NOUVEAU
+                        'message_1': message_1,
+                        'message_2': message_2,
+                        'message_3': message_3
                         }
                         
                         success = update_prospect_leonar(token, prospect['_id'], messages)
