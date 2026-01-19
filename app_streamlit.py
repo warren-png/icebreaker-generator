@@ -923,6 +923,5 @@ with tab4:
 # FOOTER
 # ========================================
 
-st.divider(
+st.divider()
 st.caption("🎯 Icebreaker Generator v2.1 + Leonar | Powered by Claude Sonnet 4")
-)
