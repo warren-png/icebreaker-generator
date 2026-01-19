@@ -47,6 +47,38 @@ except (KeyError, AttributeError):
 # Fichier de tracking (AJOUTEZ ICI)
 PROCESSED_FILE = "processed_prospects.txt"
 
+def clean_message_format(message, first_name):
+    """
+    Nettoie le format des messages générés :
+    - Assure une ligne vide après "Bonjour {prénom},"
+    - Supprime les signatures [Prénom]
+    """
+    import re
+    
+    # 1. Assurer ligne vide après salutation
+    message = re.sub(
+        r'(Bonjour ' + re.escape(first_name) + r',)\s*',
+        r'\1\n\n',
+        message,
+        count=1
+    )
+    
+    # 2. Supprimer toutes les variations de signature
+    patterns_to_remove = [
+        r'\n\nBien cordialement,?\s*\n+\[Prénom\]',
+        r'\nBien cordialement,\s*\[Prénom\]',
+        r'\n\[Prénom\]\s*$',
+        r'Bien cordialement,\s*\[Prénom\]'
+    ]
+    
+    for pattern in patterns_to_remove:
+        message = re.sub(pattern, '\n\nBien cordialement', message)
+    
+    # 3. Nettoyer signature orpheline
+    message = re.sub(r'\n+\[Prénom\]\s*$', '', message)
+    
+    return message.strip()
+
 
 # ========================================
 # FONCTIONS LEONAR
@@ -814,10 +846,13 @@ with tab4:
                         
                         st.write(f"📝 {name} - Génération message 1...")
                         message_1 = generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data)
+                        message_1 = clean_message_format(message_1, prospect_data['first_name'])
                         time.sleep(15)
                         
                         st.write(f"📝 {name} - Génération message 2...")
                         message_2 = generate_message_2(prospect_data, hooks_json, job_posting_data, message_1)
+                        time.sleep(15)
+                        message_2 = clean_message_format(message_2, prospect_data['first_name'])
                         time.sleep(15)
                         
                         st.write(f"📝 {name} - Génération message 3...")
