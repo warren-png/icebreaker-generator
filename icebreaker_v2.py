@@ -1,7 +1,7 @@
 """
 ═══════════════════════════════════════════════════════════════════
-ICEBREAKER GENERATOR V2 (MODULE)
-Version : V16 (Ton Adouci + Formatage Corrigé)
+ICEBREAKER GENERATOR V2 (MODULE COMPLET)
+Version : V17 (Scraping + IA V16 Adoucie)
 Utilisé par : app_streamlit.py
 ═══════════════════════════════════════════════════════════════════
 """
@@ -9,7 +9,9 @@ Utilisé par : app_streamlit.py
 import anthropic
 import json
 import os
-from config import COMPANY_INFO 
+import requests
+from apify_client import ApifyClient
+from config import * # Importe APIFY_TOKEN, SERPER_API_KEY, etc.
 from scraper_job_posting import format_job_data_for_prompt
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -17,8 +19,118 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 if not ANTHROPIC_API_KEY:
     raise ValueError("❌ ANTHROPIC_API_KEY non trouvée")
 
+
 # ========================================
-# 1. EXTRACTION DES HOOKS
+# PARTIE 1 : FONCTIONS DE SCRAPING (INDISPENSABLES)
+# ========================================
+
+def init_apify_client():
+    """Initialise le client Apify"""
+    return ApifyClient(APIFY_API_TOKEN)
+
+
+def scrape_linkedin_profile(apify_client, linkedin_url):
+    """Scrape le profil LinkedIn complet"""
+    print(f"🕷️  Scraping du profil LinkedIn...")
+    try:
+        run_input = {
+            "profileUrls": [linkedin_url],
+            "searchForEmail": False
+        }
+        run = apify_client.actor(APIFY_ACTORS["profile"]).call(run_input=run_input)
+        items = []
+        for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
+            items.append(item)
+        return items[0] if items else None
+    except Exception as e:
+        print(f"❌ Erreur scraping profil : {e}")
+        return None
+
+
+def scrape_linkedin_posts(apify_client, linkedin_url, limit=5):
+    """Scrape les posts LinkedIn du profil"""
+    print(f"📝 Scraping de {limit} posts LinkedIn...")
+    try:
+        run_input = {
+            "urls": [linkedin_url],
+            "limit": limit
+        }
+        run = apify_client.actor(APIFY_ACTORS["profile_posts"]).call(run_input=run_input)
+        posts = []
+        for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
+            posts.append({
+                "text": item.get("text", ""),
+                "date": item.get("date", ""),
+                "likes": item.get("numReactions", 0)
+            })
+            if len(posts) >= limit: break
+        return posts
+    except Exception as e:
+        return []
+
+
+def scrape_company_posts(apify_client, company_name, limit=5):
+    """Scrape les posts de l'entreprise"""
+    print(f"🏢 Scraping posts entreprise...")
+    try:
+        company_slug = company_name.lower().replace(' ', '-')
+        company_url = f"https://www.linkedin.com/company/{company_slug}"
+        run_input = {"urls": [company_url], "limit": limit}
+        run = apify_client.actor(APIFY_ACTORS["company_posts"]).call(run_input=run_input)
+        posts = []
+        for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
+            posts.append({"text": item.get("text", ""), "date": item.get("date", "")})
+            if len(posts) >= limit: break
+        return posts
+    except Exception:
+        return []
+
+
+def scrape_company_profile(apify_client, company_name):
+    """Scrape le profil entreprise"""
+    try:
+        company_slug = company_name.lower().replace(' ', '-')
+        company_url = f"https://www.linkedin.com/company/{company_slug}"
+        run_input = {"profileUrls": [company_url]}
+        run = apify_client.actor(APIFY_ACTORS["company_profile"]).call(run_input=run_input)
+        items = []
+        for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
+            items.append(item)
+        return items[0] if items else None
+    except Exception:
+        return None
+
+
+def web_search_prospect(first_name, last_name, company, title=""):
+    """Recherche web sur le prospect"""
+    if not WEB_SEARCH_ENABLED: return []
+    try:
+        query = f'"{first_name} {last_name}" "{company}"'
+        if title: query += f' "{title}"'
+        query += ' after:2023'
+        
+        url = "https://google.serper.dev/search"
+        headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
+        payload = {'q': query, 'num': MAX_SEARCH_RESULTS}
+        
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        if response.status_code == 200:
+            results = response.json()
+            filtered = []
+            for item in results.get('organic', [])[:MAX_SEARCH_RESULTS]:
+                filtered.append({
+                    'title': item.get('title', ''),
+                    'snippet': item.get('snippet', ''),
+                    'link': item.get('link', '')
+                })
+            return filtered
+        return []
+    except Exception:
+        return []
+
+
+# ========================================
+# PARTIE 2 : INTELLIGENCE ARTIFICIELLE (V16 - Clean)
 # ========================================
 
 def extract_hooks_with_claude(profile_data, posts_data, company_posts, company_profile, web_results, prospect_name, company_name):
@@ -69,21 +181,14 @@ Si rien trouvé : Réponds "NOT_FOUND".
             messages=[{"role": "user", "content": prompt}]
         )
         response_text = message.content[0].text.strip()
-        # Nettoyage basique si Claude met du markdown
         response_text = response_text.replace('```json', '').replace('```', '').strip()
         return response_text
-        
-    except Exception as e:
+    except Exception:
         return "NOT_FOUND"
 
 
-# ========================================
-# 2. GÉNÉRATION ICEBREAKER (Message 1)
-# ========================================
-
 def generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data=None):
     """Génère un icebreaker (Message 1) avec le ton adouci et le bon formatage."""
-    
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
     # Gestion des hooks
@@ -122,18 +227,10 @@ TON & STYLE (MODIFIÉ - IMPORTANT) :
 
 STRUCTURE DU MESSAGE :
 1. Salutation + [Hook Perso OU Mention de l'annonce].
-   *Ex avec Hook : "J'ai lu votre post sur..."*
-   *Ex sans Hook : "J'ai consulté votre recherche de [Poste]..."*
-
 2. L'Insight Marché (La Polarisation) :
    "Trouver un profil alliant [Compétence A] et [Compétence B] est un vrai défi. On observe souvent une polarisation sur le marché : d'un côté des experts très pointus sur [A], de l'autre des profils focalisés sur [B]. L'équilibre parfait est rare."
-
 3. La Question d'Arbitrage :
    "Comment arbitrez-vous aujourd'hui entre privilégier [A] ou favoriser [B] ?"
-
-EXEMPLES DE PHRASES D'INSIGHT (À Utiliser) :
-- "On observe souvent une polarisation sur le marché : d'un côté des experts techniques, de l'autre des business partners. L'équilibre parfait est rare."
-- "Le marché est souvent scindé en deux : les purs techniciens et les profils terrain. Trouver le pont entre les deux est complexe."
 
 Génère le Message 1.
 """
@@ -147,5 +244,5 @@ Génère le Message 1.
         )
         return message.content[0].text.strip()
         
-    except Exception as e:
+    except Exception:
         return f"Bonjour {prospect_data['first_name']},\n\nErreur de génération."
