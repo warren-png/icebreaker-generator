@@ -1,14 +1,23 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V21 (HYBRIDE & ROBUSTE)
-Modif : Sécurité Prénom + Contextualisation sans annonce
+MESSAGE SEQUENCE GENERATOR - V22 (SEMAINE 1 - MONITORING & SÉCURITÉ)
+Ajouts : Logging, Cost Tracking, Validation, Fallback
+Comportement : IDENTIQUE à V21
 ═══════════════════════════════════════════════════════════════════
 """
 
 import anthropic
 import os
 import re 
-from config import COMPANY_INFO 
+from config import COMPANY_INFO
+
+# ========================================
+# IMPORTS DES NOUVEAUX UTILITAIRES
+# ========================================
+from prospection_utils.logger import log_event, log_error
+from prospection_utils.cost_tracker import tracker
+from prospection_utils.validator import validate_and_report
+from prospection_utils.fallback_templates import generate_fallback_sequence, get_fallback_if_needed
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
@@ -17,7 +26,7 @@ if not ANTHROPIC_API_KEY:
 
 
 # ========================================
-# FONCTIONS UTILITAIRES
+# FONCTIONS UTILITAIRES (INCHANGÉES)
 # ========================================
 
 def get_safe_firstname(prospect_data):
@@ -55,10 +64,16 @@ def get_smart_context(job_posting_data, prospect_data):
 
 
 # ========================================
-# 1. GÉNÉRATEUR D'OBJETS
+# 1. GÉNÉRATEUR D'OBJETS (AVEC TRACKING)
 # ========================================
 
 def generate_subject_lines(prospect_data, job_posting_data):
+    """Génère les objets d'email avec tracking des coûts"""
+    
+    log_event('generate_subject_lines_start', {
+        'prospect': prospect_data.get('_id', 'unknown')
+    })
+    
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
     context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
@@ -78,22 +93,48 @@ Génère 3 variantes d'objets courts :
 - V2 : Enjeu organisationnel
 - V3 : Sujet direct
 """
+    
     try:
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=150,
             messages=[{"role": "user", "content": prompt}]
         )
-        return message.content[0].text.strip()
-    except:
+        
+        # ✅ NOUVEAU : Tracker les coûts
+        tracker.track(message.usage, 'generate_subject_lines')
+        
+        result = message.content[0].text.strip()
+        
+        log_event('generate_subject_lines_success', {
+            'length': len(result)
+        })
+        
+        return result
+        
+    except anthropic.APIError as e:
+        log_error('claude_api_error', str(e), {'function': 'generate_subject_lines'})
+        # ✅ NOUVEAU : Fallback si erreur
+        from prospection_utils.fallback_templates import generate_fallback_subjects
+        return generate_fallback_subjects(prospect_data, job_posting_data)
+    
+    except Exception as e:
+        log_error('unexpected_error', str(e), {'function': 'generate_subject_lines'})
         return f"Echange | {context_name}"
 
 
 # ========================================
-# 2. MESSAGE 2 : LE DILEMME (ADAPTATIF)
+# 2. MESSAGE 2 : LE DILEMME (AVEC TRACKING)
 # ========================================
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
+    """Génère le message 2 avec tracking et fallback"""
+    
+    log_event('generate_message_2_start', {
+        'prospect': prospect_data.get('_id', 'unknown'),
+        'has_hooks': hooks_data != "NOT_FOUND"
+    })
+    
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
     first_name = get_safe_firstname(prospect_data)
@@ -126,19 +167,46 @@ STRUCTURE :
 Génère le message 2.
 """
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return message.content[0].text
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        # ✅ NOUVEAU : Tracker les coûts
+        tracker.track(message.usage, 'generate_message_2')
+        
+        result = message.content[0].text
+        
+        log_event('generate_message_2_success', {
+            'length': len(result)
+        })
+        
+        return result
+        
+    except anthropic.APIError as e:
+        log_error('claude_api_error', str(e), {'function': 'generate_message_2'})
+        # ✅ NOUVEAU : Fallback si erreur
+        from prospection_utils.fallback_templates import generate_fallback_message
+        return generate_fallback_message(2, prospect_data, job_posting_data)
+    
+    except Exception as e:
+        log_error('unexpected_error', str(e), {'function': 'generate_message_2'})
+        raise
 
 
 # ========================================
-# 3. MESSAGE 3 : BREAK-UP (ADAPTATIF)
+# 3. MESSAGE 3 : BREAK-UP (AVEC TRACKING)
 # ========================================
 
 def generate_message_3(prospect_data, message_1_content, job_posting_data):
+    """Génère le message 3 avec tracking et fallback"""
+    
+    log_event('generate_message_3_start', {
+        'prospect': prospect_data.get('_id', 'unknown')
+    })
+    
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
     first_name = get_safe_firstname(prospect_data)
@@ -168,26 +236,96 @@ STRUCTURE :
 Génère le message 3.
 """
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return message.content[0].text
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        # ✅ NOUVEAU : Tracker les coûts
+        tracker.track(message.usage, 'generate_message_3')
+        
+        result = message.content[0].text
+        
+        log_event('generate_message_3_success', {
+            'length': len(result)
+        })
+        
+        return result
+        
+    except anthropic.APIError as e:
+        log_error('claude_api_error', str(e), {'function': 'generate_message_3'})
+        # ✅ NOUVEAU : Fallback si erreur
+        from prospection_utils.fallback_templates import generate_fallback_message
+        return generate_fallback_message(3, prospect_data, job_posting_data)
+    
+    except Exception as e:
+        log_error('unexpected_error', str(e), {'function': 'generate_message_3'})
+        raise
 
 
 # ========================================
-# FONCTION HELPER
+# FONCTION HELPER (AVEC VALIDATION)
 # ========================================
 
 def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_1_content):
-    subject_lines = generate_subject_lines(prospect_data, job_posting_data)
-    message_2 = generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content)
-    message_3 = generate_message_3(prospect_data, message_1_content, job_posting_data)
+    """
+    Génère une séquence complète avec logging, tracking et validation
+    Comportement identique à la version précédente, mais avec monitoring
+    """
     
-    return {
-        'subject_lines': subject_lines,
-        'message_1': message_1_content,
-        'message_2': message_2,
-        'message_3': message_3
-    }
+    log_event('sequence_generation_start', {
+        'prospect_id': prospect_data.get('_id', 'unknown'),
+        'prospect_name': prospect_data.get('full_name', 'unknown'),
+        'company': prospect_data.get('company', 'unknown'),
+        'has_job_posting': bool(job_posting_data),
+        'has_hooks': hooks_data != "NOT_FOUND"
+    })
+    
+    try:
+        # Génération (identique à avant)
+        subject_lines = generate_subject_lines(prospect_data, job_posting_data)
+        message_2 = generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content)
+        message_3 = generate_message_3(prospect_data, message_1_content, job_posting_data)
+        
+        sequence = {
+            'subject_lines': subject_lines,
+            'message_1': message_1_content,
+            'message_2': message_2,
+            'message_3': message_3
+        }
+        
+        # ✅ NOUVEAU : Validation avant de retourner
+        is_valid = validate_and_report(sequence, prospect_data, raise_on_error=False)
+        
+        if not is_valid:
+            log_error('sequence_validation_failed', 'Séquence générée invalide', {
+                'prospect': prospect_data.get('_id', 'unknown')
+            })
+            # ✅ NOUVEAU : Utiliser fallback si validation échoue
+            print("⚠️  Séquence invalide détectée, génération d'un fallback...")
+            sequence = generate_fallback_sequence(prospect_data, job_posting_data, message_1_content)
+        
+        log_event('sequence_generation_success', {
+            'prospect_id': prospect_data.get('_id', 'unknown'),
+            'is_fallback': sequence.get('is_fallback', False)
+        })
+        
+        return sequence
+        
+    except Exception as e:
+        log_error('sequence_generation_failed', str(e), {
+            'prospect_id': prospect_data.get('_id', 'unknown')
+        })
+        
+        # ✅ NOUVEAU : Fallback complet en cas d'erreur critique
+        print(f"❌ Erreur lors de la génération : {e}")
+        print("🔄 Génération d'une séquence de fallback...")
+        return generate_fallback_sequence(prospect_data, job_posting_data, message_1_content)
+
+
+
+
+
+

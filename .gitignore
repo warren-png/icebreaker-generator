@@ -1,17 +1,21 @@
-# Fichiers secrets - NE JAMAIS COMMIT
 .env
+.env.example
 google-credentials.json
 *.json
 
-# Fichiers Python
+# Logs
+logs/
+*.log
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-venv/
 env/
-ENV/
+venv/
+.venv/
 
 # IDE
 .vscode/
@@ -19,9 +23,9 @@ ENV/
 *.swp
 *.swo
 
-# Logs
-*.log
-
 # OS
 .DS_Store
 Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
