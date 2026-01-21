@@ -1,7 +1,7 @@
 """
 ═══════════════════════════════════════════════════════════════════
 MESSAGE SEQUENCE GENERATOR - Messages 2, 3 + OBJETS
-CORRECTIF v6 - Anti-Hallucination & Contextualisation Stricte
+CORRECTIF v7 - Logique Anti-Hallucination + Modèle 2025 (Fix Crash)
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -52,7 +52,7 @@ Exemple si poste Comptable Cinéma : "Expertise Louma ? | Rigueur vs Agilité Pr
 
     try:
         message = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
+            model="claude-sonnet-4-20250514", # ✅ VERSION CORRIGÉE
             max_tokens=150,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -95,7 +95,7 @@ Génère le message 2.
 """
 
     message = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
+        model="claude-sonnet-4-20250514", # ✅ VERSION CORRIGÉE
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -137,7 +137,7 @@ Génère le message 3.
 """
 
     message = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
+        model="claude-sonnet-4-20250514", # ✅ VERSION CORRIGÉE
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
     )
