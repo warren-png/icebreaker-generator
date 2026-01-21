@@ -104,7 +104,7 @@ with tab1:
     with c2: 
         t_last = st.text_input("Nom", "Durand")
         t_lnk = st.text_input("URL LinkedIn")
-    t_job = st.text_input("URL Annonce")
+        t_job = st.text_input("URL Annonce")
     
     if st.button("🚀 Lancer le test"):
         with st.spinner("Génération..."):
@@ -123,10 +123,39 @@ with tab1:
             st.subheader("M1"); st.info(clean_message_format(seq['message_1'], t_first))
             st.subheader("M2"); st.info(clean_message_format(seq['message_2'], t_first))
             st.subheader("M3"); st.info(clean_message_format(seq['message_3'], t_first))
+        
+        
+            import streamlit as st
+            from prospection_utils.cost_tracker import tracker
 
-# --- TAB 4 : EXPORT LEONAR (AVEC LISTE RESTAURÉE) ---
-with tab4:
-    st.header("📤 Export Leonar")
+            # Après la génération de séquences
+            st.subheader("📊 Statistiques de génération")
+
+            summary = tracker.get_summary()
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.metric("Appels API", summary['total_calls'])
+
+            with col2:
+                st.metric("Tokens total", f"{summary['total_tokens']:,}")
+
+            with col3:
+                st.metric("Coût total", f"${summary['total_cost_usd']}")
+
+            with col4:
+                st.metric("Durée", f"{summary['session_duration_seconds']}s")
+        # Afficher les détails par appel
+            with st.expander("📋 Détail des appels"):
+                for call in tracker.calls:
+                    st.write(f"**{call['function']}**")
+                    st.write(f"   - Tokens: {call['input_tokens']} → {call['output_tokens']}")
+                    st.write(f"   - Coût: ${call['cost_usd']}")
+                    st.write("---")
+        # --- TAB 4 : EXPORT LEONAR (AVEC LISTE RESTAURÉE) ---
+            with tab4:
+                st.header("📤 Export Leonar")
     if not all([LEONAR_EMAIL, LEONAR_PASSWORD, LEONAR_CAMPAIGN_ID]): st.stop()
     token = get_leonar_token()
     if not token: st.stop()
