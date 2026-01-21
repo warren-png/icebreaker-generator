@@ -1,18 +1,19 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - Messages 2, 3, 4
+MESSAGE SEQUENCE GENERATOR - Messages 2, 3 + OBJETS
 ═══════════════════════════════════════════════════════════════════
 
-Ce module génère les messages de relance personnalisés :
-- Message 2 (J+5) : Apport de valeur + insight marché
-- Message 3 (J+12) : Relance légère et empathique
-- Message 4 (J+21) : Break-up message
+Ce module génère :
+1. Les Objets de mail (Variantes Copywriting)
+2. Le Message 2 (Méthode "Dilemme Expert")
+3. Le Message 3 (Méthode "Break-up FOMO" - Fin de séquence)
 
 """
 
 import anthropic
 import os
 import json
+from config import COMPANY_INFO 
 
 # Clé API Anthropic
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -22,290 +23,193 @@ if not ANTHROPIC_API_KEY:
 
 
 # ========================================
-# MESSAGE 2 : APPORT DE VALEUR (J+5)
+# 1. GÉNÉRATEUR D'OBJETS
+# ========================================
+
+def generate_subject_lines(prospect_data, job_posting_data):
+    """
+    Génère 3 variantes d'objets copywrités pour maximiser l'ouverture.
+    """
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    
+    contexte_poste = "votre équipe Finance"
+    if job_posting_data and job_posting_data.get('title'):
+        contexte_poste = f"le poste de {job_posting_data['title']}"
+
+    prompt = f"""Tu es un copywriter B2B expert.
+Ta mission : Rédiger 3 objets de mail pour un prospect Finance/RH.
+Le but est uniquement de provoquer l'ouverture (curiosité ou précision).
+
+PROSPECT : {prospect_data['first_name']} ({prospect_data['company']})
+SUJET : Recrutement pour {contexte_poste}
+
+RÈGLES :
+1. Courts (2 à 6 mots max).
+2. Pas de majuscules agressives, pas de points d'exclamation.
+3. Ton : "Peer-to-peer" (d'égal à égal).
+
+Génère 3 variantes selon ces angles :
+- Variante 1 (Ultra-Directe) : Ex: "Question sur [Poste]"
+- Variante 2 (Le Dilemme) : Ex: "Arbitrage [Compétence A] vs [Compétence B]"
+- Variante 3 (Intriguante) : Ex: "[Prénom], votre avis ?" ou "Profil [Poste]"
+
+Réponds UNIQUEMENT avec les 3 objets séparés par une barre verticale "|".
+Exemple : Question AMOA | Arbitrage Technique vs Projet | Profil hybride pour Mutualia
+"""
+
+    try:
+        message = client.messages.create(
+            model="claude-3-5-sonnet-latest",
+            max_tokens=100,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return message.content[0].text.strip()
+    except:
+        return f"Question {contexte_poste} | Votre recrutement | Profil Entourage"
+
+
+# ========================================
+# 2. MESSAGE 2 : LE DILEMME (J+5)
 # ========================================
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
     """
-    Génère le message 2 : apport de valeur + insights marché
-    
-    Args:
-        prospect_data: Dict avec first_name, last_name, company
-        hooks_data: Dict avec les hooks LinkedIn/web
-        job_posting_data: Dict avec annonce (ou None)
-        message_1_content: Contenu du message 1 (pour contexte)
-    
-    Returns:
-        str: Message 2 généré (60-80 mots)
+    Génère le message 2 basé sur la structure "Dilemme" (Profil A vs Profil B -> Hybride)
     """
-    
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    prompt = f"""Tu es un expert en prospection B2B recrutement finance.
+    # Contexte du poste
+    job_context = "votre recherche actuelle"
+    if job_posting_data and job_posting_data.get('title'):
+        job_context = f"le poste de {job_posting_data['title']}"
+    
+    prompt = f"""Tu es consultant chez {COMPANY_INFO['name']}.
+Ton style est expert, précis et analytique.
 
 CONTEXTE :
-Il y a 5 jours, tu as envoyé ce message 1 au prospect :
----
-{message_1_content}
----
+Tu relances {prospect_data['first_name']} ({prospect_data['company']}) concernant {job_context}.
 
-Le prospect n'a PAS répondu.
+TA MISSION :
+Rédiger un email de relance qui expose un DILEMME DE RECRUTEMENT (A vs B) et propose un profil HYBRIDE.
 
-PROSPECT :
-- Prénom : {prospect_data['first_name']}
-- Nom : {prospect_data['last_name']}
-- Entreprise : {prospect_data['company']}
+EXEMPLES À IMITER PARFAITEMENT (Structure & Ton) :
 
-HOOKS INITIAUX :
-{json.dumps(hooks_data, indent=2, ensure_ascii=False)}
+Exemple 1 (AMOA) :
+"Bonjour Domitille,
+Je fais suite à mon courriel concernant votre arbitrage sur le profil AMOA.
+En observant les projets SI actuels, une tendance se confirme : recruter un expert purement "Métier" crée souvent un goulot d'étranglement face à la DSI, tandis qu'un profil purement "Projet" peine à anticiper les impacts DSN.
+Mon objectif est de sécuriser votre roadmap en vous présentant des profils "hybrides", capables de traduire instantanément les contraintes légales en specs techniques.
+Avez-vous un créneau ce jeudi pour définir ensemble si cette double compétence est la clé pour débloquer vos projets ?"
 
-ANNONCE (si disponible) :
-{json.dumps(job_posting_data, indent=2, ensure_ascii=False) if job_posting_data else "Aucune annonce"}
+Exemple 2 (Trésorerie) :
+"Bonjour Sileymane,
+Je fais suite à mon courriel concernant votre recherche de profil Trésorerie.
+En observant le secteur retail, une réalité s'impose : un expert trésorerie trop traditionnel peine souvent à suivre la cadence des flux magasins, tandis qu'un profil trop généraliste manque de la rigueur nécessaire pour sécuriser vos liquidités.
+Mon objectif est de fiabiliser votre gestion du cash en vous présentant des profils "agiles", qui possèdent la technicité mais ont prouvé leur adaptation.
+Avez-vous un créneau ce jeudi pour définir ensemble si cette capacité d'adaptation est le critère décisif ?"
 
-TA MISSION : Rédiger un MESSAGE 2 de relance qui apporte de la VALEUR.
+CONSIGNES DE RÉDACTION :
+1. Reprends EXACTEMENT la structure : 
+   - Intro ("Je fais suite concernant votre arbitrage...")
+   - Le Constat/Dilemme ("En observant..., une tendance se confirme : Profil A [défaut], tandis que Profil B [défaut].")
+   - La Solution ("Mon objectif est de sécuriser [Enjeu] en vous présentant des profils [Hybrides/Mixtes]...")
+   - Le CTA ("Avez-vous un créneau ce jeudi pour définir si...")
+2. Adapte le contenu au poste de : {job_context}.
+3. Invente un dilemme PLAUSIBLE et PERTINENT pour ce métier (Tech vs Métier, Cabinet vs Entreprise, Expert vs Business Partner).
 
-STRUCTURE OBLIGATOIRE (60-80 mots) :
-
-1. Rappel discret du message 1 (10-15 mots)
-   Exemple : "Suite à mon message sur votre recherche d'auditeur..."
-
-2. Apport de valeur concret (35-50 mots)
-   CHOISIR PARMI :
-   
-   OPTION A - Insight marché :
-   "J'ai croisé une donnée intéressante : [stat/observation marché pertinente]."
-   
-   OPTION B - Observation terrain :
-   "En échangeant avec d'autres [fonction similaire] cette semaine, j'ai noté que [pattern observé]."
-   
-   OPTION C - Tendance sectorielle :
-   "Le marché [secteur] montre actuellement [tendance concrète liée à leur besoin]."
-
-3. Question ouverte simple (10-15 mots)
-   Exemples :
-   - "Cela confirme-t-il la tendance que vous observez ?"
-   - "Est-ce un critère que vous avez également identifié ?"
-   - "Voyez-vous la même dynamique de votre côté ?"
-
-RÈGLES STRICTES :
-✅ Ton courtois et professionnel (vouvoiement)
-✅ Apporter de la VALEUR réelle (pas juste relancer)
-✅ Pas de pression commerciale
-✅ Insight doit être PLAUSIBLE et lié au contexte
-✅ 60-80 mots MAX
-✅ Signature : "Bien cordialement, [Prénom]"
-
-INTERDICTIONS :
-❌ "Avez-vous vu mon message ?"
-❌ "Je me permets de relancer..."
-❌ Ton insistant ou commercial
-❌ Inventer des stats non plausibles
-
-Génère maintenant le message 2.
-
-Réponds UNIQUEMENT avec le message final (pas de préambule)."""
+Génère maintenant le message 2. Réponds UNIQUEMENT avec le message final.
+"""
 
     message = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-3-5-sonnet-latest",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
     )
-    
     return message.content[0].text
 
 
 # ========================================
-# MESSAGE 3 : RELANCE LÉGÈRE (J+12)
+# 3. MESSAGE 3 : BREAK-UP EXPERT (J+12)
 # ========================================
 
 def generate_message_3(prospect_data, message_1_content):
     """
-    Génère le message 3 : relance légère et empathique
-    
-    Args:
-        prospect_data: Dict avec first_name, company
-        message_1_content: Contenu du message 1 (pour contexte)
-    
-    Returns:
-        str: Message 3 généré (40-60 mots)
+    Génère le message 3 : Break-up avec Insight Marché/FOMO
     """
-    
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    prompt = f"""Tu es un expert en prospection B2B recrutement finance.
+    prompt = f"""Tu es consultant chez {COMPANY_INFO['name']}. C'est ton DERNIER message.
+Ton but : Créer un FOMO (Fear Of Missing Out) en partageant une observation marché alarmante (délai, échec, pénurie).
 
-CONTEXTE :
-Il y a 12 jours, tu as envoyé le message 1 au prospect.
-Il y a 7 jours, tu as envoyé le message 2.
-Le prospect n'a TOUJOURS PAS répondu.
+PROSPECT : {prospect_data['first_name']} ({prospect_data['company']})
 
-MESSAGE 1 INITIAL :
----
-{message_1_content}
----
+EXEMPLES À IMITER PARFAITEMENT :
 
-PROSPECT :
-- Prénom : {prospect_data['first_name']}
-- Entreprise : {prospect_data['company']}
+Exemple 1 (Délai qui s'allonge) :
+"Bonjour Domitille,
+Sans retour de votre part, je vais arrêter mes relances sur ce poste de Responsable AMOA.
+Avant de clore le dossier, je voulais juste partager un dernier chiffre : sur les recrutements similaires ce trimestre, le délai moyen de prise de poste s'allonge (environ 4 mois) en raison de la pénurie de profils hybrides Paie/SI.
+Si jamais vous rencontrez des difficultés de sourcing dans les semaines à venir, n'hésitez pas à revenir vers moi.
+Bonne continuation dans vos recherches,
+Bien à vous,"
 
-TA MISSION : Rédiger un MESSAGE 3 ultra-court et empathique.
+Exemple 2 (Risque d'échec) :
+"Bonjour Matthias,
+Sans retour de votre part, je vais arrêter mes relances sur ce poste de PMO.
+Avant de clore le dossier, je voulais partager une dernière observation critique : nous constatons que près de 40% des recrutements échouent dans les 6 premiers mois, non par manque de compétence technique, mais par manque de leadership d'influence.
+Si jamais vous faites face à cette difficulté d'adhésion terrain, n'hésitez pas à revenir vers moi.
+Bonne continuation pour la structuration de Cap Vert Group.
+Bien à vous,"
 
-STRUCTURE OBLIGATOIRE (40-60 mots) :
+CONSIGNES DE RÉDACTION :
+1. Structure stricte :
+   - Intro ("Sans retour, je vais arrêter mes relances...")
+   - L'Insight FOMO ("Avant de clore, je voulais partager une dernière observation/chiffre : [Insight alarmant lié au poste].")
+   - La Porte ouverte ("Si jamais vous faites face à [Problème], n'hésitez pas...")
+   - Fin ("Bonne continuation...")
+2. Sois crédible : invente une stat ou une tendance réaliste pour le poste du prospect.
 
-1. Empathie (10-15 mots)
-   Exemple : "Je sais que vos journées sont bien remplies."
-
-2. Rappel du sujet (15-25 mots)
-   Exemple : "Ma question sur [sujet du message 1] reste ouverte si jamais vous avez 2 minutes pour échanger."
-
-3. Zéro pression (10-15 mots)
-   Exemple : "Pas d'urgence de mon côté." ou "Sinon, aucun souci !"
-
-RÈGLES STRICTES :
-✅ Ultra-court (40-60 mots MAX)
-✅ Ton empathique et léger
-✅ ZÉRO pression commerciale
-✅ Faciliter la réponse au maximum
-✅ Signature : "Bien cordialement, [Prénom]"
-
-INTERDICTIONS :
-❌ Ton insistant
-❌ "Dernier message" (trop tôt)
-❌ Répéter l'insight du message 2
-
-Génère maintenant le message 3.
-
-Réponds UNIQUEMENT avec le message final (pas de préambule)."""
+Génère maintenant le message 3. Réponds UNIQUEMENT avec le message final.
+"""
 
     message = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-3-5-sonnet-latest",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
     )
-    
     return message.content[0].text
 
 
 # ========================================
-# MESSAGE 4 : BREAK-UP (J+21)
-# ========================================
-
-def generate_message_4(prospect_data, message_1_content):
-    """
-    Génère le message 4 : break-up message (permission-based)
-    
-    Args:
-        prospect_data: Dict avec first_name
-        message_1_content: Contenu du message 1 (pour contexte)
-    
-    Returns:
-        str: Message 4 généré (50-70 mots)
-    """
-    
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
-    prompt = f"""Tu es un expert en prospection B2B recrutement finance.
-
-CONTEXTE :
-Il y a 21 jours, tu as envoyé le message 1 au prospect.
-Tu as envoyé 2 relances (messages 2 et 3).
-Le prospect n'a JAMAIS répondu.
-
-C'est le DERNIER message de la séquence (break-up message).
-
-MESSAGE 1 INITIAL :
----
-{message_1_content}
----
-
-PROSPECT :
-- Prénom : {prospect_data['first_name']}
-
-TA MISSION : Rédiger un MESSAGE 4 "break-up" qui crée un FOMO tout en restant courtois.
-
-STRUCTURE OBLIGATOIRE (50-70 mots) :
-
-1. Annonce de clôture (15-20 mots)
-   Exemple : "Je suppose que ma question sur [sujet] n'est pas tombée au bon moment. Je vais clore le sujet de mon côté."
-
-2. Porte ouverte (15-25 mots)
-   Exemple : "Si jamais vous souhaitez échanger sur ces enjeux dans les mois à venir, ma porte reste évidemment ouverte."
-
-3. Bonne continuation (10-20 mots)
-   Exemple : "Bonne continuation pour votre recherche." ou "Je vous souhaite de trouver la perle rare !"
-
-RÈGLES STRICTES :
-✅ Ton courtois et professionnel
-✅ Créer FOMO ("clore le sujet", "retirer de mon radar")
-✅ Laisser la porte ouverte (pour le futur)
-✅ 50-70 mots MAX
-✅ Signature : "Bien cordialement, [Prénom]"
-
-INTERDICTIONS :
-❌ Ton négatif ou vexé
-❌ "Si vous êtes intéressé, répondez vite"
-❌ Pression commerciale
-
-Génère maintenant le message 4.
-
-Réponds UNIQUEMENT avec le message final (pas de préambule)."""
-
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    
-    return message.content[0].text
-
-
-# ========================================
-# FONCTION HELPER : Générer toute la séquence
+# FONCTION HELPER : Séquence Complète (3 Messages)
 # ========================================
 
 def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_1_content):
     """
-    Génère les 4 messages d'une séquence complète
-    
-    Args:
-        prospect_data: Dict avec infos prospect
-        hooks_data: Dict avec hooks
-        job_posting_data: Dict avec annonce (ou None)
-        message_1_content: Message 1 déjà généré
-    
-    Returns:
-        dict: {
-            'message_1': str,
-            'message_2': str,
-            'message_3': str,
-            'message_4': str
-        }
+    Orchestre la génération des objets et des messages 2 & 3.
     """
     
-    print(f"🔄 Génération séquence complète pour {prospect_data['first_name']} {prospect_data['last_name']}...")
+    print(f"🔄 Génération séquence (3 msgs) pour {prospect_data['first_name']}...")
     
-    # Message 1 déjà fourni
-    print("   ✅ Message 1 (fourni)")
+    # 1. Objets
+    print("   💡 Génération des objets...")
+    subject_lines = generate_subject_lines(prospect_data, job_posting_data)
     
-    # Générer message 2
-    print("   📝 Génération message 2...")
+    # 2. Message 2
+    print("   📝 Génération message 2 (Dilemme)...")
     message_2 = generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content)
     
-    # Générer message 3
-    print("   📝 Génération message 3...")
+    # 3. Message 3
+    print("   📝 Génération message 3 (Break-up)...")
     message_3 = generate_message_3(prospect_data, message_1_content)
     
-    # Générer message 4
-    print("   📝 Génération message 4...")
-    message_4 = generate_message_4(prospect_data, message_1_content)
-    
-    print("   ✅ Séquence complète générée\n")
+    print("   ✅ Séquence générée avec succès\n")
     
     return {
+        'subject_lines': subject_lines,
         'message_1': message_1_content,
         'message_2': message_2,
-        'message_3': message_3,
-        'message_4': message_4
+        'message_3': message_3
     }
 
 
@@ -315,34 +219,32 @@ def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_
 
 if __name__ == "__main__":
     
-    # Test rapide des fonctions
-    print("🧪 Test des générateurs de messages\n")
+    print("🧪 Test des nouveaux messages (Séquence 3 messages)\n")
     
-    # Données de test
     test_prospect = {
-        'first_name': 'Claire',
-        'last_name': 'Martin',
-        'company': 'Mutualia'
+        'first_name': 'Thomas',
+        'last_name': 'Durand',
+        'company': 'Green Energy'
     }
     
-    test_hooks = {
-        'type': 'job_posting',
-        'title': 'Auditeur Interne'
+    test_job = {
+        'title': 'Responsable Administratif et Financier'
     }
     
-    test_message_1 = """Bonjour Claire, en lisant votre recherche pour Mutualia, une question me vient : comment gérez-vous le grand écart culturel ? Le marché dispose de nombreux auditeurs excellents techniquement (Big 4, normes strictes), mais qui peinent souvent à s'adapter à la réalité du terrain agricole et aux élus mutualistes. Avez-vous tendance à privilégier le savoir-être (le fit agricole) quitte à former sur la technique, ou l'expertise reste-t-elle non négociable pour l'ACPR ?"""
+    test_msg_1 = "Contenu msg 1..."
     
-    # Générer les 3 messages de relance
-    print("1️⃣ Test Message 2...")
-    message_2 = generate_message_2(test_prospect, test_hooks, None, test_message_1)
-    print(f"✅ Message 2 ({len(message_2.split())} mots):\n{message_2}\n")
+    # Test Objets
+    print("1️⃣ Idées Objets :")
+    print(generate_subject_lines(test_prospect, test_job))
+    print("\n----------------\n")
     
-    print("2️⃣ Test Message 3...")
-    message_3 = generate_message_3(test_prospect, test_message_1)
-    print(f"✅ Message 3 ({len(message_3.split())} mots):\n{message_3}\n")
+    # Test M2
+    print("2️⃣ Message 2 (Dilemme) :")
+    print(generate_message_2(test_prospect, None, test_job, test_msg_1))
+    print("\n----------------\n")
     
-    print("3️⃣ Test Message 4...")
-    message_4 = generate_message_4(test_prospect, test_message_1)
-    print(f"✅ Message 4 ({len(message_4.split())} mots):\n{message_4}\n")
+    # Test M3
+    print("3️⃣ Message 3 (Break-up) :")
+    print(generate_message_3(test_prospect, test_msg_1))
     
-    print("✅ Tests terminés !")
+    print("\n✅ Tests terminés !")

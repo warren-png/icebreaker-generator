@@ -273,8 +273,8 @@ def web_search_prospect(first_name, last_name, company, title=""):
 # ========================================
 
 def extract_hooks_with_claude(profile_data, posts_data, company_posts, company_profile, web_results, prospect_name, company_name):
-    """Extrait 1-2 hooks pertinents pour l'icebreaker"""
-    print(f"🎯 Extraction des hooks avec Claude...")
+    """Extrait 1-2 hooks pertinents pour l'icebreaker (Limité à 3 mois)"""
+    print(f"🎯 Extraction des hooks avec Claude (Filtre strict 3 mois)...")
     
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
@@ -286,6 +286,7 @@ def extract_hooks_with_claude(profile_data, posts_data, company_posts, company_p
             "location": profile_data.get("location", "") if profile_data else "",
             "current_company": profile_data.get("experiences", [{}])[0].get("companyName", "") if profile_data and profile_data.get("experiences") else "",
             "current_position": profile_data.get("experiences", [{}])[0].get("title", "") if profile_data and profile_data.get("experiences") else "",
+            # On conserve les données mais Claude filtrera sur la date
             "education": profile_data.get("education", [])[:2] if profile_data else [],
             "certifications": profile_data.get("certifications", [])[:3] if profile_data else []
         },
@@ -301,137 +302,69 @@ def extract_hooks_with_claude(profile_data, posts_data, company_posts, company_p
         "web_mentions": web_results
     }
     
+    # PROMPT MIS À JOUR : CRITÈRE STRICT 3 MOIS
     prompt = f"""# RÔLE
-Tu es un expert en "Sales Intelligence" et en recherche de prospects. Ta mission est d'analyser le profil LinkedIn et la présence web d'un prospect pour extraire des informations clés permettant de rédiger un icebreaker ultra-personnalisé.
+Tu es un analyste en intelligence économique. Ta mission : trouver un prétexte (Hook) pour engager une conversation avec un prospect B2B.
 
 # OBJECTIF
-Scanner les sources de données fournies (LinkedIn + Web) pour identifier 1 à 2 faits notables ("Hooks") qui permettront d'engager la conversation de manière pertinente et chaleureuse.
+Identifier 1 à 2 faits notables (Hooks) dans les données JSON fournies.
 
 # DONNÉES À ANALYSER
 {json.dumps(data_summary, indent=2, ensure_ascii=False)}
 
-# PÉRIMÈTRE DE RECHERCHE
-Tu dois scanner et analyser les éléments suivants :
-1. **Activité LinkedIn :** Posts, commentaires, likes, articles partagés
-2. **Réalisations professionnelles :** Promotions récentes, changement de poste, prix, certifications, diplômes
-3. **Médias & Presse :** Participation à un podcast, interview vidéo, mention dans la presse (écrite ou digitale), publication d'un livre ou livre blanc
-4. **Engagement personnel :** Bénévolat, causes associatives, intérêts marqués (écologie, tech, social, etc.)
+# CRITÈRE ABSOLU DE TEMPS : 3 MOIS (90 JOURS)
+La règle d'or est la "FRAÎCHEUR". 
+Tout événement datant de plus de 3 mois est considéré comme "PÉRIMÉ" et doit être ignoré.
 
-# CRITÈRES DE SÉLECTION (STRICT)
-1. **Récence ABSOLUE :** Le fait doit dater de MAXIMUM 6 MOIS (180 jours). 
-   - Changement de poste : UNIQUEMENT si < 6 mois
-   - Certification : UNIQUEMENT si < 6 mois
-   - Post LinkedIn : UNIQUEMENT si < 6 mois
-   - Article/Podcast : UNIQUEMENT si < 6 mois
-   
-   ⚠️ UN POSTE PRIS IL Y A 1 AN OU PLUS = PAS UN HOOK VALIDE
-   ⚠️ Si aucun fait < 6 mois → Répondre "NOT_FOUND"
-2. **Véracité :** NE RIEN INVENTER. Si l'information n'est pas explicitement présente dans les données, ne l'utilise pas.
-3. **Pertinence :** Choisis l'information qui offre le meilleur prétexte pour une conversation business ou humaine.
-4. **Validation anti-homonymes :** Pour les infos web, vérifie que l'entreprise "{company_name}" est bien mentionnée et que le contexte correspond au profil LinkedIn.
+# HIÉRARCHIE DE SÉLECTION (Si < 3 mois uniquement)
 
-# EXEMPLES DE HOOKS EXCELLENTS (5/5)
-✅ "A publié un article sur [sujet précis] dans [média] le [date]"
-✅ "A participé au podcast [nom] épisode [X] sur [thème] en [mois année]"
-✅ "A rejoint le conseil d'administration de [association] en [mois année]"
-✅ "A posté sur LinkedIn à propos de [sujet très spécifique] le [date]"
-✅ "A obtenu la certification [nom] en [mois année]"
+1. **Le Prospect a CRÉÉ du contenu (Priorité 1)**
+   - Post LinkedIn écrit par lui, Article, Interview.
+   - ⚠️  DOIT DATER DE MOINS DE 3 MOIS.
 
-# EXEMPLES DE HOOKS FAIBLES (< 3/5) À ÉVITER
-❌ "A de l'expérience en [domaine]" (trop vague, non daté)
-❌ "Travaille chez [entreprise]" (évident, pas un hook)
-❌ "A étudié à [école]" (sauf diplôme très récent < 1 an)
-❌ "Professionnel dans son domaine" (vide de sens)
+2. **Le Prospect a INTERAGI (Priorité 2)**
+   - Like ou Commentaire sur un sujet métier (Finance, Tech, RH, Stratégie).
+   - ⚠️  DOIT DATER DE MOINS DE 3 MOIS.
 
-# PROCESSUS D'ANALYSE
-1. Recherche le **Fait Notable Principal** (le plus récent ET le plus impactant)
-2. Recherche un **Fait Notable Secondaire** (uniquement s'il est distinct du premier ET date de < 1 an)
-3. **Auto-critique :** 
-   - Ces faits sont-ils datés de moins d'un an ?
-   - Sont-ils suffisamment intéressants pour un icebreaker ?
-   - Ai-je vérifié la cohérence des sources web avec le profil LinkedIn ?
-   - Y a-t-il un risque d'homonyme sur les infos web ?
+3. **Actu Entreprise (Priorité 3)**
+   - Rachat, Levée de fonds, Lancement produit majeur.
+   - ⚠️  DOIT DATER DE MOINS DE 3 MOIS.
 
-# RÈGLE CRITIQUE : VÉRIFIER LE RÔLE DE LA PERSONNE
+# CE QUI EST INTERDIT (BLACKLIST)
+❌ TOUT ce qui a plus de 3 mois (même si c'est génial, on jette).
+❌ Une prise de poste il y a 4 mois = PÉRIMÉ.
+❌ Une certification il y a 6 mois = PÉRIMÉ.
+❌ Anniversaire, Vœux de bonne année (sauf en janvier).
 
-Avant de valider un hook, VÉRIFIEZ TOUJOURS :
+# FORMAT DE SORTIE (JSON STRICT)
+Si AUCUN hook de MOINS DE 3 MOIS n'est trouvé, réponds UNIQUEMENT : "NOT_FOUND"
 
-1. **Est-ce que la personne est ACTEUR ou SPECTATEUR ?**
-   
-   ✅ ACTEUR (validé) :
-   - "J'ai animé le webinar..."
-   - "Ravi d'avoir été invité au podcast..."
-   - "Fier d'annoncer notre levée de fonds..."
-   - "Heureux de partager que j'ai obtenu la certification..."
-   
-   ❌ SPECTATEUR (à rejeter) :
-   - "Enchanté par ce TEDx..." → Il a ASSISTÉ, pas animé
-   - "Belle conférence de X..." → Il a ÉCOUTÉ, pas présenté
-   - "Intéressant article de Y..." → Il a LU, pas écrit
-   - "Bravo à l'équipe pour..." → Il FÉLICITE, pas réalisé
-
-2. **Mots-clés à surveiller :**
-   
-   🚨 DANGER (souvent spectateur) :
-   - "Enchanté par"
-   - "Belle", "Intéressant", "Inspirant"
-   - "Bravo à", "Félicitations à"
-   - "J'ai assisté", "J'ai participé" (en tant que public)
-   
-   ✅ SÛR (souvent acteur) :
-   - "J'ai animé", "J'ai présenté"
-   - "Ravi d'annoncer", "Fier de partager"
-   - "J'ai obtenu", "J'ai rejoint"
-   - "Heureux de contribuer"
-
-3. **EN CAS DE DOUTE → REJETER LE HOOK**
-   
-   Mieux vaut dire "NOT_FOUND" que de faire une erreur d'interprétation.
-   Une erreur = crédibilité perdue instantanément.
-
-# FORMAT DE SORTIE (JSON UNIQUEMENT)
-Si aucune information pertinente de moins d'un an n'est trouvée, réponds UNIQUEMENT avec la chaîne :
-"NOT_FOUND"
-
-Sinon, réponds avec ce JSON exact (sans texte avant ou après) :
+Sinon, réponds avec ce JSON exact :
 {{
   "hook_principal": {{
-    "description": "Description concise en 1 phrase",
-    "contexte": "Détails clés : nom événement, sujet, titre...",
-    "date": "2024-12-15",
-    "source": "URL ou 'LinkedIn - Section X'",
+    "description": "Description concise",
+    "type_action": "CREATOR" | "INTERACTOR" | "COMPANY",
+    "contexte": "Détails clés",
+    "date": "Date approximative",
+    "source": "Source",
     "pertinence": 5
-  }},
-  "hook_secondaire": {{
-    "description": "...",
-    "contexte": "...",
-    "date": "2024-11-20",
-    "source": "...",
-    "pertinence": 3
-  }},
-  "validation": {{
-    "tous_faits_moins_1_an": true,
-    "coherence_linkedin_verifiee": true,
-    "entreprise_mentionnee_si_web": true
-  }}
-}}
+   }}
+ }}
 
-Si tu n'as qu'un seul hook, omets "hook_secondaire" du JSON.
-
-Réponds UNIQUEMENT avec le JSON ou "NOT_FOUND"."""
+Réponds UNIQUEMENT avec le JSON. Pas de texte."""
 
     try:
         message = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=2000,
-            temperature=0.3,
+            model="claude-3-5-sonnet-latest",
+            max_tokens=1000,
+            temperature=0.2, # Température basse pour être rigoureux sur la date
             messages=[{"role": "user", "content": prompt}]
         )
         
         hooks_response = message.content[0].text.strip()
         hooks_response = hooks_response.replace('```json', '').replace('```', '').strip()
         
-        print(f"   ✅ Hooks extraits")
+        print(f"   ✅ Analyse terminée (Filtre 3 mois appliqué)")
         return hooks_response
         
     except Exception as e:
