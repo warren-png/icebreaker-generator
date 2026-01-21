@@ -59,7 +59,7 @@ Exemple : Question AMOA | Arbitrage Technique vs Projet | Profil hybride pour Mu
 
     try:
         message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-sonnet-4-20250514",
             max_tokens=100,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -121,7 +121,7 @@ Génère maintenant le message 2. Réponds UNIQUEMENT avec le message final.
 """
 
     message = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-20250514",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -173,7 +173,7 @@ Génère maintenant le message 3. Réponds UNIQUEMENT avec le message final.
 """
 
     message = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-20250514",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
     )
