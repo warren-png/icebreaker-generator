@@ -1,7 +1,7 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V12 (FINAL PRO)
-Contenu : Textes validés par l'utilisateur (Variantes Pro)
+MESSAGE SEQUENCE GENERATOR - V13 (FINAL STRICT)
+Contenu : Textes Conclusions verrouillés au mot près (Copywriting Utilisateur)
 Logique : Fusion Annonce + Hooks (si pertinent)
 ═══════════════════════════════════════════════════════════════════
 """
@@ -56,7 +56,7 @@ Génère 3 variantes séparées par " | " :
 
 
 # ========================================
-# 2. MESSAGE 2 : LE DILEMME (INTELLIGENT & VARIÉ)
+# 2. MESSAGE 2 : LE DILEMME (Textes Utilisateur)
 # ========================================
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
@@ -76,7 +76,7 @@ Actu Prospect : {hooks_str}
 
 RÈGLE D'OR (MATCHMAKING) :
 - Analyse l'actualité du prospect (Hook).
-- SI elle a un lien professionnel pertinent avec le poste (ex: Post sur la RSE et poste de Directeur RSE), utilise-la en phrase d'accroche.
+- SI elle a un lien professionnel pertinent avec le poste, utilise-la en phrase d'accroche.
 - SINON (ou si vide), commence directement par le rappel du poste.
 
 CONSIGNE FORMATAGE :
@@ -88,12 +88,12 @@ STRUCTURE DU MESSAGE :
 1. [Accroche personnalisée ou Rappel du poste]
 2. [Le Dilemme : "En observant le marché, recruter un profil purement X crée le risque Y, tandis que Z..."]
 3. [La Solution Hybride : "Les meilleurs profils savent jongler entre..."]
-4. [CONCLUSION OBLIGATOIRE (Choisis UNE des 3 options ci-dessous aléatoirement)]
+4. [CONCLUSION OBLIGATOIRE : Choisis UNE option ci-dessous. RECOPIE-LA AU MOT PRÈS.]
 
-OPTIONS DE CONCLUSION (Ne change pas le texte, utilise ces formulations exactes) :
-- Option A : "Si cet arbitrage entre technique et métier est aujourd'hui le point bloquant pour avancer sur votre roadmap, une approche ciblée sur ces profils 'passerelles' est souvent la clé. Avez-vous 15 min pour définir si cette stratégie correspond à votre besoin ?"
-- Option B : "Ces profils à double compétence sont rares mais sécurisent la pérennité de vos projets. Il me semble pertinent de vérifier si ce niveau d'exigence est aligné avec la réalité du marché actuel. Avez-vous 15 min pour faire ce point de cadrage ?"
-- Option C : "Pour éviter l'écueil d'un recrutement qui ne répondrait qu'à moitié aux enjeux opérationnels, je vous propose de valider ensemble la pertinence de ce profil hybride. Avez-vous 15 min cette semaine pour en échanger ?"
+OPTIONS DE CONCLUSION (Strictement interdits de modifier) :
+- Option 1 : "Si cet arbitrage entre technique et métier est aujourd'hui le point bloquant pour avancer sur votre roadmap, une approche ciblée sur ces profils 'passerelles' est souvent la clé. Avez-vous 15 min pour définir si cette stratégie correspond à votre besoin ?"
+- Option 2 : "Ces profils à double compétence sont rares mais sécurisent la pérennité de vos projets. Il me semble pertinent de vérifier si ce niveau d'exigence est aligné avec la réalité du marché actuel. Avez-vous 15 min pour faire ce point de cadrage ?"
+- Option 3 : "Pour éviter l'écueil d'un recrutement qui ne répondrait qu'à moitié aux enjeux opérationnels, je vous propose de valider ensemble la pertinence de ce profil hybride. Avez-vous 15 min cette semaine pour en échanger ?"
 
 Génère le message 2 complet.
 """
@@ -107,7 +107,7 @@ Génère le message 2 complet.
 
 
 # ========================================
-# 3. MESSAGE 3 : BREAK-UP (TEXTES UTILISATEUR)
+# 3. MESSAGE 3 : BREAK-UP (Textes Utilisateur)
 # ========================================
 
 def generate_message_3(prospect_data, message_1_content, job_posting_data):
@@ -134,12 +134,12 @@ CONSIGNE ANTI-HALLUCINATION :
 STRUCTURE DU MESSAGE :
 1. Intro : "Sans retour de votre part, je vais arrêter mes relances sur ce poste."
 2. Observation Marché : "Avant de clore le dossier, je voulais partager une dernière observation : sur des profils [Métier], nous constatons que [Statistique pénurie crédible et pertinente]."
-3. [CONCLUSION OBLIGATOIRE (Choisis UNE des 3 options ci-dessous aléatoirement)]
+3. [CONCLUSION OBLIGATOIRE : Choisis UNE option ci-dessous. RECOPIE-LA AU MOT PRÈS.]
 
-OPTIONS DE CONCLUSION (Ne change pas le texte, utilise ces formulations exactes) :
-- Option A : "Je clos ce dossier. Si toutefois la tension sur ces compétences spécifiques venait à freiner vos recrutements dans les semaines à venir, je reste à votre disposition pour réévaluer le marché. Bonne continuation pour votre recherche"
-- Option B : "Je cesse mes relances ici. Si vous constatez que le sourcing traditionnel atteint ses limites sur ce type d'expertise pointue, n'hésitez pas à me solliciter pour activer une approche par chasse directe. Bonne continuation pour votre recherche"
-- Option C : "Je ne vous sollicite plus sur ce sujet. Si jamais vous faites face à cette inertie ou à une pénurie de CVs pertinents dans les semaines à venir, n'hésitez pas à revenir vers moi. Bonne continuation pour votre recherche"
+OPTIONS DE CONCLUSION (Strictement interdits de modifier) :
+- Option A : "Je clos ce dossier. Si toutefois la tension sur ces compétences spécifiques venait à freiner vos recrutements dans les semaines à venir, je reste à votre disposition pour réévaluer le marché. Bonne continuation pour votre recherche."
+- Option B : "Je cesse mes relances ici. Si vous constatez que le sourcing traditionnel atteint ses limites sur ce type d'expertise pointue, n'hésitez pas à me solliciter pour activer une approche par chasse directe. Bonne continuation pour votre recherche."
+- Option C : "Je ne vous sollicite plus sur ce sujet. Si jamais vous faites face à cette inertie ou à une pénurie de CVs pertinents dans les semaines à venir, n'hésitez pas à revenir vers moi. Bonne continuation pour votre recherche."
 
 Génère le message 3 complet.
 """
