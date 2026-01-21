@@ -1,7 +1,7 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V15 (FINAL & CLEAN)
-Corrections : Nettoyage Titres, Prénoms, CTA Utilisateur, Logique Audit
+MESSAGE SEQUENCE GENERATOR - V21 (HYBRIDE & ROBUSTE)
+Modif : Sécurité Prénom + Contextualisation sans annonce
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -17,25 +17,41 @@ if not ANTHROPIC_API_KEY:
 
 
 # ========================================
-# FONCTIONS UTILITAIRES (NETTOYAGE)
+# FONCTIONS UTILITAIRES
 # ========================================
 
-def clean_job_title_string(title):
+def get_safe_firstname(prospect_data):
+    """Trouve le prénom (détective)"""
+    target_keys = ['first_name', 'firstname', 'first name', 'prénom', 'prenom', 'name']
+    for key, value in prospect_data.items():
+        if str(key).lower().strip() in target_keys:
+            if value and str(value).strip():
+                return str(value).strip().capitalize()
+    return "[Prénom]"
+
+def get_smart_context(job_posting_data, prospect_data):
     """
-    Nettoie le titre du poste pour l'insérer dans une phrase.
-    Ex: "COMPTABLE SENIOR H/F" -> "Comptable Senior"
+    Définit le sujet de la discussion.
     """
-    if not title: return "ce poste"
+    # Cas 1 : Il y a une annonce
+    if job_posting_data and job_posting_data.get('title') and len(str(job_posting_data.get('title'))) > 2:
+        title = str(job_posting_data.get('title'))
+        # Nettoyage
+        title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', title, flags=re.IGNORECASE)
+        title = re.sub(r'\s*[-|]\s*.*$', '', title)
+        return title.strip().title(), True
+
+    # Cas 2 : Pas d'annonce (Approche Spontanée)
+    headline = str(prospect_data.get('headline', '')).lower()
     
-    # 1. Enlever H/F, M/F, (h/f), etc. avec regex insensible à la casse
-    title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', title, flags=re.IGNORECASE)
-    title = re.sub(r'\s*\(?[Mm]\s*[/\-]\s*[Ff]\)?', '', title, flags=re.IGNORECASE)
-    
-    # 2. Enlever les tirets ou barres en fin de chaîne
-    title = re.sub(r'\s*[-|]\s*.*$', '', title) # Coupe tout après un tiret final type " - CDI"
-    
-    # 3. Formater en "Title Case" (Première lettre majuscule)
-    return title.strip().title()
+    if 'financ' in headline or 'daf' in headline or 'cfo' in headline:
+        return "vos équipes Finance", False
+    elif 'rh' in headline or 'drh' in headline or 'talents' in headline:
+        return "votre stratégie Talents", False
+    elif 'audit' in headline:
+        return "votre département Audit", False
+    else:
+        return "vos équipes", False
 
 
 # ========================================
@@ -45,28 +61,23 @@ def clean_job_title_string(title):
 def generate_subject_lines(prospect_data, job_posting_data):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    raw_title = job_posting_data.get('title', 'Finance') if job_posting_data else 'Finance'
-    job_title = clean_job_title_string(raw_title)
-    job_desc = job_posting_data.get('description', '')[:500] if job_posting_data else ''
+    context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
     
-    prompt = f"""Tu es un copywriter B2B expert en recrutement.
+    if is_hiring:
+        prompt_context = f"Recrutement pour : {context_name}"
+    else:
+        prompt_context = f"Sujet : Organisation de {context_name} (Approche Spontanée)"
+    
+    prompt = f"""Tu es un copywriter B2B.
 CONTEXTE :
-Recrutement pour : {job_title}
-Chez : {prospect_data['company']}
-Extrait annonce : {job_desc}
+{prompt_context}
+Chez : {prospect_data.get('company', 'l\'entreprise')}
 
-RÈGLES D'OR :
-1. Langue : FRANÇAIS.
-2. INTERDIT : "Votre avis", "Votre retour", "[Prénom] seul".
-3. INTERDIT : Inventer des outils (ne cite SAP, Tagetik, etc. que si présents dans l'extrait).
-4. INTERDIT : Copier la description de l'entreprise dans l'objet (trop long).
-
-Génère 3 variantes séparées par " | " :
-- V1 : Question technique précise (ex: "Expertise Consolidation ?")
-- V2 : Le Dilemme (ex: "Conformité vs Business")
-- V3 : Poste + Entreprise (ex: "Profil {job_title}")
+Génère 3 variantes d'objets courts :
+- V1 : Question expertise
+- V2 : Enjeu organisationnel
+- V3 : Sujet direct
 """
-
     try:
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -75,59 +86,44 @@ Génère 3 variantes séparées par " | " :
         )
         return message.content[0].text.strip()
     except:
-        return f"Candidature {job_title} | Profil {job_title} | Recrutement {prospect_data['company']}"
+        return f"Echange | {context_name}"
 
 
 # ========================================
-# 2. MESSAGE 2 : LE DILEMME (CORRIGÉ & VARIÉ)
+# 2. MESSAGE 2 : LE DILEMME (ADAPTATIF)
 # ========================================
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    raw_title = job_posting_data.get('title', 'ce poste') if job_posting_data else 'ce poste'
-    job_title = clean_job_title_string(raw_title)
-    
+    first_name = get_safe_firstname(prospect_data)
+    context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
     hooks_str = str(hooks_data) if hooks_data and hooks_data != "NOT_FOUND" else "Aucune actualité récente"
     
-    # Instruction spécifique Audit
-    audit_instruction = ""
-    if "audit" in job_title.lower():
-        audit_instruction = "ATTENTION AUDIT : Le dilemme n'est PAS Technique vs Métier. C'est 'Expertise Méthodologique/Conformité' (Théorie) vs 'Pragmatisme Opérationnel/Business' (Pratique)."
+    if is_hiring:
+        intro_phrase = f"Je fais suite à mon message concernant le poste de {context_name}."
+    else:
+        intro_phrase = f"Je fais suite à mon message concernant la structuration de {context_name}."
 
     prompt = f"""Tu es chasseur de têtes expert.
 
 CONTEXTE :
-Prospect : {prospect_data['first_name']}
-Poste : {job_title}
-Actu Prospect : {hooks_str}
+Prospect : {first_name}
+Sujet : {context_name}
+Mode : {'Recrutement Actif' if is_hiring else 'Approche Spontanée'}
 
-{audit_instruction}
+CONSIGNE FORMATAGE :
+1. "Bonjour {first_name},"
+2. SAUTE DEUX LIGNES.
 
-RÈGLE D'OR (MATCHMAKING) :
-- Analyse l'actualité du prospect (Hook).
-- SI elle a un lien professionnel pertinent avec le poste, utilise-la en phrase d'accroche.
-- SINON (ou si vide), commence directement par le rappel du poste.
+STRUCTURE :
+1. Intro : "{intro_phrase}"
+2. Le Dilemme : "En observant le marché, recruter ou structurer des profils [Expertise] crée souvent un dilemme : soit on a la technique mais pas le business, soit l'inverse..."
+3. La Solution Hybride.
+4. CONCLUSION (Strictement une de ces options) :
+   - "C'est précisément sur l'identification de ces profils que j'accompagne mes clients. Auriez-vous un rapide créneau de 15 min prochainement ou seriez-vous ouvert à recevoir des candidatures qui correspondent à votre besoin ?"
 
-CONSIGNE FORMATAGE STRICTE :
-1. Écris EXACTEMENT "Bonjour {prospect_data['first_name']}," (Insère le prénom).
-2. SAUTE DEUX LIGNES (Laisse une ligne vide).
-3. Utilise "message" (pas "courriel").
-
-STRUCTURE DU MESSAGE :
-1. "Bonjour {prospect_data['first_name']},"
-2. [Saut de ligne]
-3. [Accroche personnalisée ou Rappel du poste]
-4. [Le Dilemme : "En observant le marché, recruter un profil purement X crée le risque Y, tandis que Z..."]
-5. [La Solution Hybride : "Les meilleurs profils savent jongler entre..."]
-6. [CONCLUSION OBLIGATOIRE : Choisis UNE option ci-dessous. RECOPIE-LA AU MOT PRÈS.]
-
-OPTIONS DE CONCLUSION (Strictement interdits de modifier) :
-- Option 1 : "Si cet arbitrage entre technique et métier est aujourd'hui le point bloquant pour avancer sur votre roadmap, une approche ciblée sur ces profils 'passerelles' est souvent la clé. Avez-vous 15 min pour définir si cette stratégie correspond à votre besoin ?"
-- Option 2 : "C'est précisément sur l'identification de ces profils que j'accompagne mes clients. Auriez-vous un rapide créneau de 15 min prochainement ou seriez-vous ouvert à recevoir des candidatures qui correspondent à votre besoin ?"
-- Option 3 : "Pour éviter l'écueil d'un recrutement qui ne répondrait qu'à moitié aux enjeux opérationnels, je vous propose de valider ensemble la pertinence de ce profil hybride. Avez-vous 15 min cette semaine pour en échanger ?"
-
-Génère le message 2 complet.
+Génère le message 2.
 """
 
     message = client.messages.create(
@@ -139,44 +135,37 @@ Génère le message 2 complet.
 
 
 # ========================================
-# 3. MESSAGE 3 : BREAK-UP (CORRIGÉ & NETTOYÉ)
+# 3. MESSAGE 3 : BREAK-UP (ADAPTATIF)
 # ========================================
 
 def generate_message_3(prospect_data, message_1_content, job_posting_data):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    raw_title = job_posting_data.get('title', 'ce poste') if job_posting_data else 'ce poste'
-    job_title = clean_job_title_string(raw_title)
-    raw_desc = job_posting_data.get('description', '') if job_posting_data else ''
+    first_name = get_safe_firstname(prospect_data)
+    context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
     
-    prompt = f"""Tu es chasseur de têtes. DERNIER message (Rupture).
+    if is_hiring:
+        intro_stop = "Sans retour de votre part, je vais arrêter mes relances sur ce poste."
+    else:
+        intro_stop = "Sans retour de votre part, je ne vous solliciterai plus sur ce sujet."
+
+    prompt = f"""Tu es chasseur de têtes. DERNIER message.
 
 CONTEXTE :
-Poste : {job_title}
-Extrait Annonce : {raw_desc[:300]}
+Prospect : {first_name}
+Sujet : {context_name}
 
-CONSIGNE FORMATAGE STRICTE :
-1. Écris EXACTEMENT "Bonjour {prospect_data['first_name']}," (Insère le prénom).
-2. SAUTE DEUX LIGNES (Laisse une ligne vide).
+CONSIGNE FORMATAGE :
+1. "Bonjour {first_name},"
+2. SAUTE DEUX LIGNES.
 
-CONSIGNE ANTI-HALLUCINATION :
-- Si poste Comptable/Finance -> Parle Finance/Expertise (Pas de Tech).
-- Si poste EPM -> Parle EPM.
-- Adapte la statistique de pénurie au métier réel.
+STRUCTURE :
+1. Intro : "{intro_stop}"
+2. Observation Marché (Statistique Pénurie crédible).
+3. CONCLUSION (Strictement celle-ci) :
+   - "Je clos ce dossier. Si toutefois la tension sur ces compétences spécifiques venait à freiner vos projets, je reste à votre disposition. Bonne continuation."
 
-STRUCTURE DU MESSAGE :
-1. "Bonjour {prospect_data['first_name']},"
-2. [Saut de ligne]
-3. Intro : "Sans retour de votre part, je vais arrêter mes relances sur ce poste."
-4. Observation Marché : "Avant de clore le dossier, je voulais partager une dernière observation : sur des profils [Métier], nous constatons que [Statistique pénurie crédible et pertinente]."
-5. [CONCLUSION OBLIGATOIRE : Choisis UNE option ci-dessous. RECOPIE-LA AU MOT PRÈS.]
-
-OPTIONS DE CONCLUSION (Strictement interdits de modifier) :
-- Option A : "Je clos ce dossier. Si toutefois la tension sur ces compétences spécifiques venait à freiner vos recrutements dans les semaines à venir, je reste à votre disposition pour réévaluer le marché. Bonne continuation pour votre recherche."
-- Option B : "Je cesse mes relances ici. Si vous constatez que le sourcing traditionnel atteint ses limites sur ce type d'expertise pointue, n'hésitez pas à me solliciter pour activer une approche par chasse directe. Bonne continuation pour votre recherche."
-- Option C : "Je ne vous sollicite plus sur ce sujet. Si jamais vous faites face à cette inertie ou à une pénurie de CVs pertinents dans les semaines à venir, n'hésitez pas à revenir vers moi. Bonne continuation pour votre recherche."
-
-Génère le message 3 complet.
+Génère le message 3.
 """
 
     message = client.messages.create(
@@ -192,7 +181,6 @@ Génère le message 3 complet.
 # ========================================
 
 def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_1_content):
-    
     subject_lines = generate_subject_lines(prospect_data, job_posting_data)
     message_2 = generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content)
     message_3 = generate_message_3(prospect_data, message_1_content, job_posting_data)
