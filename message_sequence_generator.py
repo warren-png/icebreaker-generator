@@ -1,13 +1,12 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - Messages 2, 3 + OBJETS
-CORRECTIF v7 - Logique Anti-Hallucination + Modèle 2025 (Fix Crash)
+MESSAGE SEQUENCE GENERATOR - V8 (Copywriting Expert & Varié)
+Corrections : Formatage, "Message", Pertinence EPM, Variantes CTA
 ═══════════════════════════════════════════════════════════════════
 """
 
 import anthropic
 import os
-import json
 from config import COMPANY_INFO 
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -17,42 +16,38 @@ if not ANTHROPIC_API_KEY:
 
 
 # ========================================
-# 1. GÉNÉRATEUR D'OBJETS (CORRIGÉ & STRICT)
+# 1. GÉNÉRATEUR D'OBJETS
 # ========================================
 
 def generate_subject_lines(prospect_data, job_posting_data):
-    """
-    Génère 3 variantes d'objets copywrités sans hallucination.
-    """
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    # Extraction sécurisée des infos
     job_title = job_posting_data.get('title', 'Finance') if job_posting_data else 'Finance'
-    job_desc = job_posting_data.get('description', '')[:500] if job_posting_data else '' # On prend le début pour le contexte
+    job_desc = job_posting_data.get('description', '')[:500] if job_posting_data else ''
     
-    prompt = f"""Tu es un copywriter B2B.
-Ton but : 3 objets de mail pour un recrutement.
+    prompt = f"""Tu es un copywriter B2B d'élite.
+Ton but : 3 objets de mail pour un recrutement, courts et percutants.
 
-PROSPECT : {prospect_data['first_name']} ({prospect_data['company']})
-POSTE : {job_title}
-EXTRAIT ANNONCE : {job_desc}
+CONTEXTE :
+Recrutement pour : {job_title}
+Chez : {prospect_data['company']}
+Extrait annonce : {job_desc}
 
-RÈGLES D'OR (A RESPECTER SINON ÉCHEC) :
-1. INTERDIT : "Votre avis", "Votre retour", "[Prénom] seul".
-2. INTERDIT : Inventer des logiciels (Ne cite pas SAP si ce n'est pas dans l'extrait).
-3. OBLIGATOIRE : Utilise des mots-clés présents dans l'extrait (ex: logiciel spécifique, secteur, compétence).
+RÈGLES D'OR :
+1. Langue : FRANÇAIS.
+2. INTERDIT : "Votre avis", "Votre retour", "[Prénom] seul".
+3. INTERDIT : Inventer des outils (ne cite SAP ou Tagetik que si présents dans l'extrait).
+4. Ton : Professionnel, pair-à-pair.
 
 Génère 3 variantes séparées par " | " :
-- V1 : Question précise sur une compétence réelle du poste.
-- V2 : Dilemme (Option A vs Option B).
-- V3 : Nom du poste + Entreprise.
-
-Exemple si poste Comptable Cinéma : "Expertise Louma ? | Rigueur vs Agilité Production | Comptable pour {prospect_data['company']}"
+- V1 : Question technique précise (ex: "Expertise Consolidation ?")
+- V2 : Le Dilemme (ex: "Tech vs Métier")
+- V3 : Poste + Entreprise (ex: "Profil {job_title}")
 """
 
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-20250514", # ✅ VERSION CORRIGÉE
+            model="claude-sonnet-4-20250514",
             max_tokens=150,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -62,7 +57,7 @@ Exemple si poste Comptable Cinéma : "Expertise Louma ? | Rigueur vs Agilité Pr
 
 
 # ========================================
-# 2. MESSAGE 2 : LE DILEMME
+# 2. MESSAGE 2 : LE DILEMME (VARIÉ & PERTINENT)
 # ========================================
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
@@ -70,32 +65,44 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
     
     job_title = job_posting_data.get('title', 'ce poste') if job_posting_data else 'ce poste'
     
-    prompt = f"""Tu es consultant chez {COMPANY_INFO['name']}.
-Ta mission : Email de relance "Dilemme Expert".
+    prompt = f"""Tu es chasseur de têtes expert. Tu écris un message de relance.
 
 CONTEXTE :
-Prospect : {prospect_data['first_name']} ({prospect_data['company']})
+Prospect : {prospect_data['first_name']}
 Poste : {job_title}
 
-RÈGLES DE RÉDACTION :
-1. Ne parle PAS anglais (Traduis "Functional" -> "Fonctionnel").
-2. Le dilemme doit être lié au métier de : {job_title}.
-   - Si Comptable : Rigueur cabinet vs Agilité PME.
-   - Si Finance : Contrôle vs Business Partner.
-   - Si RH : Admin vs Stratégie.
+CONSIGNE FORMATAGE (CRITIQUE) :
+1. Écris "Bonjour {prospect_data['first_name']},"
+2. SAUTE DEUX LIGNES OBLIGATOIREMENT.
+3. Commence la phrase suivante par une MAJUSCULE.
+4. PAS DE SIGNATURE à la fin (mon CRM l'ajoute).
+5. Utilise le mot "message" (jamais "courriel").
 
-STRUCTURE :
+CONSIGNE FOND (LE DILEMME) :
+Trouve le vrai point de tension du poste (Dilemme) :
+- Si EPM/SI Finance : Le dilemme est "Expertise Outil (Tech)" vs "Vision Business (Métier)". (Ne parle pas de réglementaire international sauf si précisé).
+- Si Audit : "Rigueur Normative" vs "Agilité Opérationnelle".
+- Si Comptable : "Expertise Cabinet" vs "Polyvalence PME".
+
+CHOISIS UNE FIN (CTA) PARMI CES OPTIONS (Ne prends pas toujours la même) :
+Option A : "Plutôt que de multiplier les entretiens, prenons 15 min pour valider si cette double compétence est la clé de votre roadmap."
+Option B : "Si cet équilibre est critique pour votre équipe, je vous propose d'échanger 15 min pour en discuter."
+Option C : "Avez-vous 15 min cette semaine pour définir si cette approche hybride correspond à votre besoin ?"
+
+STRUCTURE DU MESSAGE :
 "Bonjour {prospect_data['first_name']},
-Je fais suite à mon courriel concernant votre arbitrage sur le profil {job_title}.
-En observant le marché, une tendance se confirme : recruter un expert purement [Qualité A] crée [Risque A], tandis qu'un profil purement [Qualité B] manque de [Risque B].
-Mon objectif est de sécuriser votre département en vous présentant des profils hybrides.
-Avez-vous un créneau ce jeudi pour en discuter ?"
 
-Génère le message 2.
+Je fais suite à mon message concernant votre arbitrage sur le profil {job_title}.
+
+En observant [Secteur/Marché], une tendance se confirme : recruter un profil purement [Qualité A] crée [Risque A], tandis qu'un profil purement [Qualité B] manque de [Risque B].
+
+[Insère ici ta phrase de transition sur le profil hybride].
+
+[Insère ici une des Options de Fin (A, B ou C)]."
 """
 
     message = client.messages.create(
-        model="claude-sonnet-4-20250514", # ✅ VERSION CORRIGÉE
+        model="claude-sonnet-4-20250514",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -103,41 +110,47 @@ Génère le message 2.
 
 
 # ========================================
-# 3. MESSAGE 3 : BREAK-UP (CORRIGÉ "TECH")
+# 3. MESSAGE 3 : BREAK-UP (VARIÉ & ANTI-HALLUCINATION)
 # ========================================
 
 def generate_message_3(prospect_data, message_1_content, job_posting_data):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
     job_title = job_posting_data.get('title', 'ce poste') if job_posting_data else 'ce poste'
-    # On récupère le secteur ou une info clé pour guider l'IA
     raw_desc = job_posting_data.get('description', '') if job_posting_data else ''
     
-    prompt = f"""Tu es consultant chez {COMPANY_INFO['name']}. DERNIER message (Rupture).
+    prompt = f"""Tu es chasseur de têtes. C'est ton DERNIER message (Rupture).
 
-PROSPECT : {prospect_data['first_name']} ({prospect_data['company']})
-POSTE CIBLÉ : {job_title}
-DESCRIPTION SOMMAIRE : {raw_desc[:300]}
+CONTEXTE :
+Poste : {job_title}
+Extrait : {raw_desc[:300]}
 
-🚨 PROTOCOLE ANTI-HALLUCINATION :
-1. Regarde le TITRE DU POSTE.
-2. Si le poste est "Comptable", NE PARLE PAS de "Tech", "Développeurs" ou "Code". Parle de "Profils financiers", "Comptables", "Rigueur".
-3. Si le poste est "RH", parle de "Recruteurs" ou "DRH".
-4. Adapte la statistique inventée au MÉTIER RÉEL.
+CONSIGNE FORMATAGE :
+1. "Bonjour {prospect_data['first_name']}," + 2 sauts de ligne + Majuscule.
+2. PAS DE SIGNATURE.
+
+CONSIGNE ANTI-HALLUCINATION :
+- Regarde le titre du poste.
+- Si Comptable/Finance : PARLE DE PROFILS FINANCIERS (Jamais de "Tech" ou "Dev").
+- Si EPM : Parle d'experts EPM.
+
+CHOISIS UNE FIN (PORTE OUVERTE) PARMI CES OPTIONS :
+Option A : "Si jamais la pénurie de candidats sur ce créneau spécifique persiste, ma ligne reste ouverte."
+Option B : "Si vous faites face à cette difficulté de sourcing dans les semaines à venir, n'hésitez pas à revenir vers moi."
+Option C : "Je clos le dossier pour le moment. Si la situation évolue de votre côté, je reste à l'écoute."
 
 STRUCTURE :
 "Bonjour {prospect_data['first_name']},
-Sans retour de votre part, je vais arrêter mes relances sur ce poste de {job_title}.
-Avant de clore le dossier, je voulais partager une dernière observation : sur ce type de profil, nous constatons [INVENTER UNE STAT PÉNURIE LIÉE AU MÉTIER SPÉCIFIQUE DU POSTE].
-Si jamais vous rencontrez des difficultés de sourcing, n'hésitez pas à revenir vers moi.
-Bonne continuation pour le développement de {prospect_data['company']}.
-Bien à vous,"
 
-Génère le message 3.
+Sans retour de votre part, je vais arrêter mes relances sur ce poste.
+
+Avant de clore le dossier, je voulais partager une dernière observation : sur des profils [Citer le métier exact], nous constatons que [Inventer une stat/tendance pénurie crédible liée au métier].
+
+[Insère ici une des Options de Fin (A, B ou C)]."
 """
 
     message = client.messages.create(
-        model="claude-sonnet-4-20250514", # ✅ VERSION CORRIGÉE
+        model="claude-sonnet-4-20250514",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}]
     )
