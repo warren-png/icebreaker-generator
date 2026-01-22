@@ -472,6 +472,8 @@ TON ET STYLE (IMPÉRATIF) :
 - Consultatif, PAS commercial
 - Crédibilité par observation marché, PAS auto-promotion
 - 100-120 mots maximum
+- ❌ INTERDICTION ABSOLUE de ton commercial type "auriez-vous 15 min" ou "rapide créneau"
+- ❌ INTERDICTION de phrases génériques type "recruter crée un dilemme"
 
 STRUCTURE STRICTE :
 1. "Bonjour {first_name},"
@@ -565,6 +567,9 @@ INTERDICTIONS ABSOLUES :
 - ❌ Jamais proposer des profils génériques ("contrôle de gestion", "FP&A") si le poste 
      demande EPM/Consolidation/Comptabilité spécialisée !
 - ❌ Jamais plus de 120 mots
+- ❌ JAMAIS de ton commercial type : "Auriez-vous un rapide créneau de 15 min"
+- ❌ JAMAIS de phrases bateau : "recruter crée un dilemme : technique vs business"
+- ❌ JAMAIS proposer un appel téléphonique directement
 
 VALIDATION CRITIQUE AVANT ENVOI :
 1. Les expertises proposées correspondent-elles EXACTEMENT aux compétences détectées ? → Si NON : RECOMMENCER

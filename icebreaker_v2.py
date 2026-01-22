@@ -120,20 +120,24 @@ def extract_hooks_with_claude(profile_data, posts_data, company_posts, company_p
     """
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    # SÉCURITÉ : Validation en amont ASSOUPLIE
+    # SÉCURITÉ : Validation en amont
     has_recent_posts = posts_data and len(posts_data) > 0
     has_web_content = web_results and len(web_results) > 0
     
-    # On continue même s'il y a peu de contenu - Claude décidera
     if not has_recent_posts and not has_web_content:
         print("   ⚠️  Aucun contenu détecté - Pas de hook")
         return "NOT_FOUND"
     
-    # Log pour debug
-    if has_recent_posts:
-        print(f"   📝 {len(posts_data)} posts LinkedIn trouvés")
-    if has_web_content:
-        print(f"   🌐 {len(web_results)} résultats web trouvés")
+    # LOGS DÉTAILLÉS pour debug
+    print(f"\n   📊 ANALYSE HOOKS DISPONIBLES :")
+    print(f"   📝 Posts LinkedIn : {len(posts_data) if posts_data else 0}")
+    print(f"   🌐 Résultats web : {len(web_results) if web_results else 0}")
+    
+    if posts_data:
+        print(f"   📋 Aperçu posts :")
+        for i, post in enumerate(posts_data[:3], 1):
+            text_preview = str(post.get('text', ''))[:80].replace('\n', ' ')
+            print(f"      Post {i}: {text_preview}...")
     
     data_summary = {
         "profile": {
@@ -145,55 +149,139 @@ def extract_hooks_with_claude(profile_data, posts_data, company_posts, company_p
         "web_mentions": web_results
     }
     
-    prompt = f"""Tu es un analyste en intelligence économique.
-OBJECTIF : Trouver un "Hook" (Point d'accroche) pour contacter ce prospect.
+    prompt = f"""Tu es un analyste en intelligence économique expert.
+OBJECTIF : Trouver LE MEILLEUR "Hook" (Point d'accroche) pour contacter ce prospect.
+
+CONTEXTE DU PROSPECT :
+- Nom : {prospect_name}
+- Entreprise : {company_name}
+- Poste/Industrie : {profile_data.get('headline', 'N/A') if profile_data else 'N/A'}
 
 ═══════════════════════════════════════════════════════════════════
-⚠️  RÈGLES DE SÉCURITÉ (NON NÉGOCIABLES) ⚠️
+🎯 SYSTÈME DE SCORING - PRIORISATION INTELLIGENTE
 ═══════════════════════════════════════════════════════════════════
 
-1. INTERDICTION D'INVENTER DU CONTENU
-   - Si les données ne contiennent AUCUN élément exploitable, réponds "NOT_FOUND"
-   - Tu ne peux mentionner QUE des éléments EXPLICITEMENT présents dans les données
-   
-2. EXEMPLES D'INVENTIONS INTERDITES :
-   ❌ "Participation au Programme EVE" (si pas dans les données)
-   ❌ Déduire du contenu à partir du prénom/genre
-   ❌ Inventer des événements ou participations
+SCORE DE PERTINENCE (5 = excellent, 1 = faible) :
 
-3. MAIS : Si tu trouves un vrai post, commentaire ou activité LinkedIn, 
-   tu DOIS le signaler comme hook valide !
+**Score 5 (PRIORITÉ ABSOLUE)** :
+- Podcast/Interview où le prospect parle
+- Article écrit par le prospect
+- Conférence/intervention publique
+- Post LinkedIn ORIGINAL sur un sujet métier précis
+
+**Score 4 (TRÈS BON)** :
+- Post LinkedIn original avec analyse/réflexion
+- Certification professionnelle récente PERTINENTE pour le poste recherché
+- Commentaire substantiel (3+ lignes) sur sujet métier
+
+**Score 3 (BON)** :
+- Post personnel/événement SI lien avec compétences métier
+- Commentaire court mais pertinent
+- Partage avec commentaire ajouté
+
+**Score 2 (FAIBLE)** :
+- Événement générique (teambuilding, séminaire RH sans lien métier)
+- Post purement personnel
+- Simple like/partage sans commentaire
+
+**Score 1 (À ÉVITER)** :
+- Contenu sans lien avec le poste recherché
+- Événement trop générique
+
+═══════════════════════════════════════════════════════════════════
+📊 EXEMPLES DE PRIORISATION POUR EPM/FINANCE
+═══════════════════════════════════════════════════════════════════
+
+SCÉNARIO : Poste = EPM Manager (Tagetik, change management, adoption outils)
+
+Hooks disponibles :
+A) Post sur "Award ESG reporting - importance Tech teams pour solutions business reporting" (3 sem)
+B) Certification "SAFe® 6 Agilist" (3 mois)
+C) "Programme EVE - leadership féminin à Evian" (3 mois)
+
+SCORING :
+- Hook A = Score 5 ✅ MEILLEUR CHOIX
+  Raison : Lien DIRECT avec le poste (Tech/Finance, solutions reporting = cœur EPM)
+  
+- Hook B = Score 4 ✅ BON CHOIX
+  Raison : SAFe = méthodologie projet pertinente pour EPM Manager
+  
+- Hook C = Score 2 ❌ ÉVITER
+  Raison : Leadership féminin = peu de lien avec compétences EPM techniques
+
+➡️ CHOIX FINAL : Hook A (ESG reporting + Tech teams)
 
 ═══════════════════════════════════════════════════════════════════
 
-HIÉRARCHIE DES HOOKS (DU MEILLEUR AU MOINS BON) :
-1. **Contenu Intellectuel** : Article écrit, podcast, livre, conférence
-2. **Post LinkedIn original** : Le prospect a publié un post
-3. **Commentaire LinkedIn** : Le prospect a commenté un post
-4. **Activité LinkedIn** : Like, partage d'un post pertinent
-5. **News Entreprise** : Levée de fonds, rachat, lancement produit
+SCÉNARIO 2 : Poste = Comptable audiovisuel
+
+Hooks disponibles :
+A) Commentaire "Bravo Geraldine ! Longue vie à Parcel Tiny House" (4 mois)
+B) Post original sur collaboration "JACQUEMUS x NIKE" avec photos production (récent)
+C) Post "Film CHIEN 51 sélectionné à Venise" (récent)
+
+SCORING :
+- Hook A = Score 1 ❌ ÉVITER (sans lien avec le métier)
+- Hook B = Score 5 ✅ MEILLEUR CHOIX (montre productions luxe/mode)
+- Hook C = Score 5 ✅ EXCELLENT aussi (dimension internationale ciné)
+
+➡️ CHOIX FINAL : Hook B ou C (les deux sont pertinents)
+
+═══════════════════════════════════════════════════════════════════
+⚠️ RÈGLES DE SÉCURITÉ (NON NÉGOCIABLES)
+═══════════════════════════════════════════════════════════════════
+
+1. INTERDICTION D'INVENTER
+   - Si un élément n'est PAS dans les données, tu ne peux pas le mentionner
+   - Vérifie que le hook existe VRAIMENT dans les données fournies
+
+2. PRIORISER LA PERTINENCE MÉTIER
+   - Un hook récent mais peu pertinent < Un hook moins récent mais très pertinent
+   - Exemple : Certification métier (3 mois) > Événement RH (1 mois)
+
+3. EN CAS DE DOUTE SUR LA PERTINENCE
+   - Choisis le hook le plus lié aux COMPÉTENCES du poste
+   - Évite les hooks purement personnels/génériques
+
+═══════════════════════════════════════════════════════════════════
+
+HIÉRARCHIE DES TYPES DE HOOKS :
+1. 🏆 **Contenu Intellectuel métier** (Score 5)
+2. 🥈 **Post LinkedIn métier original** (Score 4-5)
+3. 🥉 **Certification professionnelle pertinente** (Score 4)
+4. ⭐ **Commentaire substantiel métier** (Score 3-4)
+5. 👥 **Activité LinkedIn pertinente** (Score 2-3)
+6. 📰 **News Entreprise** (Score 3)
 
 DONNÉES FOURNIES :
 {json.dumps(data_summary, indent=2, ensure_ascii=False)}
 
-CONSIGNE DE SORTIE :
+═══════════════════════════════════════════════════════════════════
+CONSIGNE DE SORTIE
+═══════════════════════════════════════════════════════════════════
 
-Si tu trouves un hook VALIDE (même un simple commentaire LinkedIn récent) :
-Réponds en JSON :
+Si tu trouves un ou plusieurs hooks valides :
+
+ÉTAPE 1 : Score chaque hook (1-5) selon pertinence métier
+ÉTAPE 2 : Choisis le hook avec le MEILLEUR SCORE
+ÉTAPE 3 : Réponds en JSON :
+
 {{
   "hook_principal": {{
-    "description": "Description PRÉCISE (ex: 'Commentaire sur le post de X concernant Y')",
-    "citation": "Citation textuelle si disponible",
+    "description": "Description PRÉCISE du hook (ex: 'Post sur award ESG reporting mentionnant importance Tech teams')",
+    "citation": "Citation textuelle si disponible (phrase clé du post)",
     "type_action": "CONTENT_CREATOR" | "LINKEDIN_ACTIVE" | "COMPANY_NEWS",
-    "date": "Date approximative si disponible",
-    "pertinence": 3 à 5
+    "score_pertinence": 1 à 5,
+    "justification_choix": "Pourquoi ce hook plutôt qu'un autre"
    }}
 }}
 
-Si AUCUN contenu exploitable :
+Si AUCUN hook exploitable :
 Réponds EXACTEMENT : "NOT_FOUND"
 
-IMPORTANT : Un simple commentaire récent sur LinkedIn EST un hook valide - ne sois pas trop strict !
+RAPPEL CRITIQUE : 
+- Priorise les hooks MÉTIER/COMPÉTENCES sur les hooks personnels/génériques
+- Un bon hook = lien clair avec le poste recherché
 """
 
     try:
@@ -204,6 +292,9 @@ IMPORTANT : Un simple commentaire récent sur LinkedIn EST un hook valide - ne s
             messages=[{"role": "user", "content": prompt}]
         )
         response_text = message.content[0].text.strip().replace('```json', '').replace('```', '').strip()
+        
+        # LOGS : Afficher le hook choisi
+        print(f"\n   🎯 RÉPONSE CLAUDE HOOKS :")
         
         # SÉCURITÉ : Validation post-génération
         if response_text == "NOT_FOUND":
@@ -216,7 +307,16 @@ IMPORTANT : Un simple commentaire récent sur LinkedIn EST un hook valide - ne s
             if not hook_data.get("hook_principal"):
                 print("   ⚠️  JSON invalide - Pas de hook")
                 return "NOT_FOUND"
-            print(f"   ✅ Hook extrait : {hook_data['hook_principal'].get('description', '')[:60]}...")
+            
+            # LOGS détaillés du hook choisi
+            hook = hook_data['hook_principal']
+            print(f"   ✅ Hook sélectionné :")
+            print(f"      Type: {hook.get('type_action', 'N/A')}")
+            print(f"      Score: {hook.get('score_pertinence', 'N/A')}/5")
+            print(f"      Description: {hook.get('description', '')[:80]}...")
+            if hook.get('justification_choix'):
+                print(f"      Justification: {hook.get('justification_choix', '')[:60]}...")
+            
             return response_text
         except json.JSONDecodeError:
             print("   ⚠️  Réponse non-JSON - Pas de hook")
