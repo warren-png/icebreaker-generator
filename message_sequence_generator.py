@@ -1,8 +1,8 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V22 (SEMAINE 1 - MONITORING & SÉCURITÉ)
-Ajouts : Logging, Cost Tracking, Validation, Fallback
-Comportement : IDENTIQUE à V21
+MESSAGE SEQUENCE GENERATOR - V23 (OPTIMISÉ PAIN POINTS + OUTCOMES)
+Modifications : Prompts optimisés avec pain points métier, outcomes cabinet,
+adaptation selon richesse données scrapées
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -23,6 +23,167 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 if not ANTHROPIC_API_KEY:
     raise ValueError("❌ ANTHROPIC_API_KEY non trouvée")
+
+
+# ========================================
+# PAIN POINTS ET OUTCOMES PAR MÉTIER
+# ========================================
+
+PAIN_POINTS_BY_JOB = {
+    'daf': [
+        "reporting trop lent pour piloter en temps réel",
+        "équipes finance absorbées par la production au détriment de l'analyse stratégique",
+        "transformations ERP/EPM/BI qui s'éternisent",
+        "difficulté à attirer et retenir des profils finance à haut potentiel",
+        "dépendance forte à quelques profils clés (key-man risk)"
+    ],
+    'raf': [
+        "polyvalence extrême : comptabilité, contrôle, trésorerie, fiscalité",
+        "sous-dimensionnement chronique des équipes",
+        "outils finance insuffisants (ERP sous-exploité, reporting artisanal)",
+        "forte dépendance à quelques personnes clés"
+    ],
+    'controle_gestion': [
+        "données peu fiables et disponibles trop tard pour décider",
+        "manque de profils hybrides finance + data",
+        "difficulté à passer du reporting au business partnering",
+        "projets EPM/BI qui n'aboutissent pas ou ne sont pas adoptés"
+    ],
+    'fpna': [
+        "trop de dépendance à Excel, retraitements manuels multiples",
+        "équipes cantonnées au reporting, faible influence sur les décisions",
+        "multiplication des demandes métiers sans priorisation claire"
+    ],
+    'comptabilite': [
+        "charge de clôture excessive et récurrente",
+        "pénurie de profils comptables opérationnels fiables",
+        "dépendance à des personnes clés",
+        "qualité des données perfectible"
+    ],
+    'consolidation': [
+        "process lourds et peu automatisés (forte dépendance Excel)",
+        "pression extrême sur les délais de clôture groupe",
+        "qualité hétérogène des données filiales",
+        "key-man risk élevé (connaissance concentrée)"
+    ],
+    'audit': [
+        "couverture de risques insuffisante face à la croissance du périmètre",
+        "manque de profils seniors autonomes capables de dialoguer avec la DG",
+        "backlog de recommandations non suivies",
+        "transformation vers l'audit data-driven difficile à mener"
+    ],
+    'epm': [
+        "projets EPM qui s'éternisent, forte dépendance aux intégrateurs",
+        "faible adoption des outils (contournements Excel persistants)",
+        "gouvernance des données insuffisante (multiples versions de la vérité)",
+        "key-man risk élevé sur la connaissance des outils"
+    ],
+    'bi_data': [
+        "accès aux données lent et instable",
+        "KPI contestés en comité de direction faute de référentiels clairs",
+        "manque de profils hybrides (data engineers sans culture finance)",
+        "dette analytique (tableurs critiques, retraitements manuels avant CODIR)"
+    ]
+}
+
+OUTCOMES_CABINET = {
+    'general': [
+        "sécurisation rapide de profils opérationnels alignés avec vos enjeux",
+        "réduction du temps de recrutement et du risque d'erreur de casting",
+        "accès à des profils passifs non visibles sur les jobboards",
+        "évaluation orientée contexte : capacité à réussir chez vous, pas juste savoir faire le métier"
+    ],
+    'daf': [
+        "stabilisation et montée en compétence des équipes",
+        "capacité à mener la transformation sans rupture",
+        "finance repositionnée comme partenaire business"
+    ],
+    'controle_gestion': [
+        "accélération du pilotage de la performance",
+        "transformation du rôle des équipes vers le business partnering",
+        "réussite des projets EPM/BI par des profils sachant les porter"
+    ],
+    'audit': [
+        "couverture de risques alignée avec la stratégie",
+        "renforcement rapide du niveau senior",
+        "crédibilité renforcée auprès des comités"
+    ]
+}
+
+
+# ========================================
+# DÉTECTION AUTOMATIQUE DU MÉTIER
+# ========================================
+
+def detect_job_category(prospect_data, job_posting_data):
+    """
+    Détecte automatiquement la catégorie métier du prospect
+    pour adapter pain points et outcomes
+    """
+    
+    text = f"{prospect_data.get('headline', '')} {prospect_data.get('title', '')} "
+    if job_posting_data:
+        text += f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}"
+    
+    text = text.lower()
+    
+    # Détection par mots-clés
+    if any(word in text for word in ['daf', 'directeur administratif', 'cfo', 'chief financial']):
+        return 'daf'
+    elif any(word in text for word in ['raf', 'responsable administratif']):
+        return 'raf'
+    elif any(word in text for word in ['fp&a', 'fp a', 'financial planning']):
+        return 'fpna'
+    elif any(word in text for word in ['contrôle de gestion', 'controle gestion', 'business controller']):
+        return 'controle_gestion'
+    elif any(word in text for word in ['consolidation', 'consolidateur']):
+        return 'consolidation'
+    elif any(word in text for word in ['audit', 'auditeur']):
+        return 'audit'
+    elif any(word in text for word in ['epm', 'anaplan', 'hyperion', 'planning']):
+        return 'epm'
+    elif any(word in text for word in ['bi', 'business intelligence', 'data', 'analytics']):
+        return 'bi_data'
+    elif any(word in text for word in ['comptable', 'comptabilité', 'accounting']):
+        return 'comptabilite'
+    else:
+        return 'general'  # Défaut finance générique
+
+
+def get_relevant_pain_points(job_category, max_points=2):
+    """Récupère les pain points pertinents pour le métier détecté"""
+    pain_points = PAIN_POINTS_BY_JOB.get(job_category, PAIN_POINTS_BY_JOB['daf'])
+    return pain_points[:max_points]
+
+
+def get_relevant_outcomes(job_category, max_outcomes=2):
+    """Récupère les outcomes pertinents"""
+    outcomes = OUTCOMES_CABINET.get(job_category, OUTCOMES_CABINET['general'])
+    return outcomes[:max_outcomes]
+
+
+# ========================================
+# ÉVALUATION RICHESSE DES DONNÉES
+# ========================================
+
+def assess_data_richness(hooks_data, job_posting_data):
+    """
+    Évalue la richesse des données scrapées pour adapter le style du message
+    
+    Returns:
+        str: 'rich' (contenu LinkedIn/web riche) ou 'basic' (juste fiche de poste)
+    """
+    
+    # Critères de richesse
+    has_hooks = hooks_data and hooks_data != "NOT_FOUND" and len(str(hooks_data)) > 100
+    has_detailed_job = job_posting_data and len(str(job_posting_data.get('description', ''))) > 200
+    
+    if has_hooks:
+        return 'rich'
+    elif has_detailed_job:
+        return 'basic'
+    else:
+        return 'minimal'
 
 
 # ========================================
@@ -64,11 +225,11 @@ def get_smart_context(job_posting_data, prospect_data):
 
 
 # ========================================
-# 1. GÉNÉRATEUR D'OBJETS (AVEC TRACKING)
+# 1. GÉNÉRATEUR D'OBJETS (OPTIMISÉ PAIN POINTS)
 # ========================================
 
 def generate_subject_lines(prospect_data, job_posting_data):
-    """Génère les objets d'email avec tracking des coûts"""
+    """Génère les objets d'email axés pain points"""
     
     log_event('generate_subject_lines_start', {
         'prospect': prospect_data.get('_id', 'unknown')
@@ -77,22 +238,47 @@ def generate_subject_lines(prospect_data, job_posting_data):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
     context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
+    job_category = detect_job_category(prospect_data, job_posting_data)
+    pain_points = get_relevant_pain_points(job_category, max_points=2)
     
     if is_hiring:
-        prompt_context = f"Recrutement pour : {context_name}"
+        prompt_type = "recrutement actif"
+        subject_focus = f"Poste : {context_name}"
     else:
-        prompt_context = f"Sujet : Organisation de {context_name} (Approche Spontanée)"
+        prompt_type = "approche spontanée"
+        subject_focus = f"Sujet : {context_name}"
     
-    prompt = f"""Tu es un copywriter B2B.
-CONTEXTE :
-{prompt_context}
-Chez : {prospect_data.get('company', 'l\'entreprise')}
+    prompt = f"""Tu es expert en copywriting B2B pour cabinet de recrutement.
 
-Génère 3 variantes d'objets courts :
-- V1 : Question expertise
-- V2 : Enjeu organisationnel
-- V3 : Sujet direct
-"""
+CONTEXTE :
+{prompt_type.capitalize()}
+{subject_focus}
+Entreprise : {prospect_data.get('company', 'l\'entreprise')}
+Métier détecté : {job_category}
+
+PAIN POINTS PRINCIPAUX :
+- {pain_points[0] if len(pain_points) > 0 else 'recrutement complexe'}
+- {pain_points[1] if len(pain_points) > 1 else 'difficulté à trouver les bons profils'}
+
+CONSIGNE :
+Génère 3 objets d'email courts (max 60 caractères) axés sur les pain points, PAS sur la vente.
+
+FORMAT ATTENDU :
+1. [Question ouverte sur pain point 1]
+2. [Constat marché lié au pain point 2]  
+3. [Sujet direct mentionnant le poste]
+
+EXEMPLES DE TON :
+- "Reporting trop lent pour piloter ?"
+- "Profils EPM : technique OU business ?"
+- "Re: {context_name}"
+
+INTERDICTIONS :
+- Pas de "Opportunité", "Proposition", "Collaboration"
+- Pas de points d'exclamation
+- Pas de promesses directes
+
+Génère les 3 objets (numérotés 1, 2, 3) :"""
     
     try:
         message = client.messages.create(
@@ -101,34 +287,28 @@ Génère 3 variantes d'objets courts :
             messages=[{"role": "user", "content": prompt}]
         )
         
-        # ✅ NOUVEAU : Tracker les coûts
         tracker.track(message.usage, 'generate_subject_lines')
-        
         result = message.content[0].text.strip()
         
-        log_event('generate_subject_lines_success', {
-            'length': len(result)
-        })
-        
+        log_event('generate_subject_lines_success', {'length': len(result)})
         return result
         
     except anthropic.APIError as e:
         log_error('claude_api_error', str(e), {'function': 'generate_subject_lines'})
-        # ✅ NOUVEAU : Fallback si erreur
         from prospection_utils.fallback_templates import generate_fallback_subjects
         return generate_fallback_subjects(prospect_data, job_posting_data)
     
     except Exception as e:
         log_error('unexpected_error', str(e), {'function': 'generate_subject_lines'})
-        return f"Echange | {context_name}"
+        return f"Re: {context_name}"
 
 
 # ========================================
-# 2. MESSAGE 2 : LE DILEMME (AVEC TRACKING)
+# 2. MESSAGE 2 : LE DILEMME (OPTIMISÉ)
 # ========================================
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
-    """Génère le message 2 avec tracking et fallback"""
+    """Génère le message 2 avec pain points + outcomes cabinet"""
     
     log_event('generate_message_2_start', {
         'prospect': prospect_data.get('_id', 'unknown'),
@@ -139,33 +319,58 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
     
     first_name = get_safe_firstname(prospect_data)
     context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
-    hooks_str = str(hooks_data) if hooks_data and hooks_data != "NOT_FOUND" else "Aucune actualité récente"
+    job_category = detect_job_category(prospect_data, job_posting_data)
+    pain_points = get_relevant_pain_points(job_category, max_points=2)
+    outcomes = get_relevant_outcomes(job_category, max_outcomes=1)
     
     if is_hiring:
-        intro_phrase = f"Je fais suite à mon message concernant le poste de {context_name}."
+        intro_phrase = f"Je me permets de vous relancer concernant votre recherche de {context_name}."
+        context_type = "ce recrutement"
     else:
-        intro_phrase = f"Je fais suite à mon message concernant la structuration de {context_name}."
-
-    prompt = f"""Tu es chasseur de têtes expert.
+        intro_phrase = f"Je reviens vers vous concernant la structuration de {context_name}."
+        context_type = "ce type de besoin"
+    
+    prompt = f"""Tu es chasseur de têtes spécialisé Finance.
 
 CONTEXTE :
 Prospect : {first_name}
-Sujet : {context_name}
-Mode : {'Recrutement Actif' if is_hiring else 'Approche Spontanée'}
+Poste/Sujet : {context_name}
+Métier : {job_category}
+Type : {'Recrutement actif' if is_hiring else 'Approche spontanée'}
 
-CONSIGNE FORMATAGE :
+PAIN POINTS IDENTIFIÉS (à mentionner subtilement) :
+- {pain_points[0] if len(pain_points) > 0 else 'difficulté à recruter'}
+- {pain_points[1] if len(pain_points) > 1 else 'manque de profils qualifiés'}
+
+OUTCOME CABINET (à suggérer sans vendre) :
+- {outcomes[0] if len(outcomes) > 0 else 'sécurisation rapide de profils alignés'}
+
+TON ET STYLE (IMPÉRATIF) :
+- Consultatif, PAS commercial
+- Crédibilité par l'observation marché, PAS par l'auto-promotion
+- Proposition concrète sans engagement
+- 100-120 mots maximum
+
+STRUCTURE STRICTE :
 1. "Bonjour {first_name},"
-2. SAUTE DEUX LIGNES.
+2. SAUT DE LIGNE
+3. "{intro_phrase}"
+4. Observation marché crédible mentionnant UN pain point (exemple : "Sur {context_type}, je constate souvent que...")
+5. Proposition concrète : "J'ai identifié 2 profils [expertise pertinente] qui pourraient retenir votre attention."
+6. Offre sans engagement : "Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait de juger leur pertinence en 30 secondes."
+7. Formule de politesse simple
 
-STRUCTURE :
-1. Intro : "{intro_phrase}"
-2. Le Dilemme : "En observant le marché, recruter ou structurer des profils [Expertise] crée souvent un dilemme : soit on a la technique mais pas le business, soit l'inverse..."
-3. La Solution Hybride.
-4. CONCLUSION (Strictement une de ces options) :
-   - "C'est précisément sur l'identification de ces profils que j'accompagne mes clients. Auriez-vous un rapide créneau de 15 min prochainement ou seriez-vous ouvert à recevoir des candidatures qui correspondent à votre besoin ?"
+INTERDICTIONS :
+- Pas de "Notre cabinet", "Nos services", "Notre expertise"
+- Pas de superlatifs ("meilleurs", "excellents")
+- Pas de jargon cabinet ("chasse de têtes", "approche directe")
+- Pas plus de 120 mots
 
-Génère le message 2.
-"""
+EXEMPLES DE TON À REPRODUIRE :
+"Sur ce type de poste, je constate souvent que le défi n'est pas la technique pure, mais la capacité à dialoguer avec les opérationnels..."
+"Dans mes accompagnements récents, l'apport externe a surtout permis de sécuriser rapidement des profils opérationnels..."
+
+Génère le message 2 :"""
 
     try:
         message = client.messages.create(
@@ -174,20 +379,14 @@ Génère le message 2.
             messages=[{"role": "user", "content": prompt}]
         )
         
-        # ✅ NOUVEAU : Tracker les coûts
         tracker.track(message.usage, 'generate_message_2')
-        
         result = message.content[0].text
         
-        log_event('generate_message_2_success', {
-            'length': len(result)
-        })
-        
+        log_event('generate_message_2_success', {'length': len(result)})
         return result
         
     except anthropic.APIError as e:
         log_error('claude_api_error', str(e), {'function': 'generate_message_2'})
-        # ✅ NOUVEAU : Fallback si erreur
         from prospection_utils.fallback_templates import generate_fallback_message
         return generate_fallback_message(2, prospect_data, job_posting_data)
     
@@ -197,72 +396,38 @@ Génère le message 2.
 
 
 # ========================================
-# 3. MESSAGE 3 : BREAK-UP (AVEC TRACKING)
+# 3. MESSAGE 3 : BREAK-UP (TEMPLATE FIXE)
 # ========================================
 
 def generate_message_3(prospect_data, message_1_content, job_posting_data):
-    """Génère le message 3 avec tracking et fallback"""
+    """Génère le message 3 - Template fixe approuvé"""
     
     log_event('generate_message_3_start', {
         'prospect': prospect_data.get('_id', 'unknown')
     })
     
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
     first_name = get_safe_firstname(prospect_data)
-    context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
     
-    if is_hiring:
-        intro_stop = "Sans retour de votre part, je vais arrêter mes relances sur ce poste."
-    else:
-        intro_stop = "Sans retour de votre part, je ne vous solliciterai plus sur ce sujet."
+    # Template fixe basé sur vos exemples qui fonctionnent
+    message_3_template = f"""Bonjour {first_name},
 
-    prompt = f"""Tu es chasseur de têtes. DERNIER message.
+Je comprends que vous n'ayez pas eu le temps de revenir vers moi — je sais à quel point vos fonctions sont sollicitées.
 
-CONTEXTE :
-Prospect : {first_name}
-Sujet : {context_name}
+Avant de clore le dossier de mon côté, une dernière question : Est-ce que le timing n'est simplement pas bon pour l'instant, ou bien travaillez-vous déjà avec d'autres cabinets/recruteurs sur ce poste ?
 
-CONSIGNE FORMATAGE :
-1. "Bonjour {first_name},"
-2. SAUTE DEUX LIGNES.
+Si c'est une question de timing, je serai ravi de reprendre contact dans quelques semaines.
 
-STRUCTURE :
-1. Intro : "{intro_stop}"
-2. Observation Marché (Statistique Pénurie crédible).
-3. CONCLUSION (Strictement celle-ci) :
-   - "Je clos ce dossier. Si toutefois la tension sur ces compétences spécifiques venait à freiner vos projets, je reste à votre disposition. Bonne continuation."
+Si vous préférez gérer ce recrutement autrement, aucun souci — je vous souhaite de trouver la perle rare rapidement.
 
-Génère le message 3.
-"""
+Merci en tous cas pour votre attention,
 
-    try:
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        # ✅ NOUVEAU : Tracker les coûts
-        tracker.track(message.usage, 'generate_message_3')
-        
-        result = message.content[0].text
-        
-        log_event('generate_message_3_success', {
-            'length': len(result)
-        })
-        
-        return result
-        
-    except anthropic.APIError as e:
-        log_error('claude_api_error', str(e), {'function': 'generate_message_3'})
-        # ✅ NOUVEAU : Fallback si erreur
-        from prospection_utils.fallback_templates import generate_fallback_message
-        return generate_fallback_message(3, prospect_data, job_posting_data)
+Bonne continuation,"""
     
-    except Exception as e:
-        log_error('unexpected_error', str(e), {'function': 'generate_message_3'})
-        raise
+    log_event('generate_message_3_success', {
+        'length': len(message_3_template)
+    })
+    
+    return message_3_template
 
 
 # ========================================
@@ -272,7 +437,7 @@ Génère le message 3.
 def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_1_content):
     """
     Génère une séquence complète avec logging, tracking et validation
-    Comportement identique à la version précédente, mais avec monitoring
+    Version optimisée avec pain points + outcomes
     """
     
     log_event('sequence_generation_start', {
@@ -280,11 +445,13 @@ def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_
         'prospect_name': prospect_data.get('full_name', 'unknown'),
         'company': prospect_data.get('company', 'unknown'),
         'has_job_posting': bool(job_posting_data),
-        'has_hooks': hooks_data != "NOT_FOUND"
+        'has_hooks': hooks_data != "NOT_FOUND",
+        'data_richness': assess_data_richness(hooks_data, job_posting_data),
+        'job_category': detect_job_category(prospect_data, job_posting_data)
     })
     
     try:
-        # Génération (identique à avant)
+        # Génération
         subject_lines = generate_subject_lines(prospect_data, job_posting_data)
         message_2 = generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content)
         message_3 = generate_message_3(prospect_data, message_1_content, job_posting_data)
@@ -296,14 +463,13 @@ def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_
             'message_3': message_3
         }
         
-        # ✅ NOUVEAU : Validation avant de retourner
+        # Validation
         is_valid = validate_and_report(sequence, prospect_data, raise_on_error=False)
         
         if not is_valid:
             log_error('sequence_validation_failed', 'Séquence générée invalide', {
                 'prospect': prospect_data.get('_id', 'unknown')
             })
-            # ✅ NOUVEAU : Utiliser fallback si validation échoue
             print("⚠️  Séquence invalide détectée, génération d'un fallback...")
             sequence = generate_fallback_sequence(prospect_data, job_posting_data, message_1_content)
         
@@ -319,13 +485,6 @@ def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_
             'prospect_id': prospect_data.get('_id', 'unknown')
         })
         
-        # ✅ NOUVEAU : Fallback complet en cas d'erreur critique
         print(f"❌ Erreur lors de la génération : {e}")
         print("🔄 Génération d'une séquence de fallback...")
         return generate_fallback_sequence(prospect_data, job_posting_data, message_1_content)
-
-
-
-
-
-
