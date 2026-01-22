@@ -248,7 +248,7 @@ def generate_subject_lines(prospect_data, job_posting_data):
         prompt_type = "approche spontanée"
         subject_focus = f"Sujet : {context_name}"
     
-    prompt = f"""Tu es expert en copywriting B2B pour cabinet de recrutement.
+    prompt = f"""Tu es expert en copywriting B2B pour cabinet de recrutement Finance.
 
 CONTEXTE :
 {prompt_type.capitalize()}
@@ -256,27 +256,60 @@ CONTEXTE :
 Entreprise : {prospect_data.get('company', 'l\'entreprise')}
 Métier détecté : {job_category}
 
-PAIN POINTS PRINCIPAUX :
+DONNÉES JOB POSTING (à utiliser IMPÉRATIVEMENT) :
+Titre poste : {job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'}
+Mots-clés détectés : {', '.join([
+    word for word in str(job_posting_data).lower().split() 
+    if word in ['tagetik', 'epm', 'sap', 'consolidation', 'ifrs', 'hyperion', 
+                'anaplan', 'change', 'adoption', 'bi', 'data', 'excel', 
+                'reporting', 'forecast', 'budget', 'fp&a']
+][:5]) if job_posting_data else 'Aucun'}
+
+PAIN POINTS CONTEXTUELS (à intégrer subtilement) :
 - {pain_points[0] if len(pain_points) > 0 else 'recrutement complexe'}
-- {pain_points[1] if len(pain_points) > 1 else 'difficulté à trouver les bons profils'}
+- {pain_points[1] if len(pain_points) > 1 else 'difficulté à trouver profils'}
 
 CONSIGNE :
-Génère 3 objets d'email courts (max 60 caractères) axés sur les pain points, PAS sur la vente.
+Génère 3 objets d'email courts (40-60 caractères) qui :
+1. Mentionnent les MOTS-CLÉS du job posting (si présents)
+2. Évoquent les pain points de manière INTERROGATIVE
+3. Restent sobres et professionnels
 
 FORMAT ATTENDU :
-1. [Question ouverte sur pain point 1]
-2. [Constat marché lié au pain point 2]  
-3. [Sujet direct mentionnant le poste]
+1. [Question ouverte avec mot-clé poste]
+2. [Constat marché avec pain point]
+3. [Objet direct : "Re: [titre poste]"]
 
-EXEMPLES DE TON :
-- "Reporting trop lent pour piloter ?"
-- "Profils EPM : technique OU business ?"
-- "Re: {context_name}"
+EXEMPLES DE BONS OBJETS (selon contexte) :
+
+Pour EPM/Tagetik :
+1. Tagetik : profils Tech OU Change ?
+2. Adoption EPM : le vrai défi
+3. Re: Senior Functional Analyst Tagetik
+
+Pour Consolidation :
+1. Consolidation : Excel ou outil groupe ?
+2. Clôture groupe : le dilemme compétences
+3. Re: Responsable Consolidation
+
+Pour FP&A :
+1. FP&A : reporting ou business partner ?
+2. Profils hybrides Finance + Data
+3. Re: Directeur FP&A
+
+Pour Comptabilité :
+1. Comptables autonomes : marché tendu
+2. Clôture : absorber les pics
+3. Re: Chef Comptable
 
 INTERDICTIONS :
-- Pas de "Opportunité", "Proposition", "Collaboration"
-- Pas de points d'exclamation
-- Pas de promesses directes
+- ❌ Pas de "Opportunité", "Proposition", "Collaboration"
+- ❌ Pas de points d'exclamation
+- ❌ Pas de promesses directes
+- ❌ Pas de "Notre cabinet"
+
+IMPÉRATIF : Si le job posting mentionne un outil précis (Tagetik, SAP, Anaplan, etc.), 
+l'objet 1 ou 2 DOIT mentionner cet outil !
 
 Génère les 3 objets (numérotés 1, 2, 3) :"""
     

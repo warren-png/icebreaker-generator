@@ -179,46 +179,116 @@ def generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data=Non
     job_context = str(job_posting_data) if has_job else "PAS_D_ANNONCE"
     
     # 3. Le Prompt FUSION (Logique conditionnelle stricte)
-    prompt = f"""Tu es un expert en copywriting B2B (Recrutement).
-Ta mission : Rédiger le MESSAGE 1 (Icebreaker).
+    prompt = f"""Tu es un expert en copywriting B2B pour cabinet de recrutement Finance.
 
 CONTEXTE :
-Prospect : {prospect_data['first_name']} ({prospect_data['company']})
-Hook Prospect (Activité/Web) : {json.dumps(hooks_data, ensure_ascii=False)}
+Prospect : {prospect_data['first_name']} {prospect_data.get('last_name', '')}
+Entreprise : {prospect_data.get('company', '')}
+Poste : {prospect_data.get('title', 'N/A')}
+
+Hook Prospect (LinkedIn/Web) : {json.dumps(hooks_data, ensure_ascii=False)}
 Annonce de recrutement : {job_context}
 
-RÈGLES DE FORMATAGE :
+IMPÉRATIF ABSOLU DE LONGUEUR : 80-100 MOTS MAXIMUM (compter chaque mot !)
+
+FORMAT STRICT NON NÉGOCIABLE :
 1. "Bonjour {prospect_data['first_name']},"
-2. SAUTE DEUX LIGNES.
-3. Phrase suivante commence par MAJUSCULE.
+2. SAUT DE LIGNE (ligne vide)
+3. Corps du message (60-80 mots)
+4. Question finale (10-15 mots)
 
-STRATÉGIE DE CONTENU (LA FUSION) :
+STRATÉGIE CONTENU (FUSION INTELLIGENTE) :
 
-CAS A : IL Y A UN HOOK (Podcast/Post) **ET** UNE ANNONCE (Le Top)
--> TU DOIS LIER LES DEUX.
--> Structure : "J'ai lu votre post sur [Sujet Hook]... Cela fait écho à votre recherche actuelle de [Poste]..."
--> Objectif : Montrer que tu as tout lu (Profil + Annonce).
+═══════════════════════════════════════════════════════════════════
+CAS A : Hook (podcast/article) + Annonce (LE MEILLEUR)
+═══════════════════════════════════════════════════════════════════
 
-CAS B : IL Y A UNE ANNONCE MAIS PAS DE HOOK
--> Structure : "J'ai vu votre recherche de [Poste]..."
--> Focus : La difficulté du recrutement.
+Structure OBLIGATOIRE :
+- Phrase 1 (15-20 mots) : "J'ai [écouté/lu/consulté] [type contenu précis avec nom]"
+  → IMPÉRATIF : Mentionner le NOM du podcast/article/conférence !
+  
+- Phrase 2 (15-20 mots) : "Votre analyse sur [sujet précis extrait hook] était [qualificatif sobre]."
+  → Citer UNE idée spécifique du hook
+  
+- Phrase 3 (20-25 mots) : "Cela résonne avec votre recherche de [titre poste]. Le défi est [pain point marché]."
+  → Lier hook + annonce + observation marché
+  
+- Phrase 4 (15-20 mots) : "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
 
-CAS C : IL N'Y A PAS D'ANNONCE (Approche Spontanée)
--> Utilise le Hook pour parler des enjeux du département du prospect.
--> Structure : "Votre intervention sur [Sujet Hook] soulève un point clé... Dans le pilotage de vos équipes..."
+EXEMPLE TYPE :
+"Bonjour Marie,
 
-TON OBLIGATOIRE :
-- Valorise la "Polarisation du marché" (Experts vs Business Partners).
-- Ne sois jamais critique.
+J'ai écouté votre intervention dans le podcast CFO 4.0 sur la digitalisation finance. Votre analyse sur la nécessité d'acculturer les équipes métiers était très juste.
 
-EXEMPLE TYPE (CAS A - FUSION) :
-"Bonjour [Prénom],
-(Saut de ligne)
-Votre intervention dans le podcast 'CFO 4.0' sur la digitalisation était passionnante. Ce sujet résonne particulièrement avec votre recherche actuelle de [Poste] chez [Entreprise].
-Trouver un profil capable de [Compétence] tout en [Autre Compétence] est un défi..."
+Cela résonne avec votre recherche de Directeur Contrôle de Gestion. Le défi n'est plus seulement de trouver des experts techniques, mais ces profils hybrides capables d'embarquer les opérationnels.
 
-Génère le Message 1 selon ces règles.
+Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
+
+Bien à vous,"
+
+═══════════════════════════════════════════════════════════════════
+CAS B : Annonce seule (PAS DE HOOK détecté)
+═══════════════════════════════════════════════════════════════════
+
+Structure OBLIGATOIRE :
+- Phrase 1 (15-20 mots) : "J'ai consulté votre recherche de [titre poste exact]."
+  OU "Je me permets de vous contacter concernant votre recherche de [titre]."
+  
+- Phrase 2-3 (40-50 mots) : Observation marché spécifique au métier
+  → Mentionner un pain point CONTEXTUEL (pas générique)
+  → Ex EPM : "profils qui parlent Tech ET Business sur Tagetik"
+  → Ex Consolidation : "profils sachant piloter clôture ET former les filiales"
+  
+- Phrase 4 (15-20 mots) : "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
+
+EXEMPLE TYPE :
+"Bonjour Clémentine,
+
+J'ai consulté votre recherche de Senior Functional Analyst pour votre EPM CoE chez Pernod Ricard.
+
+Sur ce type de poste, je constate que le défi n'est pas la maîtrise technique de Tagetik seule, mais la capacité à faire le pont entre les équipes IT et les utilisateurs finance tout en animant l'adoption des outils.
+
+Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
+
+Bien à vous,"
+
+═══════════════════════════════════════════════════════════════════
+CAS C : Hook seul (PAS D'ANNONCE - Approche spontanée)
+═══════════════════════════════════════════════════════════════════
+
+Structure OBLIGATOIRE :
+- Phrase 1 (15-20 mots) : Référence précise au hook
+- Phrase 2-3 (40-50 mots) : Lien avec enjeux département du prospect
+- Phrase 4 (15-20 mots) : Question ouverte sur les défis actuels
+
+EXEMPLE TYPE :
+"Bonjour Thomas,
+
+Votre post récent sur LinkedIn concernant la transformation de vos process de consolidation était très instructif.
+
+Dans le pilotage de vos équipes Finance, vous devez certainement constater cette tension entre expertise technique pointue (IFRS, consolidation) et vision business globale. Trouver des profils qui combinent les deux devient un véritable défi.
+
+Est-ce aujourd'hui une difficulté que vous rencontrez sur vos recrutements ou dans la structuration de vos équipes ?
+
+Bien à vous,"
+
+═══════════════════════════════════════════════════════════════════
+INTERDICTIONS ABSOLUES :
+═══════════════════════════════════════════════════════════════════
+- ❌ Jamais "Notre cabinet", "Nos services", "Notre expertise"
+- ❌ Jamais de superlatifs ("excellents", "meilleurs", "top")
+- ❌ Jamais de jargon cabinet ("chasse de têtes", "approche directe")
+- ❌ Jamais plus de 100 mots au total
+- ❌ Jamais de formules creuses ("soulève un point clé", "retenu mon attention")
+
+VALIDATION AVANT ENVOI :
+1. Compter les mots → Si > 100 mots : RECOMMENCER
+2. Vérifier référence explicite au hook (si CAS A) → Si manque : RECOMMENCER
+3. Vérifier question finale présente → Si manque : AJOUTER
+
+Génère le Message 1 selon ces règles STRICTES.
 """
+
 
     try:
         message = client.messages.create(
