@@ -114,19 +114,26 @@ def extract_hooks_with_claude(profile_data, posts_data, company_posts, company_p
     Extrait les Hooks avec SÉCURITÉ ANTI-HALLUCINATION
     
     Modifications :
-    - Validation stricte de la présence de contenu récent
+    - Validation de la présence de contenu
     - Instructions explicites INTERDISANT l'invention
-    - Retour "NOT_FOUND" si pas de contenu exploitable
+    - Retour "NOT_FOUND" uniquement si vraiment rien
     """
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    # SÉCURITÉ : Validation en amont
+    # SÉCURITÉ : Validation en amont ASSOUPLIE
     has_recent_posts = posts_data and len(posts_data) > 0
     has_web_content = web_results and len(web_results) > 0
     
+    # On continue même s'il y a peu de contenu - Claude décidera
     if not has_recent_posts and not has_web_content:
-        print("   ⚠️  Aucun contenu récent détecté - Pas de hook")
+        print("   ⚠️  Aucun contenu détecté - Pas de hook")
         return "NOT_FOUND"
+    
+    # Log pour debug
+    if has_recent_posts:
+        print(f"   📝 {len(posts_data)} posts LinkedIn trouvés")
+    if has_web_content:
+        print(f"   🌐 {len(web_results)} résultats web trouvés")
     
     data_summary = {
         "profile": {
@@ -142,65 +149,58 @@ def extract_hooks_with_claude(profile_data, posts_data, company_posts, company_p
 OBJECTIF : Trouver un "Hook" (Point d'accroche) pour contacter ce prospect.
 
 ═══════════════════════════════════════════════════════════════════
-⚠️  RÈGLES DE SÉCURITÉ ABSOLUES (NON NÉGOCIABLES) ⚠️
+⚠️  RÈGLES DE SÉCURITÉ (NON NÉGOCIABLES) ⚠️
 ═══════════════════════════════════════════════════════════════════
 
-1. INTERDICTION TOTALE D'INVENTER DU CONTENU
-   - Si les données ne contiennent AUCUN contenu récent (moins de 4 mois), 
-     tu DOIS répondre EXACTEMENT : "NOT_FOUND"
+1. INTERDICTION D'INVENTER DU CONTENU
+   - Si les données ne contiennent AUCUN élément exploitable, réponds "NOT_FOUND"
+   - Tu ne peux mentionner QUE des éléments EXPLICITEMENT présents dans les données
    
-2. VALIDATION STRICTE
-   - Tu ne peux mentionner que des éléments EXPLICITEMENT présents dans les données
-   - Si tu n'es pas sûr à 100% qu'un élément existe, réponds "NOT_FOUND"
-   
-3. VÉRIFICATION DE RÉCENCE
-   - Les hooks doivent avoir moins de 4 mois
-   - Si aucune date récente n'est disponible, réponds "NOT_FOUND"
+2. EXEMPLES D'INVENTIONS INTERDITES :
+   ❌ "Participation au Programme EVE" (si pas dans les données)
+   ❌ Déduire du contenu à partir du prénom/genre
+   ❌ Inventer des événements ou participations
 
-4. PAS D'EXTRAPOLATION
-   - Ne pas déduire de contenu à partir du prénom/genre
-   - Ne pas inventer de participation à des programmes/événements
-   - Ne pas supposer de l'activité en l'absence de données
-
-EXEMPLES D'INVENTIONS INTERDITES :
-❌ "Participation au Programme EVE" (si pas dans les données)
-❌ "Intervention dans le podcast X" (si pas de mention explicite)
-❌ "Leadership féminin" (si juste déduit du prénom)
+3. MAIS : Si tu trouves un vrai post, commentaire ou activité LinkedIn, 
+   tu DOIS le signaler comme hook valide !
 
 ═══════════════════════════════════════════════════════════════════
 
 HIÉRARCHIE DES HOOKS (DU MEILLEUR AU MOINS BON) :
 1. **Contenu Intellectuel** : Article écrit, podcast, livre, conférence
-2. **Engagement LinkedIn** : Post original ou commentaire récent
-3. **News Entreprise** : Levée de fonds, rachat, lancement produit
+2. **Post LinkedIn original** : Le prospect a publié un post
+3. **Commentaire LinkedIn** : Le prospect a commenté un post
+4. **Activité LinkedIn** : Like, partage d'un post pertinent
+5. **News Entreprise** : Levée de fonds, rachat, lancement produit
 
 DONNÉES FOURNIES :
 {json.dumps(data_summary, indent=2, ensure_ascii=False)}
 
 CONSIGNE DE SORTIE :
 
-Si tu trouves un hook VALIDE et RÉCENT (moins de 4 mois) :
+Si tu trouves un hook VALIDE (même un simple commentaire LinkedIn récent) :
 Réponds en JSON :
 {{
   "hook_principal": {{
-    "description": "Description PRÉCISE avec nom exact du contenu",
-    "citation": "Citation textuelle d'une phrase clé (si applicable)",
+    "description": "Description PRÉCISE (ex: 'Commentaire sur le post de X concernant Y')",
+    "citation": "Citation textuelle si disponible",
     "type_action": "CONTENT_CREATOR" | "LINKEDIN_ACTIVE" | "COMPANY_NEWS",
-    "pertinence": 5
+    "date": "Date approximative si disponible",
+    "pertinence": 3 à 5
    }}
 }}
 
-Si AUCUN hook valide n'est trouvé :
+Si AUCUN contenu exploitable :
 Réponds EXACTEMENT : "NOT_FOUND"
 
-RAPPEL FINAL : En cas de doute, réponds "NOT_FOUND". Il vaut mieux ne pas avoir de hook 
-que d'en inventer un faux qui détruit la crédibilité."""
+IMPORTANT : Un simple commentaire récent sur LinkedIn EST un hook valide - ne sois pas trop strict !
+"""
 
     try:
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1000,
-            temperature=0.1,  # Baissé de 0.2 à 0.1 pour plus de déterminisme
+            temperature=0.3,  # Monté de 0.1 à 0.3 pour meilleure détection hooks
             messages=[{"role": "user", "content": prompt}]
         )
         response_text = message.content[0].text.strip().replace('```json', '').replace('```', '').strip()

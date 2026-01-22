@@ -480,33 +480,47 @@ STRUCTURE STRICTE :
 
 4. Observation marché ULTRA-SPÉCIFIQUE au poste (30-40 mots)
    → IMPÉRATIF : L'observation doit mentionner les COMPÉTENCES DÉTECTÉES !
+   → CRITIQUE : Si le Message 1 a déjà utilisé une formulation, VARIER l'angle !
    
    MÉTHODE POUR CONSTRUIRE L'OBSERVATION :
    a) Identifier les 2-3 compétences RARES du poste (pas juste "comptabilité" ou "finance")
    b) Formuler le pain point autour de ces compétences rares
    c) Contextualiser (secteur, environnement, type d'entreprise si pertinent)
+   d) VARIER l'angle par rapport au Message 1 (autre aspect du même pain point)
    
-   EXEMPLES DE BONNES OBSERVATIONS CONTEXTUELLES :
+   EXEMPLES DE BONNES OBSERVATIONS CONTEXTUELLES (VARIÉES) :
    
    Pour EPM/Tagetik :
-   "Sur ce type de poste EPM en environnement international, je constate que le défi n'est pas 
-   la maîtrise technique de Tagetik seule, mais la capacité à piloter l'adoption de l'outil 
-   auprès des affiliates globales tout en animant le change management."
+   Version A (Message 1) : "le défi n'est pas la maîtrise technique de Tagetik seule, 
+   mais la capacité à faire le pont entre les équipes IT et les utilisateurs finance 
+   tout en animant l'adoption des outils"
+   
+   Version B (Message 2) : "le défi principal sur ce type de poste EPM en environnement 
+   international réside dans la capacité à piloter des projets complexes (intégration SAP, 
+   Data Governance) tout en garantissant une adoption effective par les filiales internationales"
    
    Pour Consolidation IFRS :
-   "Sur ce type de poste consolidation, je constate que le marché combine rarement expertise 
-   normative IFRS poussée et capacité pédagogique pour faire monter le niveau des filiales 
-   internationales."
+   Version A : "le marché combine rarement expertise normative IFRS poussée et capacité 
+   pédagogique pour faire monter le niveau des filiales"
+   
+   Version B : "trouver des profils qui allient maîtrise des normes IFRS et expérience 
+   terrain de montée en compétence des équipes locales devient complexe"
    
    Pour Comptabilité bancaire :
-   "Sur ce type de poste en banque tech, je constate que le défi n'est pas la comptabilité 
-   bancaire seule, mais la capacité à automatiser les process tout en participant activement 
-   aux projets transverses (nouveaux produits, évolutions réglementaires)."
+   Version A : "le défi va au-delà de la comptabilité bancaire pure : automatiser 
+   les process tout en participant aux projets transverses"
+   
+   Version B : "la rareté porte sur des profils qui combinent rigueur comptable bancaire 
+   (clôtures réglementaires, normes) et agilité projet pour accompagner les lancements produits"
    
    Pour Comptabilité audiovisuelle :
-   "Sur ce type de poste en production audiovisuelle, je constate que le défi va au-delà 
-   de la comptabilité générale : il faut maîtriser les spécificités sectorielles (droits 
-   d'auteurs, convention collective production) tout en gérant plusieurs productions simultanées."
+   Version A : "le défi n'est pas la comptabilité générale seule, mais la maîtrise 
+   des spécificités sectorielles (droits d'auteurs, convention collective) tout en 
+   gérant plusieurs productions simultanées"
+   
+   Version B : "trouver des profils qui maîtrisent les subtilités de la comptabilité 
+   audiovisuelle (notes de frais équipes, droits auteurs) tout en s'adaptant aux 
+   rythmes projets devient rare"
 
 5. Proposition ULTRA-SPÉCIFIQUE (40-50 mots)
    "J'ai identifié 2 profils qui pourraient retenir votre attention :"
@@ -520,7 +534,7 @@ STRUCTURE STRICTE :
    "- L'un combine expertise Tagetik (consolidation & reporting) et expérience en project management, 
      ayant piloté l'intégration EPM/ERP en environnement international.
    - L'autre vient du conseil EPM, avec une forte capacité d'animation du change management 
-     auprès d'affiliates globales (formations, stakeholder engagement)."
+     auprès de filiales internationales (formations, stakeholder engagement)."
    
    Pour Consolidation :
    "- L'un est expert IFRS (10+ ans) avec expérience de montée en compétence des filiales.
