@@ -61,9 +61,9 @@ def scrape_linkedin_profile(apify_client, linkedin_url):
         
         # Lancer l'actor Apify pour scraper le profil
         # Utilise dev_fusion/Linkedin-Profile-Scraper (No Cookies)
+        # Cet actor attend "profileUrls" (array of strings)
         run_input = {
-            "startUrls": [linkedin_url],
-            "proxyConfiguration": {"useApifyProxy": True}
+            "profileUrls": [linkedin_url]
         }
         
         run = apify_client.actor("dev_fusion/Linkedin-Profile-Scraper").call(run_input=run_input)
@@ -92,10 +92,12 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
         log_event('scrape_linkedin_posts_start', {'url': linkedin_url})
         
         # Utilise supreme_coder/linkedin-post
+        # Format exact requis par l'actor
         run_input = {
-            "startUrls": [linkedin_url],
-            "resultsLimit": 10,
-            "proxyConfiguration": {"useApifyProxy": True}
+            "deepScrape": True,
+            "limitPerSource": 10,
+            "rawData": False,
+            "urls": [linkedin_url]
         }
         
         run = apify_client.actor("supreme_coder/linkedin-post").call(run_input=run_input)
