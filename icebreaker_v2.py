@@ -1,11 +1,10 @@
 """
 ═══════════════════════════════════════════════════════════════════
-ICEBREAKER GENERATOR V3.2 - SYSTÈME DE PRIORITÉ ÉVÉNEMENTS MAJEURS
-Modifications V3.2 :
-- Bonus massifs pour événements majeurs (podcast +3.0, article +2.5, etc.)
-- Extraction améliorée avec citations exactes
-- Parsing JSON robuste
-- Suppression [Votre signature]
+ICEBREAKER GENERATOR V3.1 - FIX EXTRACTION HOOKS SPÉCIFIQUES
+Modifications V3.1 :
+- Prompt extraction : INTERDIT les généralisations, force les citations exactes
+- Keywords enrichis : adoption IA, acculturation, Data & AI Day, podcasts
+- Parsing JSON avec regex (fix backticks Markdown)
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -59,11 +58,16 @@ def scrape_linkedin_profile(apify_client, linkedin_url):
     try:
         log_event('scrape_linkedin_profile_start', {'url': linkedin_url})
         
+        # Lancer l'actor Apify pour scraper le profil
+        # Utilise dev_fusion/Linkedin-Profile-Scraper (No Cookies)
+        # Cet actor attend "profileUrls" (array of strings)
         run_input = {
             "profileUrls": [linkedin_url]
         }
         
         run = apify_client.actor("dev_fusion/Linkedin-Profile-Scraper").call(run_input=run_input)
+        
+        # Récupérer les résultats
         items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
         
         if items:
@@ -86,9 +90,11 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
     try:
         log_event('scrape_linkedin_posts_start', {'url': linkedin_url})
         
+        # Utilise supreme_coder/linkedin-post
+        # Format exact requis par l'actor
         run_input = {
             "deepScrape": True,
-            "limitPerSource": 5,  # ✅ 5 posts comme demandé
+            "limitPerSource": 5,
             "rawData": False,
             "urls": [linkedin_url]
         }
@@ -119,6 +125,7 @@ def extract_hooks_with_claude(profile_data, posts_data, web_results, company_dat
         
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         
+        # Préparer le contexte pour Claude
         context = f"""
 PROFIL : {full_name} - {company_name}
 
@@ -155,7 +162,6 @@ Un bon hook est :
 4. ✅ Si un post mentionne un événement → cite le NOM de l'événement
 5. ✅ Si un post mentionne un projet → cite le NOM du projet
 6. ✅ Si un post mentionne une certification → cite la certification EXACTE
-7. ✅ Si un post mentionne un podcast → cite le NOM du podcast ET l'invité
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -171,14 +177,20 @@ EXEMPLES DE BONS VS MAUVAIS HOOKS :
 "Votre réflexion sur l'IA en banque"
 
 ✅ BON (citation exacte) :
-"Votre participation au podcast Inside Banking avec Richard Michaud sur l'adoption de l'IA"
+"Votre post récent : 'Le vrai défi de l'IA, c'est l'adoption : créer de la valeur en répondant à des besoins du terrain'"
+
+❌ MAUVAIS (paraphrase floue) :
+"Votre action pour promouvoir l'IA"
+
+✅ BON (événement précis) :
+"Votre organisation du premier Data & AI Day chez LCL avec plus de 130 collaborateurs"
 
 ═══════════════════════════════════════════════════════════════════
 
 Format de retour (JSON uniquement, sans texte avant/après) :
 [
-  {{"text": "Votre participation au podcast Inside Banking avec Richard Michaud sur l'adoption de l'IA", "type": "post", "date": "2025-01"}},
-  {{"text": "Votre organisation du premier Data & AI Day chez LCL avec plus de 130 collaborateurs", "type": "post", "date": "2024-11"}}
+  {{"text": "Votre post récent sur le Data & AI Day chez LCL avec Future4care - une initiative concrète pour montrer l'impact de l'IA", "type": "post", "date": "2024-11"}},
+  {{"text": "Votre citation dans le podcast Inside Banking : 'créer de la valeur en répondant aux besoins du terrain'", "type": "post", "date": "2025-01"}}
 ]
 
 Si aucun hook pertinent n'est trouvé, retourne : []
@@ -194,14 +206,16 @@ Si aucun hook pertinent n'est trouvé, retourne : []
         
         result = message.content[0].text.strip()
         
-        # ✅ Parser le JSON en gérant les backticks Markdown
+        # ✅ CORRECTION : Parser le JSON en gérant les backticks Markdown
         import json
         
+        # Essayer d'extraire le JSON depuis les backticks Markdown
         json_match = re.search(r'```json\s*(\[.*?\])\s*```', result, re.DOTALL)
         
         if json_match:
             json_str = json_match.group(1)
         else:
+            # Si pas de backticks, chercher directement le tableau JSON
             json_array_match = re.search(r'(\[.*?\])', result, re.DOTALL)
             if json_array_match:
                 json_str = json_array_match.group(1)
@@ -211,6 +225,7 @@ Si aucun hook pertinent n'est trouvé, retourne : []
         try:
             hooks = json.loads(json_str)
             
+            # Valider que c'est bien une liste
             if not isinstance(hooks, list):
                 log_event('extract_hooks_invalid_format', {'type': type(hooks).__name__})
                 return []
@@ -237,15 +252,16 @@ def format_posts_for_extraction(posts_data):
         return "Aucun post disponible"
     
     formatted = []
-    for i, post in enumerate(posts_data[:5]):
+    for i, post in enumerate(posts_data[:5]):  # ✅ CHANGÉ : Prendre les 5 posts (pas juste 5)
         text = post.get('text', '')
         date = post.get('date', 'N/A')
         title = post.get('title', '')
         
+        # ✅ AMÉLIORATION : Inclure plus de contexte
         post_content = f"Post {i+1} ({date})"
         if title:
             post_content += f"\nTitre: {title}"
-        post_content += f"\nContenu: {text[:500]}"
+        post_content += f"\nContenu: {text[:500]}"  # ✅ CHANGÉ : 500 chars au lieu de 300
         
         formatted.append(post_content)
     
@@ -287,6 +303,7 @@ def extract_hooks_from_linkedin(hooks_data):
     
     hooks_list = []
     
+    # Cas 1 : hooks_data est déjà une liste de posts
     if isinstance(hooks_data, list):
         for idx, post in enumerate(hooks_data):
             if isinstance(post, dict) and post.get('text'):
@@ -298,6 +315,7 @@ def extract_hooks_from_linkedin(hooks_data):
                     'date': post.get('date', '')
                 })
     
+    # Cas 2 : hooks_data est un dict avec une clé 'posts' ou 'content'
     elif isinstance(hooks_data, dict):
         posts = hooks_data.get('posts', hooks_data.get('content', []))
         if isinstance(posts, list):
@@ -311,6 +329,7 @@ def extract_hooks_from_linkedin(hooks_data):
                         'date': post.get('date', '')
                     })
     
+    # Cas 3 : hooks_data est un string (ancien format)
     elif isinstance(hooks_data, str) and len(hooks_data) > 50:
         hooks_list.append({
             'text': hooks_data.strip(),
@@ -320,6 +339,7 @@ def extract_hooks_from_linkedin(hooks_data):
             'date': ''
         })
     
+    # Filtrer les hooks trop courts (< 30 caractères)
     valid_hooks = [h for h in hooks_list if len(h['text']) >= 30]
     
     log_event('hooks_extracted', {
@@ -333,13 +353,17 @@ def extract_hooks_from_linkedin(hooks_data):
 def score_hook_relevance(hook, job_posting_data):
     """
     Score un hook de 1 à 5 selon sa pertinence avec le poste
-    VERSION V3.2 : SYSTÈME DE PRIORITÉ ÉVÉNEMENTS MAJEURS
+    VERSION AMÉLIORÉE : Keywords enrichis pour IA, Data, Adoption
     
-    SCORING DE BASE : 1-5 points (technical + context + sector)
-    BONUS ÉVÉNEMENTS MAJEURS : +0.3 à +3.0 points
+    SCORING :
+    5 = Mentionne compétences clés + secteur + contexte technique
+    4 = Mentionne compétences clés + contexte professionnel
+    3 = Mentionne le secteur ou des compétences générales
+    2 = Lien faible mais professionnel
+    1 = Générique ou peu pertinent
     """
     if not job_posting_data:
-        return 2, []
+        return 2  # Score par défaut si pas de fiche
     
     hook_text = hook['text'].lower()
     hook_title = hook.get('title', '').lower()
@@ -353,26 +377,37 @@ def score_hook_relevance(hook, job_posting_data):
     matching_keywords = []
     
     # ========================================
-    # NIVEAU 1 : COMPÉTENCES TECHNIQUES (+3 points)
+    # NIVEAU 1 : COMPÉTENCES TECHNIQUES PRÉCISES (+3 points)
     # ========================================
     technical_keywords = [
+        # Outils EPM/Planning
         'tagetik', 'epm', 'anaplan', 'hyperion', 'oracle planning', 'sap bpc', 'onestream',
+        # ERP
         'sap', 's/4hana', 's4hana', 'oracle', 'sage', 'sage x3', 'dynamics',
+        # Consolidation/Normes
         'ifrs', 'consolidation', 'statutory reporting', 'gaap', 'sox',
+        # BI/Data
         'power bi', 'powerbi', 'tableau', 'qlik', 'data science', 'python', 'sql', 'r',
+        # Méthodologies
         'agile', 'scrum', 'kanban', 'safe', 'prince2', 'pmp',
+        # ✅ IA/Automation (ENRICHI - V3.1)
         'ia', 'ai', 'intelligence artificielle', 'machine learning', 'copilot', 'chatgpt',
         'adoption ia', 'acculturation ia', 'acculturation', 'adoption',
         'data & ai day', 'ai day', 'centre d\'excellence', 'centre excellence',
+        'podcast', 'inside banking', 'future4care',
+        'idéation', 'atelier', 'workshop', 'poc', 'proof of concept',
+        # Finance spécialisée
         'trésorerie', 'cash management', 'fiscalité', 'tax', 'fp&a', 'fpa',
-        'bancaire', 'bank', 'banque', 'fintech', 'audiovisuel', 'cinéma', 'production'
+        # Sectoriels spécifiques
+        'bancaire', 'bank', 'banque', 'fintech', 'audiovisuel', 'cinéma', 'production',
+        'droits d\'auteur', 'convention collective'
     ]
     
     for kw in technical_keywords:
         if kw in job_full and kw in combined_text:
             score += 3
             matching_keywords.append(kw)
-            break
+            break  # Un seul match technique suffit
     
     # ========================================
     # NIVEAU 2 : CONTEXTE PROFESSIONNEL (+2 points)
@@ -383,7 +418,9 @@ def score_hook_relevance(hook, job_posting_data):
         'adoption', 'formation', 'training', 'accompagnement',
         'gouvernance', 'data governance', 'process', 'efficiency',
         'reporting', 'forecast', 'budget', 'clôture',
-        'valeur terrain', 'besoins clients', 'conseil personnalisé'
+        # ✅ AJOUTÉ V3.1
+        'valeur terrain', 'besoins clients', 'conseil personnalisé',
+        'équipes métiers', 'collaboration'
     ]
     
     context_matches = sum(1 for kw in context_keywords if kw in job_full and kw in combined_text)
@@ -397,7 +434,7 @@ def score_hook_relevance(hook, job_posting_data):
     sector_keywords = [
         'finance', 'financial', 'comptabilité', 'accounting',
         'contrôle de gestion', 'fpa', 'audit', 'consolidation',
-        'data', 'données', 'analytics'
+        'data', 'données', 'analytics'  # ✅ AJOUTÉ V3.1
     ]
     
     if any(kw in job_full and kw in combined_text for kw in sector_keywords):
@@ -405,69 +442,22 @@ def score_hook_relevance(hook, job_posting_data):
         matching_keywords.append("sector match")
     
     # ========================================
-    # ✅ BONUS ÉVÉNEMENTS MAJEURS (V3.2)
-    # ========================================
-    
-    # 1. BONUS PODCAST/INTERVIEW (+3.0) - PRIORITÉ ABSOLUE
-    podcast_keywords = ['podcast', 'inside banking', 'interview', 'échange avec', 'j\'ai eu le plaisir']
-    if any(kw in combined_text for kw in podcast_keywords):
-        score += 3.0
-        matching_keywords.append("podcast_bonus_+3.0")
-    
-    # 2. BONUS ARTICLE PUBLIÉ (+2.5)
-    article_keywords = ['article', 'publié dans', 'tribune', 'j\'ai écrit', 'publication']
-    if any(kw in combined_text for kw in article_keywords):
-        score += 2.5
-        matching_keywords.append("article_bonus_+2.5")
-    
-    # 3. BONUS AWARD/RÉCOMPENSE (+2.5)
-    award_keywords = ['award', 'prix', 'récompense', 'distinction', 'lauréat', 'trophée']
-    if any(kw in combined_text for kw in award_keywords):
-        score += 2.5
-        matching_keywords.append("award_bonus_+2.5")
-    
-    # 4. BONUS CERTIFICATION (+2.0)
-    cert_keywords = ['certifié', 'certification', 'safe', 'pmp', 'aws', 'diplôme', 'formation certifiante']
-    if any(kw in combined_text for kw in cert_keywords):
-        score += 2.0
-        matching_keywords.append("certification_bonus_+2.0")
-    
-    # 5. BONUS ÉVÉNEMENT/CONFÉRENCE (+2.0)
-    event_keywords = ['conférence', 'webinar', 'speaker', 'intervenant', 'table ronde', 'vivatech', 'salon']
-    if any(kw in combined_text for kw in event_keywords):
-        score += 2.0
-        matching_keywords.append("event_bonus_+2.0")
-    
-    # 6. BONUS LANCEMENT PROJET (+2.0)
-    launch_keywords = ['lancement', 'lancer', 'accélère', 'démarrage', 'inauguration']
-    if any(kw in combined_text for kw in launch_keywords):
-        score += 2.0
-        matching_keywords.append("launch_bonus_+2.0")
-    
-    # 7. BONUS RÉCENCE (+0.5)
-    hook_date = hook.get('date', '')
-    if 'j' in hook_date or 'day' in hook_date.lower() or '1 semaine' in hook_date.lower():
-        score += 0.5
-        matching_keywords.append("recent_bonus_+0.5")
-    
-    # 8. BONUS VISION/RÉFLEXION (+0.3)
-    vision_keywords = ['vrai défi', 'défi', 'clé', 'essentiel', 'permet de', 'conviction']
-    if any(kw in combined_text for kw in vision_keywords):
-        score += 0.3
-        matching_keywords.append("vision_bonus_+0.3")
-    
-    # ========================================
     # PÉNALITÉS
     # ========================================
-    generic_phrases = ['heureux de', 'ravi de', 'fier de', 'merci', 'bravo', 'félicitations']
+    
+    # Pénalité si le hook est trop générique
+    generic_phrases = [
+        'heureux de', 'ravi de', 'fier de', 'merci', 'bravo',
+        'félicitations', 'congratulations', 'honneur'
+    ]
     if any(phrase in combined_text for phrase in generic_phrases) and score < 3:
         score -= 1
         matching_keywords.append("generic_penalty")
     
     # ========================================
-    # CALCUL FINAL
+    # CALCUL FINAL (1-5)
     # ========================================
-    final_score = max(1, min(10, score))  # Score max = 10 maintenant (avec bonus)
+    final_score = max(1, min(5, score))
     
     log_event('hook_scored', {
         'hook_index': hook.get('index'),
@@ -498,6 +488,7 @@ def select_best_hook(hooks_list, job_posting_data):
             'keywords': keywords
         })
     
+    # Trier par score décroissant
     scored_hooks.sort(key=lambda x: x['score'], reverse=True)
     
     best = scored_hooks[0]
@@ -509,6 +500,7 @@ def select_best_hook(hooks_list, job_posting_data):
         'all_scores': [h['score'] for h in scored_hooks]
     })
     
+    # Log si on a plusieurs hooks avec le même score
     if len(scored_hooks) > 1 and scored_hooks[1]['score'] == best['score']:
         log_event('multiple_hooks_same_score', {
             'count': sum(1 for h in scored_hooks if h['score'] == best['score'])
@@ -533,12 +525,17 @@ def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
     
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
+    # Extraction du prénom
     first_name = get_safe_firstname(prospect_data)
+    
+    # Contexte du poste
     context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
     
+    # Extraction et sélection du meilleur hook
     hooks_list = extract_hooks_from_linkedin(hooks_data)
     best_hook, hook_score, hook_keywords = select_best_hook(hooks_list, job_posting_data)
     
+    # Déterminer le type de message selon la qualité du hook
     if best_hook and hook_score >= 3:
         message_type = "CAS A (Hook LinkedIn + Annonce)"
         hook_text = best_hook['text']
@@ -558,6 +555,7 @@ def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
         'hook_keywords': hook_keywords
     })
     
+    # Construction du prompt selon le cas
     if message_type == "CAS A (Hook LinkedIn + Annonce)":
         prompt = build_prompt_case_a(first_name, context_name, hook_text, hook_title, 
                                      job_posting_data, hook_keywords)
@@ -567,6 +565,7 @@ def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
     else:
         prompt = build_prompt_case_c(first_name, context_name, job_posting_data)
     
+    # Génération via Claude API
     try:
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -648,9 +647,17 @@ Pour EPM/Tagetik :
 ❌ "Le défi est la maîtrise de Tagetik"
 ✅ "Le défi n'est plus seulement la maîtrise de Tagetik, mais cette capacité à faire le pont entre IT et finance tout en pilotant l'adoption utilisateurs."
 
+Pour Consolidation IFRS :
+❌ "Le défi est de trouver des profils IFRS"
+✅ "Au-delà de l'expertise IFRS, le défi est de trouver des profils capables de faire monter le niveau des équipes locales tout en respectant les délais groupe."
+
 Pour Data/IA Officer :
 ❌ "Le défi est de maîtriser les technologies"
 ✅ "Le défi n'est plus seulement de maîtriser les technologies, mais de trouver ces profils capables d'accompagner les métiers dans l'idéation et l'acculturation IA."
+
+Pour Comptabilité bancaire :
+❌ "Le défi est la comptabilité bancaire"
+✅ "En banque tech, le défi va au-delà de la comptabilité bancaire pure : il faut automatiser les process tout en participant aux projets transverses nouveaux produits."
 
 INTERDICTIONS :
 - ❌ Jamais citer verbatim plus de 5 mots du hook
@@ -686,8 +693,15 @@ Le hook est peu pertinent, donc structure le message ainsi :
 1. "Bonjour {first_name},"
 2. SAUT DE LIGNE
 3. Référence BRÈVE au hook (10-15 mots max)
+   → Juste pour montrer que tu as regardé le profil
+   → Pas de développement
+
 4. Pivot RAPIDE vers le poste (30-35 mots)
+   → "J'ai vu votre recherche de {context_name}."
+   → Identifie le pain point SPÉCIFIQUE du poste
+
 5. Question ouverte (15-20 mots)
+
 6. "Bien à vous,"
 
 Total : 70-90 mots
@@ -717,8 +731,14 @@ Structure le message ainsi :
 1. "Bonjour {first_name},"
 2. SAUT DE LIGNE
 3. Introduction directe (15-20 mots)
+   → "J'ai consulté votre annonce pour le poste de {context_name}."
+
 4. Pain point précis du poste (35-40 mots)
+   → Identifie LE défi spécifique du recrutement
+   → Utilise les compétences rares de la fiche
+
 5. Question ouverte (15-20 mots)
+
 6. "Bien à vous,"
 
 Total : 70-90 mots
@@ -742,12 +762,15 @@ def get_safe_firstname(prospect_data):
 
 def get_smart_context(job_posting_data, prospect_data):
     """Définit le sujet de la discussion."""
+    # Cas 1 : Il y a une annonce
     if job_posting_data and job_posting_data.get('title') and len(str(job_posting_data.get('title'))) > 2:
         title = str(job_posting_data.get('title'))
+        # Nettoyage
         title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', title, flags=re.IGNORECASE)
         title = re.sub(r'\s*[-|]\s*.*$', '', title)
         return title.strip().title(), True
 
+    # Cas 2 : Pas d'annonce
     headline = str(prospect_data.get('headline', '')).lower()
     
     if 'financ' in headline or 'daf' in headline or 'cfo' in headline:
@@ -761,10 +784,7 @@ def get_smart_context(job_posting_data, prospect_data):
 
 
 def generate_fallback_icebreaker(first_name, context_name, is_hiring):
-    """
-    Génère un icebreaker de secours
-    ✅ V3.2 : Suppression [Votre signature]
-    """
+    """Génère un icebreaker de secours"""
     if is_hiring:
         return f"""Bonjour {first_name},
 
