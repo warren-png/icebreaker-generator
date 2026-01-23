@@ -1,13 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V25 (CORRECTIONS MAJEURES)
-Modifications V25 :
-- Matching FLEXIBLE des keywords (insensible casse/espaces/tirets)
-- Keywords enrichis (Agile, IA, Data Science, cas d'usage, etc.)
-- Extraction de secours si aucune compétence détectée
-- Pain points SPÉCIFIQUES obligatoires (avec compétences rares)
-- Profils Message 2 OBLIGENT les compétences techniques précises
-- Interdiction absolue de profils vagues
+MESSAGE SEQUENCE GENERATOR - V26 (FORCE 2 PROFILS SYSTÉMATIQUES)
+Modifications V26 :
+- Message 2 : TOUJOURS proposer 2 profils (règle absolue dans prompt)
+- Vérification post-génération pour garantir présence des 2 profils
+- Fonction fallback intelligente qui génère 2 profils crédibles par métier
+- Extraction automatique des compétences pour profils génériques
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -285,6 +283,152 @@ def get_smart_context(job_posting_data, prospect_data):
 
 
 # ========================================
+# NOUVELLE FONCTION : EXTRACTION COMPÉTENCES POUR FALLBACK
+# ========================================
+
+def extract_key_skills_for_profiles(job_posting_data, job_category):
+    """
+    Extrait les compétences clés de la fiche de poste pour générer
+    des profils génériques crédibles en cas de fallback
+    Retourne un dict avec compétences adaptées au métier
+    """
+    skills = {
+        'tool_1': 'un outil métier',
+        'tool_2': 'Excel avancé',
+        'technical_1': 'expertise technique',
+        'technical_2': 'maîtrise opérationnelle',
+        'soft': 'conduite du changement',
+        'sector': 'le secteur',
+        'context_1': 'grand groupe',
+        'context_2': 'environnement international'
+    }
+    
+    if not job_posting_data:
+        return skills
+    
+    job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+    
+    # Outils spécifiques
+    if flexible_match('tagetik', job_text):
+        skills['tool_1'] = 'Tagetik'
+    elif flexible_match('anaplan', job_text):
+        skills['tool_1'] = 'Anaplan'
+    elif flexible_match('hyperion', job_text):
+        skills['tool_1'] = 'Hyperion'
+    elif flexible_match('sap', job_text):
+        skills['tool_1'] = 'SAP'
+    elif flexible_match('sage', job_text):
+        skills['tool_1'] = 'Sage'
+    elif flexible_match('power bi', job_text):
+        skills['tool_1'] = 'Power BI'
+    
+    if flexible_match('python', job_text):
+        skills['tool_2'] = 'Python'
+    elif flexible_match('sql', job_text):
+        skills['tool_2'] = 'SQL'
+    elif flexible_match('vba', job_text):
+        skills['tool_2'] = 'VBA'
+    elif flexible_match('power query', job_text):
+        skills['tool_2'] = 'Power Query'
+    
+    # Compétences techniques par métier
+    if job_category == 'data_ia':
+        skills['technical_1'] = 'Data Science (Python, SQL, Machine Learning)'
+        skills['technical_2'] = 'acculturation IA et animation de centres d\'excellence'
+    elif job_category == 'epm':
+        skills['technical_1'] = f'{skills["tool_1"]} (consolidation, reporting)'
+        skills['technical_2'] = 'pilotage de projets EPM et adoption utilisateurs'
+    elif job_category == 'comptabilite':
+        skills['technical_1'] = 'comptabilité générale et clôtures'
+        skills['technical_2'] = 'autonomie sur le cycle comptable complet'
+    elif job_category == 'audit':
+        skills['technical_1'] = 'audit interne et contrôles SOX'
+        skills['technical_2'] = 'dialogue avec la Direction Générale'
+    elif job_category == 'consolidation':
+        skills['technical_1'] = 'consolidation IFRS'
+        skills['technical_2'] = 'montée en compétence des filiales'
+    elif job_category == 'controle_gestion':
+        skills['technical_1'] = 'contrôle de gestion et FP&A'
+        skills['technical_2'] = 'business partnering opérationnel'
+    elif job_category == 'fpna':
+        skills['technical_1'] = 'FP&A (budget, forecast, variance analysis)'
+        skills['technical_2'] = 'modélisation financière avancée'
+    
+    # Secteur
+    if 'banc' in job_text or 'bank' in job_text:
+        skills['sector'] = 'le secteur bancaire'
+        skills['context_1'] = 'banque d\'investissement'
+        skills['context_2'] = 'corporate banking'
+    elif 'fintech' in job_text:
+        skills['sector'] = 'la fintech'
+        skills['context_1'] = 'startup fintech'
+        skills['context_2'] = 'scale-up tech'
+    elif 'audiovisuel' in job_text or 'cinéma' in job_text:
+        skills['sector'] = 'l\'audiovisuel'
+        skills['context_1'] = 'production cinématographique'
+        skills['context_2'] = 'groupe média'
+    elif 'industrie' in job_text or 'industrial' in job_text:
+        skills['sector'] = 'l\'industrie'
+        skills['context_1'] = 'grand groupe industriel'
+        skills['context_2'] = 'environnement manufacturier'
+    
+    return skills
+
+
+# ========================================
+# NOUVELLE FONCTION : FALLBACK MESSAGE 2 AVEC 2 PROFILS
+# ========================================
+
+def generate_message_2_fallback(first_name, context_name, is_hiring, job_posting_data, job_category, prospect_data):
+    """
+    Génère un Message 2 de secours avec 2 profils génériques mais crédibles
+    Utilisé si Claude ne génère pas 2 profils dans sa réponse principale
+    """
+    log_event('message_2_fallback_triggered', {
+        'prospect': prospect_data.get('_id', 'unknown'),
+        'job_category': job_category,
+        'reason': 'Profils manquants dans génération principale'
+    })
+    
+    # Extraire compétences clés
+    skills = extract_key_skills_for_profiles(job_posting_data, job_category)
+    
+    if is_hiring:
+        intro = f"Je me permets de vous relancer concernant votre recherche de {context_name}."
+    else:
+        intro = f"Je reviens vers vous concernant la structuration de {context_name}."
+    
+    # Pain point adapté au métier
+    pain_point = f"Le défi principal sur ce type de poste réside dans la capacité à allier {skills['technical_1']} et {skills['soft']}."
+    
+    # Génération des 2 profils
+    profile_1 = f"- L'un possède une expertise {skills['technical_1']} avec 6+ ans en {skills['sector']}, ayant piloté des projets de transformation dans des contextes internationaux."
+    profile_2 = f"- L'autre combine maîtrise de {skills['tool_1']} et {skills['technical_2']}, issu d'un {skills['context_1']} avec forte autonomie opérationnelle."
+    
+    message = f"""Bonjour {first_name},
+
+{intro}
+
+{pain_point}
+
+J'ai identifié 2 profils qui pourraient retenir votre attention :
+{profile_1}
+{profile_2}
+
+Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait de juger leur pertinence en 30 secondes.
+
+Bien à vous,"""
+    
+    log_event('message_2_fallback_generated', {
+        'prospect': prospect_data.get('_id', 'unknown'),
+        'job_category': job_category,
+        'length': len(message)
+    })
+    
+    return message
+
+
+# ========================================
 # 1. GÉNÉRATEUR D'OBJETS (ENRICHI MOTS-CLÉS)
 # ========================================
 
@@ -445,11 +589,11 @@ Génère les 3 objets (numérotés 1, 2, 3) :"""
 
 
 # ========================================
-# 2. MESSAGE 2 : LE DILEMME (OPTIMISÉ EXTRACTION)
+# 2. MESSAGE 2 : LE DILEMME (OPTIMISÉ EXTRACTION + FORCE 2 PROFILS V26)
 # ========================================
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
-    """Génère le message 2 avec extraction précise des compétences"""
+    """Génère le message 2 avec extraction précise des compétences et FORCE 2 profils"""
     
     log_event('generate_message_2_start', {
         'prospect': prospect_data.get('_id', 'unknown'),
@@ -554,6 +698,28 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
         context_type = "ce type de besoin"
     
     prompt = f"""Tu es chasseur de têtes spécialisé Finance.
+
+═══════════════════════════════════════════════════════════════════
+⚠️  RÈGLE ABSOLUE - NON NÉGOCIABLE :
+═══════════════════════════════════════════════════════════════════
+
+Tu DOIS TOUJOURS proposer EXACTEMENT 2 profils candidats dans ce message.
+
+Format OBLIGATOIRE :
+"J'ai identifié 2 profils qui pourraient retenir votre attention :
+- L'un possède [compétence technique 1] avec [X ans] en [secteur], ayant [réalisation concrète 1]
+- L'autre combine [compétence technique 2] et [compétence soft/contexte différent], ayant [réalisation concrète 2]"
+
+IMPÉRATIFS :
+✅ TOUJOURS 2 profils (jamais 0, jamais 1)
+✅ Profils DIFFÉRENTS (parcours, secteurs, compétences complémentaires)
+✅ Compétences PRÉCISES extraites de la fiche de poste
+✅ Contextes et réalisations CONCRETS
+
+Si tu n'as pas assez d'informations pour créer 2 profils ultra-précis :
+→ Génère 2 profils CRÉDIBLES basés sur les compétences clés de la fiche de poste
+
+═══════════════════════════════════════════════════════════════════
 
 CONTEXTE :
 Prospect : {first_name}
@@ -689,13 +855,26 @@ Génère le message 2 selon ces règles STRICTES.
         tracker.track(message.usage, 'generate_message_2')
         result = message.content[0].text
         
+        # ========================================
+        # VÉRIFICATION POST-GÉNÉRATION (NOUVEAU V26)
+        # ========================================
+        if "2 profils" not in result.lower() and "deux profils" not in result.lower():
+            log_event('message_2_missing_profiles', {
+                'prospect': prospect_data.get('_id', 'unknown'),
+                'message_preview': result[:200]
+            })
+            
+            print("⚠️  Message 2 sans profils détecté - Utilisation du fallback...")
+            result = generate_message_2_fallback(first_name, context_name, is_hiring, 
+                                                  job_posting_data, job_category, prospect_data)
+        
         log_event('generate_message_2_success', {'length': len(result)})
         return result
         
     except anthropic.APIError as e:
         log_error('claude_api_error', str(e), {'function': 'generate_message_2'})
-        from prospection_utils.fallback_templates import generate_fallback_message
-        return generate_fallback_message(2, prospect_data, job_posting_data)
+        return generate_message_2_fallback(first_name, context_name, is_hiring, 
+                                          job_posting_data, job_category, prospect_data)
     
     except Exception as e:
         log_error('unexpected_error', str(e), {'function': 'generate_message_2'})
