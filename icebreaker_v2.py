@@ -1,20 +1,21 @@
 """
 ═══════════════════════════════════════════════════════════════════
-ICEBREAKER GENERATOR V2 (MODULE V22 - SÉCURISÉ ANTI-HALLUCINATION)
-Modifications : 
-- Sécurisation extract_hooks_with_claude() pour éviter invention de hooks
-- Validation stricte de la présence de contenu récent
-- Fallback explicite si pas de hooks trouvés
+ICEBREAKER GENERATOR V3 - SCORING INTELLIGENT DES HOOKS
+Modifications V3 :
+- Système de scoring 1-5 basé sur l'alignement hook/poste
+- Sélection du hook le PLUS pertinent (pas juste le premier valide)
+- Logs détaillés pour transparence
 ═══════════════════════════════════════════════════════════════════
 """
 
 import anthropic
-import json
 import os
-import requests
-from apify_client import ApifyClient
-from config import *
-from scraper_job_posting import format_job_data_for_prompt
+import re
+from config import COMPANY_INFO
+
+# Imports utilitaires
+from prospection_utils.logger import log_event, log_error
+from prospection_utils.cost_tracker import tracker
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
@@ -23,471 +24,510 @@ if not ANTHROPIC_API_KEY:
 
 
 # ========================================
-# PARTIE 1 : SCRAPING COMPLET (INCHANGÉ)
+# EXTRACTION ET VALIDATION DES HOOKS
 # ========================================
 
-def init_apify_client():
-    return ApifyClient(APIFY_API_TOKEN)
-
-def scrape_linkedin_profile(apify_client, linkedin_url):
-    print(f"🕷️  Scraping profil...")
-    try:
-        run_input = {"profileUrls": [linkedin_url], "searchForEmail": False}
-        run = apify_client.actor(APIFY_ACTORS["profile"]).call(run_input=run_input)
-        items = []
-        for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
-            items.append(item)
-        return items[0] if items else None
-    except Exception:
-        return None
-
-def scrape_linkedin_posts(apify_client, linkedin_url, limit=5):
-    print(f"📝 Scraping posts & activités ({limit})...")
-    try:
-        run_input = {"urls": [linkedin_url], "limit": limit}
-        run = apify_client.actor(APIFY_ACTORS["profile_posts"]).call(run_input=run_input)
-        posts = []
-        for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
-            text = item.get("text") or item.get("comment", "") or ""
-            if text:
-                posts.append({"text": text, "date": item.get("date", ""), "likes": item.get("numReactions", 0)})
-            if len(posts) >= limit: break
-        return posts
-    except Exception:
-        return []
-
-def scrape_company_posts(apify_client, company_name, limit=5):
-    print(f"🏢 Scraping posts entreprise...")
-    try:
-        company_slug = company_name.lower().replace(' ', '-')
-        company_url = f"https://www.linkedin.com/company/{company_slug}"
-        run_input = {"urls": [company_url], "limit": limit}
-        run = apify_client.actor(APIFY_ACTORS["company_posts"]).call(run_input=run_input)
-        posts = []
-        for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
-            posts.append({"text": item.get("text", ""), "date": item.get("date", "")})
-            if len(posts) >= limit: break
-        return posts
-    except Exception:
-        return []
-
-def scrape_company_profile(apify_client, company_name):
-    try:
-        company_slug = company_name.lower().replace(' ', '-')
-        company_url = f"https://www.linkedin.com/company/{company_slug}"
-        run_input = {"profileUrls": [company_url]}
-        run = apify_client.actor(APIFY_ACTORS["company_profile"]).call(run_input=run_input)
-        items = []
-        for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
-            items.append(item)
-        return items[0] if items else None
-    except Exception:
-        return None
-
-def web_search_prospect(first_name, last_name, company, title=""):
-    """Recherche Web : Podcasts, Articles, Livres..."""
-    if not WEB_SEARCH_ENABLED: return []
-    try:
-        query = f'"{first_name} {last_name}" "{company}" (podcast OR interview OR article OR livre OR conférence)'
-        
-        url = "https://google.serper.dev/search"
-        headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
-        payload = {'q': query, 'num': 5}
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
-        if response.status_code == 200:
-            results = response.json()
-            filtered = []
-            for item in results.get('organic', [])[:5]:
-                filtered.append({'title': item.get('title', ''), 'snippet': item.get('snippet', ''), 'link': item.get('link', '')})
-            return filtered
-        return []
-    except Exception:
-        return []
-
-
-# ========================================
-# PARTIE 2 : INTELLIGENCE & EXTRACTION (SÉCURISÉ)
-# ========================================
-
-def extract_hooks_with_claude(profile_data, posts_data, company_posts, company_profile, web_results, prospect_name, company_name):
+def extract_hooks_from_linkedin(hooks_data):
     """
-    Extrait les Hooks avec SÉCURITÉ ANTI-HALLUCINATION
+    Extrait les hooks valides depuis les données LinkedIn scrapées
+    Retourne une liste de hooks avec métadonnées
+    """
+    if not hooks_data or hooks_data == "NOT_FOUND":
+        log_event('no_hooks_available', {})
+        return []
     
-    Modifications :
-    - Validation de la présence de contenu
-    - Instructions explicites INTERDISANT l'invention
-    - Retour "NOT_FOUND" uniquement si vraiment rien
+    hooks_list = []
+    
+    # Cas 1 : hooks_data est déjà une liste de posts
+    if isinstance(hooks_data, list):
+        for idx, post in enumerate(hooks_data):
+            if isinstance(post, dict) and post.get('text'):
+                hooks_list.append({
+                    'text': str(post.get('text', '')).strip(),
+                    'type': post.get('type', 'post'),
+                    'index': idx,
+                    'title': post.get('title', ''),
+                    'date': post.get('date', '')
+                })
+    
+    # Cas 2 : hooks_data est un dict avec une clé 'posts' ou 'content'
+    elif isinstance(hooks_data, dict):
+        posts = hooks_data.get('posts', hooks_data.get('content', []))
+        if isinstance(posts, list):
+            for idx, post in enumerate(posts):
+                if isinstance(post, dict) and post.get('text'):
+                    hooks_list.append({
+                        'text': str(post.get('text', '')).strip(),
+                        'type': post.get('type', 'post'),
+                        'index': idx,
+                        'title': post.get('title', ''),
+                        'date': post.get('date', '')
+                    })
+    
+    # Cas 3 : hooks_data est un string (ancien format)
+    elif isinstance(hooks_data, str) and len(hooks_data) > 50:
+        hooks_list.append({
+            'text': hooks_data.strip(),
+            'type': 'legacy',
+            'index': 0,
+            'title': '',
+            'date': ''
+        })
+    
+    # Filtrer les hooks trop courts (< 30 caractères)
+    valid_hooks = [h for h in hooks_list if len(h['text']) >= 30]
+    
+    log_event('hooks_extracted', {
+        'total_found': len(hooks_list),
+        'valid_hooks': len(valid_hooks)
+    })
+    
+    return valid_hooks
+
+
+def score_hook_relevance(hook, job_posting_data):
     """
+    Score un hook de 1 à 5 selon sa pertinence avec le poste
+    
+    SCORING :
+    5 = Mentionne compétences clés + secteur + contexte technique
+    4 = Mentionne compétences clés + contexte professionnel
+    3 = Mentionne le secteur ou des compétences générales
+    2 = Lien faible mais professionnel
+    1 = Générique ou peu pertinent
+    """
+    if not job_posting_data:
+        return 2  # Score par défaut si pas de fiche
+    
+    hook_text = hook['text'].lower()
+    hook_title = hook.get('title', '').lower()
+    combined_text = f"{hook_text} {hook_title}"
+    
+    job_title = str(job_posting_data.get('title', '')).lower()
+    job_desc = str(job_posting_data.get('description', '')).lower()
+    job_full = f"{job_title} {job_desc}"
+    
+    score = 0
+    matching_keywords = []
+    
+    # ========================================
+    # NIVEAU 1 : COMPÉTENCES TECHNIQUES PRÉCISES (+3 points)
+    # ========================================
+    technical_keywords = [
+        # Outils EPM/Planning
+        'tagetik', 'epm', 'anaplan', 'hyperion', 'oracle planning', 'sap bpc', 'onestream',
+        # ERP
+        'sap', 's/4hana', 's4hana', 'oracle', 'sage', 'sage x3', 'dynamics',
+        # Consolidation/Normes
+        'ifrs', 'consolidation', 'statutory reporting', 'gaap', 'sox',
+        # BI/Data
+        'power bi', 'powerbi', 'tableau', 'qlik', 'data science', 'python', 'sql', 'r',
+        # Méthodologies
+        'agile', 'scrum', 'kanban', 'safe', 'prince2', 'pmp',
+        # IA/Automation
+        'ia', 'ai', 'intelligence artificielle', 'machine learning', 'copilot', 'chatgpt',
+        # Finance spécialisée
+        'trésorerie', 'cash management', 'fiscalité', 'tax', 'fp&a', 'fpa',
+        # Sectoriels spécifiques
+        'bancaire', 'bank', 'fintech', 'audiovisuel', 'cinéma', 'production',
+        'droits d\'auteur', 'convention collective'
+    ]
+    
+    for kw in technical_keywords:
+        if kw in job_full and kw in combined_text:
+            score += 3
+            matching_keywords.append(kw)
+            break  # Un seul match technique suffit
+    
+    # ========================================
+    # NIVEAU 2 : CONTEXTE PROFESSIONNEL (+2 points)
+    # ========================================
+    context_keywords = [
+        'transformation', 'digitalisation', 'automatisation', 'projet',
+        'déploiement', 'implémentation', 'migration', 'change management',
+        'adoption', 'formation', 'training', 'accompagnement',
+        'gouvernance', 'data governance', 'process', 'efficiency',
+        'reporting', 'forecast', 'budget', 'clôture'
+    ]
+    
+    context_matches = sum(1 for kw in context_keywords if kw in job_full and kw in combined_text)
+    if context_matches >= 2:
+        score += 2
+        matching_keywords.append(f"{context_matches} context keywords")
+    
+    # ========================================
+    # NIVEAU 3 : SECTEUR/INDUSTRIE (+1 point)
+    # ========================================
+    sector_keywords = [
+        'finance', 'financial', 'comptabilité', 'accounting',
+        'contrôle de gestion', 'fpa', 'audit', 'consolidation'
+    ]
+    
+    if any(kw in job_full and kw in combined_text for kw in sector_keywords):
+        score += 1
+        matching_keywords.append("sector match")
+    
+    # ========================================
+    # PÉNALITÉS
+    # ========================================
+    
+    # Pénalité si le hook est trop générique
+    generic_phrases = [
+        'heureux de', 'ravi de', 'fier de', 'merci', 'bravo',
+        'félicitations', 'congratulations', 'honneur'
+    ]
+    if any(phrase in combined_text for phrase in generic_phrases) and score < 3:
+        score -= 1
+        matching_keywords.append("generic_penalty")
+    
+    # ========================================
+    # CALCUL FINAL (1-5)
+    # ========================================
+    final_score = max(1, min(5, score))
+    
+    log_event('hook_scored', {
+        'hook_index': hook.get('index'),
+        'score': final_score,
+        'matching_keywords': matching_keywords,
+        'hook_preview': hook_text[:100]
+    })
+    
+    return final_score, matching_keywords
+
+
+def select_best_hook(hooks_list, job_posting_data):
+    """
+    Sélectionne le hook avec le meilleur score de pertinence
+    Retourne le hook choisi + son score + les keywords matchés
+    """
+    if not hooks_list:
+        log_event('no_hooks_to_select', {})
+        return None, 0, []
+    
+    scored_hooks = []
+    
+    for hook in hooks_list:
+        score, keywords = score_hook_relevance(hook, job_posting_data)
+        scored_hooks.append({
+            'hook': hook,
+            'score': score,
+            'keywords': keywords
+        })
+    
+    # Trier par score décroissant
+    scored_hooks.sort(key=lambda x: x['score'], reverse=True)
+    
+    best = scored_hooks[0]
+    
+    log_event('best_hook_selected', {
+        'score': best['score'],
+        'keywords': best['keywords'],
+        'total_hooks_analyzed': len(scored_hooks),
+        'all_scores': [h['score'] for h in scored_hooks]
+    })
+    
+    # Log si on a plusieurs hooks avec le même score
+    if len(scored_hooks) > 1 and scored_hooks[1]['score'] == best['score']:
+        log_event('multiple_hooks_same_score', {
+            'count': sum(1 for h in scored_hooks if h['score'] == best['score'])
+        })
+    
+    return best['hook'], best['score'], best['keywords']
+
+
+# ========================================
+# GÉNÉRATEUR D'ICEBREAKER
+# ========================================
+
+def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
+    """
+    Génère l'icebreaker (Message 1) en sélectionnant le meilleur hook
+    """
+    log_event('generate_icebreaker_start', {
+        'prospect': prospect_data.get('_id', 'unknown'),
+        'has_job_posting': bool(job_posting_data),
+        'hooks_type': type(hooks_data).__name__
+    })
+    
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    # SÉCURITÉ : Validation en amont
-    has_recent_posts = posts_data and len(posts_data) > 0
-    has_web_content = web_results and len(web_results) > 0
+    # Extraction du prénom
+    first_name = get_safe_firstname(prospect_data)
     
-    if not has_recent_posts and not has_web_content:
-        print("   ⚠️  Aucun contenu détecté - Pas de hook")
-        return "NOT_FOUND"
+    # Contexte du poste
+    context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
     
-    # LOGS DÉTAILLÉS pour debug
-    print(f"\n   📊 ANALYSE HOOKS DISPONIBLES :")
-    print(f"   📝 Posts LinkedIn : {len(posts_data) if posts_data else 0}")
-    print(f"   🌐 Résultats web : {len(web_results) if web_results else 0}")
+    # Extraction et sélection du meilleur hook
+    hooks_list = extract_hooks_from_linkedin(hooks_data)
+    best_hook, hook_score, hook_keywords = select_best_hook(hooks_list, job_posting_data)
     
-    if posts_data:
-        print(f"   📋 Aperçu posts :")
-        for i, post in enumerate(posts_data[:3], 1):
-            text_preview = str(post.get('text', ''))[:80].replace('\n', ' ')
-            print(f"      Post {i}: {text_preview}...")
+    # Déterminer le type de message selon la qualité du hook
+    if best_hook and hook_score >= 3:
+        message_type = "CAS A (Hook LinkedIn + Annonce)"
+        hook_text = best_hook['text']
+        hook_title = best_hook.get('title', '')
+    elif best_hook and hook_score >= 2:
+        message_type = "CAS B (Hook faible + Focus annonce)"
+        hook_text = best_hook['text']
+        hook_title = best_hook.get('title', '')
+    else:
+        message_type = "CAS C (Annonce seule)"
+        hook_text = None
+        hook_title = None
     
-    data_summary = {
-        "profile": {
-            "fullName": profile_data.get("fullName", "") if profile_data else "",
-            "headline": profile_data.get("headline", "") if profile_data else "",
-            "summary": profile_data.get("summary", "") if profile_data else "",
-        },
-        "recent_activity_linkedin": posts_data[:7] if posts_data else [],
-        "web_mentions": web_results
-    }
+    log_event('icebreaker_strategy', {
+        'message_type': message_type,
+        'hook_score': hook_score,
+        'hook_keywords': hook_keywords
+    })
     
-    prompt = f"""Tu es un analyste en intelligence économique expert.
-OBJECTIF : Trouver LE MEILLEUR "Hook" (Point d'accroche) pour contacter ce prospect.
-
-CONTEXTE DU PROSPECT :
-- Nom : {prospect_name}
-- Entreprise : {company_name}
-- Poste/Industrie : {profile_data.get('headline', 'N/A') if profile_data else 'N/A'}
-
-═══════════════════════════════════════════════════════════════════
-🎯 SYSTÈME DE SCORING - PRIORISATION INTELLIGENTE
-═══════════════════════════════════════════════════════════════════
-
-SCORE DE PERTINENCE (5 = excellent, 1 = faible) :
-
-**Score 5 (PRIORITÉ ABSOLUE)** :
-- Podcast/Interview où le prospect parle
-- Article écrit par le prospect
-- Conférence/intervention publique
-- Post LinkedIn ORIGINAL sur un sujet métier précis
-
-**Score 4 (TRÈS BON)** :
-- Post LinkedIn original avec analyse/réflexion
-- Certification professionnelle récente PERTINENTE pour le poste recherché
-- Commentaire substantiel (3+ lignes) sur sujet métier
-
-**Score 3 (BON)** :
-- Post personnel/événement SI lien avec compétences métier
-- Commentaire court mais pertinent
-- Partage avec commentaire ajouté
-
-**Score 2 (FAIBLE)** :
-- Événement générique (teambuilding, séminaire RH sans lien métier)
-- Post purement personnel
-- Simple like/partage sans commentaire
-
-**Score 1 (À ÉVITER)** :
-- Contenu sans lien avec le poste recherché
-- Événement trop générique
-
-═══════════════════════════════════════════════════════════════════
-📊 EXEMPLES DE PRIORISATION POUR EPM/FINANCE
-═══════════════════════════════════════════════════════════════════
-
-SCÉNARIO : Poste = EPM Manager (Tagetik, change management, adoption outils)
-
-Hooks disponibles :
-A) Post sur "Award ESG reporting - importance Tech teams pour solutions business reporting" (3 sem)
-B) Certification "SAFe® 6 Agilist" (3 mois)
-C) "Programme EVE - leadership féminin à Evian" (3 mois)
-
-SCORING :
-- Hook A = Score 5 ✅ MEILLEUR CHOIX
-  Raison : Lien DIRECT avec le poste (Tech/Finance, solutions reporting = cœur EPM)
-  
-- Hook B = Score 4 ✅ BON CHOIX
-  Raison : SAFe = méthodologie projet pertinente pour EPM Manager
-  
-- Hook C = Score 2 ❌ ÉVITER
-  Raison : Leadership féminin = peu de lien avec compétences EPM techniques
-
-➡️ CHOIX FINAL : Hook A (ESG reporting + Tech teams)
-
-═══════════════════════════════════════════════════════════════════
-
-SCÉNARIO 2 : Poste = Comptable audiovisuel
-
-Hooks disponibles :
-A) Commentaire "Bravo Geraldine ! Longue vie à Parcel Tiny House" (4 mois)
-B) Post original sur collaboration "JACQUEMUS x NIKE" avec photos production (récent)
-C) Post "Film CHIEN 51 sélectionné à Venise" (récent)
-
-SCORING :
-- Hook A = Score 1 ❌ ÉVITER (sans lien avec le métier)
-- Hook B = Score 5 ✅ MEILLEUR CHOIX (montre productions luxe/mode)
-- Hook C = Score 5 ✅ EXCELLENT aussi (dimension internationale ciné)
-
-➡️ CHOIX FINAL : Hook B ou C (les deux sont pertinents)
-
-═══════════════════════════════════════════════════════════════════
-⚠️ RÈGLES DE SÉCURITÉ (NON NÉGOCIABLES)
-═══════════════════════════════════════════════════════════════════
-
-1. INTERDICTION D'INVENTER
-   - Si un élément n'est PAS dans les données, tu ne peux pas le mentionner
-   - Vérifie que le hook existe VRAIMENT dans les données fournies
-
-2. PRIORISER LA PERTINENCE MÉTIER
-   - Un hook récent mais peu pertinent < Un hook moins récent mais très pertinent
-   - Exemple : Certification métier (3 mois) > Événement RH (1 mois)
-
-3. EN CAS DE DOUTE SUR LA PERTINENCE
-   - Choisis le hook le plus lié aux COMPÉTENCES du poste
-   - Évite les hooks purement personnels/génériques
-
-═══════════════════════════════════════════════════════════════════
-
-HIÉRARCHIE DES TYPES DE HOOKS :
-1. 🏆 **Contenu Intellectuel métier** (Score 5)
-2. 🥈 **Post LinkedIn métier original** (Score 4-5)
-3. 🥉 **Certification professionnelle pertinente** (Score 4)
-4. ⭐ **Commentaire substantiel métier** (Score 3-4)
-5. 👥 **Activité LinkedIn pertinente** (Score 2-3)
-6. 📰 **News Entreprise** (Score 3)
-
-DONNÉES FOURNIES :
-{json.dumps(data_summary, indent=2, ensure_ascii=False)}
-
-═══════════════════════════════════════════════════════════════════
-CONSIGNE DE SORTIE
-═══════════════════════════════════════════════════════════════════
-
-Si tu trouves un ou plusieurs hooks valides :
-
-ÉTAPE 1 : Score chaque hook (1-5) selon pertinence métier
-ÉTAPE 2 : Choisis le hook avec le MEILLEUR SCORE
-ÉTAPE 3 : Réponds en JSON :
-
-{{
-  "hook_principal": {{
-    "description": "Description PRÉCISE du hook (ex: 'Post sur award ESG reporting mentionnant importance Tech teams')",
-    "citation": "Citation textuelle si disponible (phrase clé du post)",
-    "type_action": "CONTENT_CREATOR" | "LINKEDIN_ACTIVE" | "COMPANY_NEWS",
-    "score_pertinence": 1 à 5,
-    "justification_choix": "Pourquoi ce hook plutôt qu'un autre"
-   }}
-}}
-
-Si AUCUN hook exploitable :
-Réponds EXACTEMENT : "NOT_FOUND"
-
-RAPPEL CRITIQUE : 
-- Priorise les hooks MÉTIER/COMPÉTENCES sur les hooks personnels/génériques
-- Un bon hook = lien clair avec le poste recherché
-"""
-
+    # Construction du prompt selon le cas
+    if message_type == "CAS A (Hook LinkedIn + Annonce)":
+        prompt = build_prompt_case_a(first_name, context_name, hook_text, hook_title, 
+                                     job_posting_data, hook_keywords)
+    elif message_type == "CAS B (Hook faible + Focus annonce)":
+        prompt = build_prompt_case_b(first_name, context_name, hook_text, 
+                                     job_posting_data)
+    else:
+        prompt = build_prompt_case_c(first_name, context_name, job_posting_data)
+    
+    # Génération via Claude API
     try:
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=1000,
-            temperature=0.3,  # Monté de 0.1 à 0.3 pour meilleure détection hooks
+            max_tokens=800,
             messages=[{"role": "user", "content": prompt}]
         )
-        response_text = message.content[0].text.strip().replace('```json', '').replace('```', '').strip()
         
-        # LOGS : Afficher le hook choisi
-        print(f"\n   🎯 RÉPONSE CLAUDE HOOKS :")
+        tracker.track(message.usage, 'generate_icebreaker')
+        result = message.content[0].text
         
-        # SÉCURITÉ : Validation post-génération
-        if response_text == "NOT_FOUND":
-            print("   ✅ Pas de hook trouvé (réponse sécurisée)")
-            return "NOT_FOUND"
+        log_event('icebreaker_generated', {
+            'length': len(result),
+            'message_type': message_type,
+            'hook_score': hook_score
+        })
         
-        # Vérifier que c'est bien du JSON valide
-        try:
-            hook_data = json.loads(response_text)
-            if not hook_data.get("hook_principal"):
-                print("   ⚠️  JSON invalide - Pas de hook")
-                return "NOT_FOUND"
-            
-            # LOGS détaillés du hook choisi
-            hook = hook_data['hook_principal']
-            print(f"   ✅ Hook sélectionné :")
-            print(f"      Type: {hook.get('type_action', 'N/A')}")
-            print(f"      Score: {hook.get('score_pertinence', 'N/A')}/5")
-            print(f"      Description: {hook.get('description', '')[:80]}...")
-            if hook.get('justification_choix'):
-                print(f"      Justification: {hook.get('justification_choix', '')[:60]}...")
-            
-            return response_text
-        except json.JSONDecodeError:
-            print("   ⚠️  Réponse non-JSON - Pas de hook")
-            return "NOT_FOUND"
-            
+        return result
+        
+    except anthropic.APIError as e:
+        log_error('claude_api_error', str(e), {'function': 'generate_icebreaker'})
+        return generate_fallback_icebreaker(first_name, context_name, is_hiring)
+    
     except Exception as e:
-        print(f"   ❌ Erreur extraction hooks : {e}")
-        return "NOT_FOUND"
+        log_error('unexpected_error', str(e), {'function': 'generate_icebreaker'})
+        raise
 
 
 # ========================================
-# PARTIE 3 : GÉNÉRATION DU MESSAGE 1 (INCHANGÉ)
+# CONSTRUCTION DES PROMPTS
 # ========================================
 
-def generate_advanced_icebreaker(prospect_data, hooks_json, job_posting_data=None):
-    """Génère un icebreaker FUSIONNEL (Hook Prospect + Annonce)."""
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+def build_prompt_case_a(first_name, context_name, hook_text, hook_title, 
+                        job_posting_data, hook_keywords):
+    """Prompt pour CAS A : Hook pertinent + Annonce"""
     
-    # 1. Parsing des Hooks
-    try:
-        hooks_data = json.loads(hooks_json) if hooks_json and hooks_json != "NOT_FOUND" else {"status": "NOT_FOUND"}
-    except:
-        hooks_data = {"status": "NOT_FOUND"}
+    job_title = job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'
+    job_desc = job_posting_data.get('description', 'N/A') if job_posting_data else 'N/A'
     
-    # 2. Parsing de l'Annonce
-    has_job = job_posting_data and job_posting_data.get('title') and len(str(job_posting_data.get('title'))) > 2
-    job_context = str(job_posting_data) if has_job else "PAS_D_ANNONCE"
-    
-    # 3. Le Prompt FUSION (Logique conditionnelle stricte)
-    prompt = f"""Tu es un expert en copywriting B2B pour cabinet de recrutement Finance.
+    return f"""Tu es expert en prospection B2B pour cabinet de recrutement Finance.
 
 CONTEXTE :
-Prospect : {prospect_data['first_name']} {prospect_data.get('last_name', '')}
-Entreprise : {prospect_data.get('company', '')}
-Poste : {prospect_data.get('title', 'N/A')}
+Prénom : {first_name}
+Poste recherché : {context_name}
 
-Hook Prospect (LinkedIn/Web) : {json.dumps(hooks_data, ensure_ascii=False)}
-Annonce de recrutement : {job_context}
+HOOK LINKEDIN SÉLECTIONNÉ (Score élevé - Très pertinent) :
+Titre : {hook_title if hook_title else 'N/A'}
+Contenu : {hook_text[:500]}
 
-IMPÉRATIF ABSOLU DE LONGUEUR : 80-100 MOTS MAXIMUM (compter chaque mot !)
+Mots-clés détectés (alignement hook/poste) : {', '.join(hook_keywords) if hook_keywords else 'Aucun'}
 
-FORMAT STRICT NON NÉGOCIABLE :
-1. "Bonjour {prospect_data['first_name']},"
-2. SAUT DE LIGNE (ligne vide)
-3. Corps du message (60-80 mots)
-4. Question finale (10-15 mots)
+FICHE DE POSTE (pour identifier le pain point précis) :
+Titre : {job_title}
+Description (extraits clés) : {str(job_desc)[:600]}
 
-STRATÉGIE CONTENU (FUSION INTELLIGENTE) :
+MISSION :
+Rédige un icebreaker de 70-90 mots structuré ainsi :
 
-═══════════════════════════════════════════════════════════════════
-CAS A : Hook (podcast/article) + Annonce (LE MEILLEUR)
-═══════════════════════════════════════════════════════════════════
+1. "Bonjour {first_name},"
+2. SAUT DE LIGNE
+3. Référence au hook LinkedIn (20-25 mots)
+   → Mentionne le sujet précis du post/événement/certification
+   → Montre que tu as vraiment lu (cite un élément spécifique)
+   → INTERDICTION de citer des phrases complètes, paraphrase intelligemment
 
-Structure OBLIGATOIRE :
-- Phrase 1 (15-20 mots) : "J'ai [écouté/lu/consulté] [type contenu précis avec nom]"
-  → IMPÉRATIF : Mentionner le NOM du podcast/article/conférence !
-  
-- Phrase 2 (15-20 mots) : "Votre analyse sur [sujet précis extrait hook] était [qualificatif sobre]."
-  → Citer UNE idée spécifique du hook
-  
-- Phrase 3 (20-25 mots) : "Cela résonne avec votre recherche de [titre poste]. Le défi est [pain point marché]."
-  → Lier hook + annonce + observation marché
-  
-- Phrase 4 (15-20 mots) : "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
+4. Transition naturelle vers le pain point (25-30 mots)
+   → "Cela résonne avec votre recherche de {context_name}."
+   → Identifie LE pain point précis du poste (pas générique)
+   → Utilise les compétences RARES détectées dans la fiche
 
-EXEMPLE TYPE :
-"Bonjour Marie,
+5. Question ouverte engageante (15-20 mots)
+   → "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
+   OU variante pertinente selon contexte
 
-J'ai écouté votre intervention dans le podcast CFO 4.0 sur la digitalisation finance. Votre analyse sur la nécessité d'acculturer les équipes métiers était très juste.
+6. "Bien à vous,"
 
-Cela résonne avec votre recherche de Directeur Contrôle de Gestion. Le défi n'est plus seulement de trouver des experts techniques, mais ces profils hybrides capables d'embarquer les opérationnels.
+EXEMPLES DE BONS PAIN POINTS (SPÉCIFIQUES) :
+
+Pour EPM/Tagetik :
+❌ "Le défi est la maîtrise de Tagetik"
+✅ "Le défi n'est plus seulement la maîtrise de Tagetik, mais cette capacité à faire le pont entre IT et finance tout en pilotant l'adoption utilisateurs."
+
+Pour Consolidation IFRS :
+❌ "Le défi est de trouver des profils IFRS"
+✅ "Au-delà de l'expertise IFRS, le défi est de trouver des profils capables de faire monter le niveau des équipes locales tout en respectant les délais groupe."
+
+Pour Data/IA Officer :
+❌ "Le défi est de maîtriser les technologies"
+✅ "Le défi n'est plus seulement de maîtriser les technologies, mais de trouver ces profils capables d'accompagner les métiers dans l'idéation et l'acculturation IA."
+
+Pour Comptabilité bancaire :
+❌ "Le défi est la comptabilité bancaire"
+✅ "En banque tech, le défi va au-delà de la comptabilité bancaire pure : il faut automatiser les process tout en participant aux projets transverses nouveaux produits."
+
+INTERDICTIONS :
+- ❌ Jamais citer verbatim plus de 5 mots du hook
+- ❌ Jamais inventer des informations non présentes dans le hook
+- ❌ Jamais mentionner le cabinet ou "nos services"
+- ❌ Jamais de superlatifs ou ton commercial
+
+Génère l'icebreaker maintenant :"""
+
+
+def build_prompt_case_b(first_name, context_name, hook_text, job_posting_data):
+    """Prompt pour CAS B : Hook faible + Focus annonce"""
+    
+    job_title = job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'
+    job_desc = job_posting_data.get('description', 'N/A') if job_posting_data else 'N/A'
+    
+    return f"""Tu es expert en prospection B2B pour cabinet de recrutement Finance.
+
+CONTEXTE :
+Prénom : {first_name}
+Poste recherché : {context_name}
+
+HOOK LINKEDIN DISPONIBLE (Score faible - Peu aligné) :
+{hook_text[:300]}
+
+FICHE DE POSTE (élément principal) :
+Titre : {job_title}
+Description : {str(job_desc)[:600]}
+
+STRATÉGIE :
+Le hook est peu pertinent, donc structure le message ainsi :
+
+1. "Bonjour {first_name},"
+2. SAUT DE LIGNE
+3. Référence BRÈVE au hook (10-15 mots max)
+   → Juste pour montrer que tu as regardé le profil
+   → Pas de développement
+
+4. Pivot RAPIDE vers le poste (30-35 mots)
+   → "J'ai vu votre recherche de {context_name}."
+   → Identifie le pain point SPÉCIFIQUE du poste
+
+5. Question ouverte (15-20 mots)
+
+6. "Bien à vous,"
+
+Total : 70-90 mots
+
+Génère l'icebreaker maintenant :"""
+
+
+def build_prompt_case_c(first_name, context_name, job_posting_data):
+    """Prompt pour CAS C : Annonce seule (pas de hook)"""
+    
+    job_title = job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'
+    job_desc = job_posting_data.get('description', 'N/A') if job_posting_data else 'N/A'
+    
+    return f"""Tu es expert en prospection B2B pour cabinet de recrutement Finance.
+
+CONTEXTE :
+Prénom : {first_name}
+Poste recherché : {context_name}
+
+FICHE DE POSTE :
+Titre : {job_title}
+Description : {str(job_desc)[:600]}
+
+STRATÉGIE (Pas de hook LinkedIn disponible) :
+Structure le message ainsi :
+
+1. "Bonjour {first_name},"
+2. SAUT DE LIGNE
+3. Introduction directe (15-20 mots)
+   → "J'ai consulté votre annonce pour le poste de {context_name}."
+
+4. Pain point précis du poste (35-40 mots)
+   → Identifie LE défi spécifique du recrutement
+   → Utilise les compétences rares de la fiche
+
+5. Question ouverte (15-20 mots)
+
+6. "Bien à vous,"
+
+Total : 70-90 mots
+
+Génère l'icebreaker maintenant :"""
+
+
+# ========================================
+# FONCTIONS UTILITAIRES
+# ========================================
+
+def get_safe_firstname(prospect_data):
+    """Trouve le prénom (détective)"""
+    target_keys = ['first_name', 'firstname', 'first name', 'prénom', 'prenom', 'name']
+    for key, value in prospect_data.items():
+        if str(key).lower().strip() in target_keys:
+            if value and str(value).strip():
+                return str(value).strip().capitalize()
+    return "[Prénom]"
+
+
+def get_smart_context(job_posting_data, prospect_data):
+    """Définit le sujet de la discussion."""
+    # Cas 1 : Il y a une annonce
+    if job_posting_data and job_posting_data.get('title') and len(str(job_posting_data.get('title'))) > 2:
+        title = str(job_posting_data.get('title'))
+        # Nettoyage
+        title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', title, flags=re.IGNORECASE)
+        title = re.sub(r'\s*[-|]\s*.*$', '', title)
+        return title.strip().title(), True
+
+    # Cas 2 : Pas d'annonce
+    headline = str(prospect_data.get('headline', '')).lower()
+    
+    if 'financ' in headline or 'daf' in headline or 'cfo' in headline:
+        return "vos équipes Finance", False
+    elif 'rh' in headline or 'drh' in headline or 'talents' in headline:
+        return "votre stratégie Talents", False
+    elif 'audit' in headline:
+        return "votre département Audit", False
+    else:
+        return "vos équipes", False
+
+
+def generate_fallback_icebreaker(first_name, context_name, is_hiring):
+    """Génère un icebreaker de secours"""
+    if is_hiring:
+        return f"""Bonjour {first_name},
+
+J'ai consulté votre annonce pour le poste de {context_name}.
+
+Le marché actuel rend ce type de recrutement particulièrement complexe : trouver des profils qui combinent expertise technique et capacités relationnelles devient rare.
 
 Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
 
-Bien à vous,"
+Bien à vous,"""
+    else:
+        return f"""Bonjour {first_name},
 
-═══════════════════════════════════════════════════════════════════
-CAS B : Annonce seule (PAS DE HOOK détecté)
-═══════════════════════════════════════════════════════════════════
+J'accompagne des entreprises comme la vôtre dans la structuration de {context_name}.
 
-Structure OBLIGATOIRE :
-- Phrase 1 (15-20 mots) : "J'ai consulté votre recherche de [titre poste exact]."
-  OU "Je me permets de vous contacter concernant votre recherche de [titre]."
-  
-- Phrase 2-3 (40-50 mots) : Observation marché ULTRA-SPÉCIFIQUE au métier
-  
-  MÉTHODE POUR CONSTRUIRE L'OBSERVATION :
-  1. Lire attentivement la fiche de poste
-  2. Identifier les 2-3 compétences RARES demandées (pas juste "comptabilité" ou "finance")
-  3. Formuler le pain point autour de la COMBINAISON de ces compétences rares
-  4. Contextualiser si pertinent (secteur, environnement, type d'entreprise)
-  
-  EXEMPLES D'OBSERVATIONS ULTRA-SPÉCIFIQUES :
-  
-  EPM/Tagetik :
-  "Sur ce type de poste, je constate que le défi n'est pas la maîtrise technique de Tagetik 
-  seule, mais la capacité à faire le pont entre les équipes IT et les utilisateurs finance 
-  tout en animant l'adoption des outils."
-  
-  Consolidation IFRS :
-  "Sur ce type de poste, je constate que le marché combine rarement expertise normative IFRS 
-  et capacité pédagogique pour faire monter le niveau des filiales internationales."
-  
-  Comptabilité bancaire :
-  "Sur ce type de poste en banque tech, le défi va au-delà de la comptabilité bancaire pure : 
-  il faut automatiser les process tout en participant aux projets transverses (nouveaux produits, 
-  évolutions réglementaires)."
-  
-  Comptabilité audiovisuelle :
-  "Sur ce type de poste en production audiovisuelle, le défi n'est pas la comptabilité générale 
-  seule, mais la maîtrise des spécificités sectorielles (droits d'auteurs, convention collective) 
-  tout en gérant plusieurs productions simultanées."
-  
-- Phrase 4 (15-20 mots) : "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
+Le défi principal que nous observons est de trouver des profils qui allient expertise technique et vision stratégique.
 
-EXEMPLE TYPE :
-"Bonjour Clémentine,
+Seriez-vous ouvert à échanger sur vos enjeux actuels ?
 
-J'ai consulté votre recherche de Senior Functional Analyst pour votre EPM CoE chez Pernod Ricard.
-
-Sur ce type de poste, je constate que le défi n'est pas la maîtrise technique de Tagetik seule, mais la capacité à faire le pont entre les équipes IT et les utilisateurs finance tout en animant l'adoption des outils.
-
-Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
-
-Bien à vous,"
-
-═══════════════════════════════════════════════════════════════════
-CAS C : Hook seul (PAS D'ANNONCE - Approche spontanée)
-═══════════════════════════════════════════════════════════════════
-
-Structure OBLIGATOIRE :
-- Phrase 1 (15-20 mots) : Référence précise au hook
-- Phrase 2-3 (40-50 mots) : Lien avec enjeux département du prospect
-- Phrase 4 (15-20 mots) : Question ouverte sur les défis actuels
-
-EXEMPLE TYPE :
-"Bonjour Thomas,
-
-Votre post récent sur LinkedIn concernant la transformation de vos process de consolidation était très instructif.
-
-Dans le pilotage de vos équipes Finance, vous devez certainement constater cette tension entre expertise technique pointue (IFRS, consolidation) et vision business globale. Trouver des profils qui combinent les deux devient un véritable défi.
-
-Est-ce aujourd'hui une difficulté que vous rencontrez sur vos recrutements ou dans la structuration de vos équipes ?
-
-Bien à vous,"
-
-═══════════════════════════════════════════════════════════════════
-INTERDICTIONS ABSOLUES :
-═══════════════════════════════════════════════════════════════════
-- ❌ Jamais "Notre cabinet", "Nos services", "Notre expertise"
-- ❌ Jamais de superlatifs ("excellents", "meilleurs", "top")
-- ❌ Jamais de jargon cabinet ("chasse de têtes", "approche directe")
-- ❌ Jamais plus de 100 mots au total
-- ❌ Jamais de formules creuses ("soulève un point clé", "retenu mon attention")
-
-VALIDATION AVANT ENVOI :
-1. Compter les mots → Si > 100 mots : RECOMMENCER
-2. Vérifier référence explicite au hook (si CAS A) → Si manque : RECOMMENCER
-3. Vérifier question finale présente → Si manque : AJOUTER
-
-Génère le Message 1 selon ces règles STRICTES.
-"""
-
-    try:
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=600,
-            temperature=0.4,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return message.content[0].text.strip()
-        
-    except Exception:
-        return f"Bonjour {prospect_data['first_name']},\n\nErreur de génération."
+Bien à vous,"""

@@ -1,10 +1,13 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V24 (OPTIMISÉ COMPLET)
-Modifications : 
-- Pain points et outcomes complets par métier
-- Prompts enrichis pour extraction précise des compétences
-- Détection améliorée des mots-clés sectoriels
+MESSAGE SEQUENCE GENERATOR - V25 (CORRECTIONS MAJEURES)
+Modifications V25 :
+- Matching FLEXIBLE des keywords (insensible casse/espaces/tirets)
+- Keywords enrichis (Agile, IA, Data Science, cas d'usage, etc.)
+- Extraction de secours si aucune compétence détectée
+- Pain points SPÉCIFIQUES obligatoires (avec compétences rares)
+- Profils Message 2 OBLIGENT les compétences techniques précises
+- Interdiction absolue de profils vagues
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -86,6 +89,12 @@ PAIN_POINTS_BY_JOB = {
         "KPI contestés en comité de direction faute de référentiels clairs",
         "manque de profils hybrides (data engineers sans culture finance)",
         "dette analytique (tableurs critiques, retraitements manuels avant CODIR)"
+    ],
+    'data_ia': [
+        "difficulté à trouver des profils qui combinent technique (Python, SQL, ML) et compréhension business",
+        "acculturation IA lente dans les métiers (résistance au changement, manque de formation)",
+        "cas d'usage IA qui n'aboutissent pas faute de sponsor métier engagé",
+        "manque de profils capables d'animer un centre d'excellence IA (leadership transverse)"
     ]
 }
 
@@ -143,12 +152,18 @@ OUTCOMES_CABINET = {
         "crédibilité renforcée du pilotage financier",
         "self-service gouverné",
         "réduction des risques opérationnels"
+    ],
+    'data_ia': [
+        "adoption réelle de l'IA dans les métiers (pas juste des POCs)",
+        "ROI mesurable sur les cas d'usage déployés",
+        "acculturation IA accélérée (formations, ateliers, centre d'excellence)",
+        "réduction de la dépendance aux consultants externes"
     ]
 }
 
 
 # ========================================
-# DÉTECTION AUTOMATIQUE DU MÉTIER (INCHANGÉ)
+# DÉTECTION AUTOMATIQUE DU MÉTIER (ENRICHI)
 # ========================================
 
 def detect_job_category(prospect_data, job_posting_data):
@@ -163,8 +178,10 @@ def detect_job_category(prospect_data, job_posting_data):
     
     text = text.lower()
     
-    # Détection par mots-clés
-    if any(word in text for word in ['daf', 'directeur administratif', 'cfo', 'chief financial']):
+    # Détection par mots-clés (ordre = priorité)
+    if any(word in text for word in ['data officer', 'ia officer', 'ai officer', 'data & ia', 'intelligence artificielle']):
+        return 'data_ia'
+    elif any(word in text for word in ['daf', 'directeur administratif', 'cfo', 'chief financial']):
         return 'daf'
     elif any(word in text for word in ['raf', 'responsable administratif']):
         return 'raf'
@@ -215,6 +232,20 @@ def assess_data_richness(hooks_data, job_posting_data):
         return 'basic'
     else:
         return 'minimal'
+
+
+# ========================================
+# MATCHING FLEXIBLE (NOUVEAU)
+# ========================================
+
+def flexible_match(keyword, text):
+    """
+    Match flexible : insensible à la casse, espaces, tirets
+    Exemple : 'power bi' matchera 'PowerBI', 'Power-BI', 'power bi'
+    """
+    # Échapper les caractères spéciaux regex sauf espaces
+    pattern = re.escape(keyword).replace(r'\ ', r'[\s\-_]*')
+    return bool(re.search(pattern, text, re.IGNORECASE))
 
 
 # ========================================
@@ -279,7 +310,7 @@ def generate_subject_lines(prospect_data, job_posting_data):
         # Consolidation/Reporting
         'consolidation', 'ifrs', 'reporting', 'forecast', 'budget', 'clôture',
         # BI/Data
-        'bi', 'business intelligence', 'data', 'analytics', 'power bi', 'tableau', 'qlik',
+        'bi', 'business intelligence', 'data', 'analytics', 'power bi', 'powerbi', 'tableau', 'qlik',
         # Finance
         'fp&a', 'fpa', 'contrôle de gestion', 'trésorerie',
         # Compétences transverses
@@ -288,13 +319,23 @@ def generate_subject_lines(prospect_data, job_posting_data):
         # Sectoriels
         'bancaire', 'bank', 'fintech', 'audiovisuel', 'cinéma', 'production',
         # Logiciels spécifiques
-        'louma', 'excel', 'python', 'sql', 'vba'
+        'louma', 'excel', 'python', 'sql', 'vba', 'r',
+        # IA / Data Science
+        'ia', 'ai', 'intelligence artificielle', 'machine learning', 'data science',
+        'copilot', 'chatgpt', 'gen ai', 'generative ai',
+        # Méthodologies
+        'agile', 'scrum', 'kanban', 'safe', 'prince2'
     ]
     
     detected_keywords = []
     if job_posting_data:
         job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
-        detected_keywords = [kw for kw in extended_keywords if kw in job_text][:7]
+        detected_keywords = [kw for kw in extended_keywords if flexible_match(kw, job_text)][:7]
+    
+    log_event('keywords_detected', {
+        'count': len(detected_keywords),
+        'keywords': detected_keywords
+    })
     
     if is_hiring:
         prompt_type = "recrutement actif"
@@ -327,7 +368,7 @@ Génère 3 objets d'email courts (40-60 caractères) qui :
 2. Évoquent les pain points de manière INTERROGATIVE
 3. Restent sobres et professionnels
 
-IMPÉRATIF ABSOLU : Si un outil/secteur spécifique est détecté (Tagetik, SAP, bancaire, audiovisuel, etc.), 
+IMPÉRATIF ABSOLU : Si un outil/secteur spécifique est détecté (Tagetik, SAP, bancaire, audiovisuel, IA, Agile, etc.), 
 AU MOINS UN des objets DOIT le mentionner explicitement !
 
 FORMAT ATTENDU :
@@ -341,6 +382,16 @@ Si Tagetik/EPM détecté :
 1. EPM : profils Tech OU Fonctionnel ?
 2. Adoption Tagetik : le vrai défi
 3. Re: Senior Functional Analyst Tagetik
+
+Si IA/Data Science détecté :
+1. IA : technique ET business ?
+2. Cas d'usage IA : acculturation métiers
+3. Re: Data & IA Officer
+
+Si Agile/Scrum détecté :
+1. EPM + Agile : profils hybrides rares
+2. SAFe : finance + project management
+3. Re: Global EPM Functional Manager
 
 Si comptabilité bancaire détectée :
 1. Comptabilité bancaire : marché tendu
@@ -413,32 +464,84 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
     pain_points = get_relevant_pain_points(job_category, max_points=2)
     outcomes = get_relevant_outcomes(job_category, max_outcomes=1)
     
-    # ENRICHISSEMENT : Extraction poussée des expertises
+    # ========================================
+    # EXTRACTION ENRICHIE DES EXPERTISES (NOUVEAU - MATCHING FLEXIBLE)
+    # ========================================
     technical_skills = []
     soft_skills = []
     tools = []
     
     if job_posting_data:
-        job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+        job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}"
         
-        # Outils/technologies
-        tool_keywords = ['tagetik', 'sap', 'anaplan', 'hyperion', 'oracle', 'sage', 'louma', 
-                        'power bi', 'tableau', 'excel', 'python', 'sql', 'onestream']
-        tools = [tool for tool in tool_keywords if tool in job_text]
+        # Outils/technologies (ENRICHI)
+        tool_keywords = [
+            'tagetik', 'sap', 'anaplan', 'hyperion', 'oracle', 'sage', 'louma', 
+            'power bi', 'powerbi', 'tableau', 'excel', 'python', 'r', 'sql', 'onestream',
+            'agile', 'scrum', 'kanban', 'safe', 'prince2',  # Méthodologies
+            'copilot', 'chatgpt', 'ia', 'ai', 'machine learning'  # IA
+        ]
+        tools = [tool for tool in tool_keywords if flexible_match(tool, job_text)]
         
-        # Compétences techniques
-        tech_keywords = ['consolidation', 'ifrs', 'reporting', 'comptabilité bancaire', 
-                        'fiscalité', 'trésorerie', 'budget', 'forecast', 'clôture',
-                        'droits d\'auteurs', 'notes de frais', 'convention collective']
-        technical_skills = [skill for skill in tech_keywords if skill in job_text]
+        # Compétences techniques (ENRICHI)
+        tech_keywords = [
+            'consolidation', 'ifrs', 'reporting', 'comptabilité bancaire', 
+            'fiscalité', 'trésorerie', 'budget', 'forecast', 'clôture',
+            'droits d\'auteurs', 'notes de frais', 'convention collective',
+            'data science', 'data governance', 'cas d\'usage', 'use case',
+            'intégration sap', 'sap integration', 'erp migration'
+        ]
+        technical_skills = [skill for skill in tech_keywords if flexible_match(skill, job_text)]
         
-        # Compétences transverses
-        soft_keywords = ['change management', 'adoption', 'training', 'user support', 
-                        'automatisation', 'business partnering', 'transformation',
-                        'project management', 'communication', 'pédagogie']
-        soft_skills = [skill for skill in soft_keywords if skill in job_text]
+        # Compétences transverses (ENRICHI)
+        soft_keywords = [
+            'change management', 'adoption', 'training', 'user support', 
+            'automatisation', 'business partnering', 'transformation',
+            'project management', 'communication', 'pédagogie',
+            'idéation', 'ideation', 'design thinking', 'acculturation',
+            'stakeholder', 'animation', 'centre d\'excellence', 'governance',
+            'roi', 'value creation'
+        ]
+        soft_skills = [skill for skill in soft_keywords if flexible_match(skill, job_text)]
+    
+    # ========================================
+    # FALLBACK SI AUCUNE COMPÉTENCE DÉTECTÉE (NOUVEAU)
+    # ========================================
+    if not tools and not technical_skills and not soft_skills:
+        log_event('no_skills_detected_fallback', {'prospect': prospect_data.get('_id')})
+        
+        # Extraction de secours : mots importants (capitalisés, > 4 lettres)
+        if job_posting_data:
+            job_desc = str(job_posting_data.get('description', ''))
+            
+            # Chercher les mots capitalisés ou acronymes
+            capitalized_words = re.findall(r'\b[A-Z][A-Za-z]{3,}(?:\s+[A-Z][A-Za-z]+)*\b', job_desc)
+            acronyms = re.findall(r'\b[A-Z]{2,}\b', job_desc)
+            
+            # Filtrer les mots pertinents
+            stop_words = {'Vous', 'Dans', 'Avec', 'Pour', 'Votre', 'Notre', 'Cette', 'Nous', 'Les', 'Des'}
+            extracted_terms = [word for word in (capitalized_words + acronyms) 
+                              if word not in stop_words and len(word) > 3]
+            
+            # Dédupliquer et garder les 5 premiers
+            extracted_terms = list(dict.fromkeys(extracted_terms))[:5]
+            
+            if extracted_terms:
+                tools = extracted_terms
+                log_event('fallback_extraction_success', {'terms': extracted_terms})
+            else:
+                log_event('fallback_extraction_failed', {'desc_length': len(job_desc)})
     
     expertises_detected = f"Outils: {', '.join(tools[:3]) if tools else 'N/A'} | Techniques: {', '.join(technical_skills[:3]) if technical_skills else 'N/A'} | Transverses: {', '.join(soft_skills[:2]) if soft_skills else 'N/A'}"
+    
+    log_event('expertises_extracted', {
+        'tools_count': len(tools),
+        'technical_count': len(technical_skills),
+        'soft_count': len(soft_skills),
+        'tools': tools[:3],
+        'technical': technical_skills[:3],
+        'soft': soft_skills[:2]
+    })
     
     if is_hiring:
         intro_phrase = f"Je me permets de vous relancer concernant votre recherche de {context_name}."
@@ -458,7 +561,7 @@ Type : {'Recrutement actif' if is_hiring else 'Approche spontanée'}
 ANALYSE POUSSÉE DE LA FICHE DE POSTE (CRITIQUE) :
 Titre exact : {job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'}
 
-EXPERTISES DÉTECTÉES :
+EXPERTISES DÉTECTÉES (À UTILISER OBLIGATOIREMENT) :
 {expertises_detected}
 
 Description complète (extraits) :
@@ -481,79 +584,72 @@ STRUCTURE STRICTE :
 3. "{intro_phrase}"
 
 4. Observation marché ULTRA-SPÉCIFIQUE au poste (30-40 mots)
-   → IMPÉRATIF : L'observation doit mentionner les COMPÉTENCES DÉTECTÉES !
-   → CRITIQUE : Si le Message 1 a déjà utilisé une formulation, VARIER l'angle !
+   → IMPÉRATIF CRITIQUE : L'observation DOIT mentionner les COMPÉTENCES DÉTECTÉES ci-dessus !
+   → Si des outils sont détectés (Tagetik, SAP, Python, Agile, etc.), les NOMMER explicitement !
+   → VARIER l'angle par rapport au Message 1 (autre facette du même pain point)
    
    MÉTHODE POUR CONSTRUIRE L'OBSERVATION :
-   a) Identifier les 2-3 compétences RARES du poste (pas juste "comptabilité" ou "finance")
-   b) Formuler le pain point autour de ces compétences rares
-   c) Contextualiser (secteur, environnement, type d'entreprise si pertinent)
-   d) VARIER l'angle par rapport au Message 1 (autre aspect du même pain point)
+   a) Prendre les 2-3 compétences les PLUS RARES détectées (pas "finance" ou "comptabilité")
+   b) Formuler le pain point autour de CES compétences précises
+   c) Contextualiser (secteur, environnement, type d'entreprise)
+   d) TOUJOURS citer au moins 2 compétences techniques précises entre parenthèses
    
-   EXEMPLES DE BONNES OBSERVATIONS CONTEXTUELLES (VARIÉES) :
+   EXEMPLES DE BONNES OBSERVATIONS CONTEXTUELLES :
    
-   Pour EPM/Tagetik :
-   Version A (Message 1) : "le défi n'est pas la maîtrise technique de Tagetik seule, 
-   mais la capacité à faire le pont entre les équipes IT et les utilisateurs finance 
-   tout en animant l'adoption des outils"
+   Pour EPM/Tagetik + Agile :
+   "Le défi principal sur ce type de poste EPM en environnement international réside dans la capacité 
+   à piloter des projets complexes (intégration SAP, Data Governance, méthodologies Agile) tout en 
+   garantissant une adoption effective par les filiales internationales."
    
-   Version B (Message 2) : "le défi principal sur ce type de poste EPM en environnement 
-   international réside dans la capacité à piloter des projets complexes (intégration SAP, 
-   Data Governance) tout en garantissant une adoption effective par les filiales internationales"
+   Pour Data/IA Officer :
+   "Le marché combine rarement expertise technique (Python, SQL, Machine Learning) et capacité 
+   d'acculturation IA auprès des métiers (formations, ateliers idéation, animation de centres 
+   d'excellence)."
    
    Pour Consolidation IFRS :
-   Version A : "le marché combine rarement expertise normative IFRS poussée et capacité 
-   pédagogique pour faire monter le niveau des filiales"
-   
-   Version B : "trouver des profils qui allient maîtrise des normes IFRS et expérience 
-   terrain de montée en compétence des équipes locales devient complexe"
+   "Trouver des profils qui allient maîtrise des normes IFRS, expérience terrain de montée en 
+   compétence des filiales et pilotage de projets de migration d'outils (OneStream, Tagetik) 
+   devient complexe."
    
    Pour Comptabilité bancaire :
-   Version A : "le défi va au-delà de la comptabilité bancaire pure : automatiser 
-   les process tout en participant aux projets transverses"
-   
-   Version B : "la rareté porte sur des profils qui combinent rigueur comptable bancaire 
-   (clôtures réglementaires, normes) et agilité projet pour accompagner les lancements produits"
-   
-   Pour Comptabilité audiovisuelle :
-   Version A : "le défi n'est pas la comptabilité générale seule, mais la maîtrise 
-   des spécificités sectorielles (droits d'auteurs, convention collective) tout en 
-   gérant plusieurs productions simultanées"
-   
-   Version B : "trouver des profils qui maîtrisent les subtilités de la comptabilité 
-   audiovisuelle (notes de frais équipes, droits auteurs) tout en s'adaptant aux 
-   rythmes projets devient rare"
+   "La rareté porte sur des profils qui combinent rigueur comptable bancaire (clôtures réglementaires, 
+   FINREP/COREP) et agilité projet pour accompagner les lancements produits (automatisation, BI)."
 
 5. Proposition ULTRA-SPÉCIFIQUE (40-50 mots)
    "J'ai identifié 2 profils qui pourraient retenir votre attention :"
    
-   → IMPÉRATIF : Mentionner EXPLICITEMENT les expertises détectées !
-   → Structure : "L'un [expertise 1 + expertise 2]. L'autre [expertise 1 + variante]."
+   → RÈGLE ABSOLUE : Les profils DOIVENT mentionner LES COMPÉTENCES DÉTECTÉES !
+   → INTERDICTION de formulations vagues type "expertise comptable" ou "expérience finance"
+   → OBLIGATION de citer les outils/compétences précises entre parenthèses
+   → Structure : "L'un [outil/techno 1 + techno 2 + contexte]. L'autre [profil différent avec variante]."
    
-   EXEMPLES DE BONNES PROPOSITIONS :
+   EXEMPLES DE BONNES PROPOSITIONS (PRÉCISES) :
    
-   Pour EPM/Tagetik :
-   "- L'un combine expertise Tagetik (consolidation & reporting) et expérience en project management, 
-     ayant piloté l'intégration EPM/ERP en environnement international.
-   - L'autre vient du conseil EPM, avec une forte capacité d'animation du change management 
-     auprès de filiales internationales (formations, stakeholder engagement)."
+   Pour EPM/Tagetik + Agile :
+   "- L'un combine expertise Tagetik (consolidation statutory, reporting) et certification SAFe/PMP, 
+     ayant piloté l'intégration EPM/SAP en environnement international.
+   - L'autre vient du conseil EPM (Big 4) avec forte capacité en Change Management et animation de 
+     formations utilisateurs multi-pays (stakeholder engagement, documentation)."
    
-   Pour Consolidation :
-   "- L'un est expert IFRS (10+ ans) avec expérience de montée en compétence des filiales.
-   - L'autre a piloté un projet de migration d'outil de consolidation et excelle dans 
-     la pédagogie normative."
+   Pour Data/IA Officer :
+   "- L'un possède une expertise en Data Science (Python, SQL, Machine Learning) avec 5 ans en 
+     finance de marché, ayant piloté des projets d'acculturation IA auprès des traders (ateliers 
+     idéation, POCs métier).
+   - L'autre vient de la finance corporate (FP&A) avec une reconversion technique (certification 
+     Azure Data Engineer), ayant accompagné des métiers dans l'adoption de solutions IA pour 
+     l'automatisation des reportings."
+   
+   Pour Consolidation IFRS :
+   "- L'un est expert IFRS (10+ ans, normes IFRS 9/15/16) avec expérience de montée en compétence 
+     des filiales et pilotage de projet de migration OneStream.
+   - L'autre combine expertise normative IFRS, maîtrise Excel/VBA avancée et forte pédagogie 
+     (formations équipes locales, documentation processus)."
    
    Pour Comptabilité bancaire :
-   "- L'un possède une expérience en comptabilité bancaire (clôtures réglementaires, IFRS) 
-     et a piloté l'automatisation des réconciliations via Excel/VBA.
-   - L'autre vient de la fintech et combine expertise fiscale avec participation active 
-     aux projets d'implémentation de nouveaux produits."
-   
-   Pour Comptabilité audiovisuelle :
-   "- L'un possède une expérience en comptabilité audiovisuelle (production cinéma/pub), 
-     maîtrise la gestion des droits d'auteurs et connaît la convention collective production.
-   - L'autre vient de l'événementiel avec forte dimension projet (multi-productions simultanées) 
-     et connaissance de logiciels sectoriels comme Louma."
+   "- L'un possède une expérience en comptabilité bancaire (clôtures réglementaires FINREP/COREP, 
+     PCB) et a piloté l'automatisation des réconciliations via Excel/VBA et Power BI.
+   - L'autre vient de la fintech et combine expertise fiscale bancaire (IS, TVA) avec participation 
+     active aux projets d'implémentation de nouveaux produits (Agile/Scrum)."
 
 6. Offre sans engagement (15-20 mots) :
    "Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait 
@@ -564,17 +660,18 @@ STRUCTURE STRICTE :
 INTERDICTIONS ABSOLUES :
 - ❌ Jamais "Notre cabinet", "Nos services", "Notre expertise"
 - ❌ Jamais de superlatifs ("meilleurs", "excellents")
-- ❌ Jamais proposer des profils génériques ("contrôle de gestion", "FP&A") si le poste 
-     demande EPM/Consolidation/Comptabilité spécialisée !
+- ❌ Jamais proposer des profils GÉNÉRIQUES ("contrôle de gestion", "FP&A") sans compétences précises !
+- ❌ Jamais de formulations vagues type "maîtrise avancée d'Excel" sans préciser (VBA, Power Query, etc.)
 - ❌ Jamais plus de 120 mots
 - ❌ JAMAIS de ton commercial type : "Auriez-vous un rapide créneau de 15 min"
 - ❌ JAMAIS de phrases bateau : "recruter crée un dilemme : technique vs business"
 - ❌ JAMAIS proposer un appel téléphonique directement
 
 VALIDATION CRITIQUE AVANT ENVOI :
-1. Les expertises proposées correspondent-elles EXACTEMENT aux compétences détectées ? → Si NON : RECOMMENCER
-2. L'observation mentionne-t-elle les compétences RARES du poste ? → Si NON : RECOMMENCER
-3. Le message fait-il plus de 120 mots ? → Si OUI : RÉDUIRE
+1. Les profils proposés mentionnent-ils EXPLICITEMENT les compétences détectées ? → Si NON : RECOMMENCER
+2. L'observation mentionne-t-elle au moins 2 compétences RARES entre parenthèses ? → Si NON : RECOMMENCER
+3. Y a-t-il des formulations vagues type "expertise", "maîtrise", "expérience" SANS précision ? → Si OUI : RECOMMENCER
+4. Le message fait-il plus de 120 mots ? → Si OUI : RÉDUIRE
 
 Génère le message 2 selon ces règles STRICTES.
 """
