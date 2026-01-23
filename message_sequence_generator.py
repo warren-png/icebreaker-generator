@@ -786,3 +786,4 @@ def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_
         print(f"❌ Erreur lors de la génération : {e}")
         print("🔄 Génération d'une séquence de fallback...")
         return generate_fallback_sequence(prospect_data, job_posting_data, message_1_content)
+    

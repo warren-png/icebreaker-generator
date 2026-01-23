@@ -5,6 +5,7 @@ Modifications V3 :
 - Système de scoring 1-5 basé sur l'alignement hook/poste
 - Sélection du hook le PLUS pertinent (pas juste le premier valide)
 - Logs détaillés pour transparence
+- COMPLET avec fonctions Apify pour app_streamlit.py
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -18,9 +19,196 @@ from prospection_utils.logger import log_event, log_error
 from prospection_utils.cost_tracker import tracker
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
 
 if not ANTHROPIC_API_KEY:
     raise ValueError("❌ ANTHROPIC_API_KEY non trouvée")
+
+
+# ========================================
+# FONCTIONS APIFY (POUR APP_STREAMLIT.PY)
+# ========================================
+
+def init_apify_client():
+    """
+    Initialise le client Apify
+    """
+    try:
+        from apify_client import ApifyClient
+        
+        if not APIFY_API_TOKEN:
+            raise ValueError("❌ APIFY_API_TOKEN non trouvée")
+        
+        client = ApifyClient(APIFY_API_TOKEN)
+        log_event('apify_client_initialized', {'success': True})
+        return client
+        
+    except ImportError:
+        log_error('apify_import_error', 'apify_client non installé', {})
+        raise ImportError("❌ Installez apify-client : pip install apify-client")
+    
+    except Exception as e:
+        log_error('apify_init_error', str(e), {})
+        raise
+
+
+def scrape_linkedin_profile(apify_client, linkedin_url):
+    """
+    Scrape un profil LinkedIn via Apify
+    """
+    try:
+        log_event('scrape_linkedin_profile_start', {'url': linkedin_url})
+        
+        # Lancer l'actor Apify pour scraper le profil
+        run_input = {
+            "startUrls": [{"url": linkedin_url}],
+            "proxyConfiguration": {"useApifyProxy": True}
+        }
+        
+        run = apify_client.actor("apify/linkedin-profile-scraper").call(run_input=run_input)
+        
+        # Récupérer les résultats
+        items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
+        
+        if items:
+            profile_data = items[0]
+            log_event('scrape_linkedin_profile_success', {'items_count': len(items)})
+            return profile_data
+        else:
+            log_event('scrape_linkedin_profile_empty', {'url': linkedin_url})
+            return {}
+        
+    except Exception as e:
+        log_error('scrape_linkedin_profile_error', str(e), {'url': linkedin_url})
+        return {}
+
+
+def scrape_linkedin_posts(apify_client, linkedin_url):
+    """
+    Scrape les posts LinkedIn d'un profil via Apify
+    """
+    try:
+        log_event('scrape_linkedin_posts_start', {'url': linkedin_url})
+        
+        # Extraire l'ID du profil depuis l'URL
+        profile_id = linkedin_url.rstrip('/').split('/')[-1]
+        
+        run_input = {
+            "startUrls": [{"url": f"https://www.linkedin.com/in/{profile_id}/recent-activity/all/"}],
+            "maxPosts": 10,
+            "proxyConfiguration": {"useApifyProxy": True}
+        }
+        
+        run = apify_client.actor("apify/linkedin-posts-scraper").call(run_input=run_input)
+        items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
+        
+        if items:
+            log_event('scrape_linkedin_posts_success', {'posts_count': len(items)})
+            return items
+        else:
+            log_event('scrape_linkedin_posts_empty', {'url': linkedin_url})
+            return []
+        
+    except Exception as e:
+        log_error('scrape_linkedin_posts_error', str(e), {'url': linkedin_url})
+        return []
+
+
+def extract_hooks_with_claude(profile_data, posts_data, web_results, company_data, 
+                               news_results, full_name, company_name):
+    """
+    Extrait les meilleurs hooks depuis les données scrapées via Claude
+    """
+    try:
+        log_event('extract_hooks_start', {'full_name': full_name})
+        
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        
+        # Préparer le contexte pour Claude
+        context = f"""
+PROFIL : {full_name} - {company_name}
+
+POSTS LINKEDIN :
+{format_posts_for_extraction(posts_data)}
+
+PROFIL LINKEDIN :
+{format_profile_for_extraction(profile_data)}
+"""
+        
+        prompt = f"""Analyse ces données LinkedIn et extrait les 3-5 meilleurs hooks pour un message de prospection.
+
+{context}
+
+Un bon hook est :
+- Récent (moins de 3 mois)
+- Professionnel et pertinent
+- Spécifique (mention d'un événement, projet, accomplissement)
+- Authentique (vérifiable)
+
+Retourne UNIQUEMENT une liste JSON des hooks :
+[
+  {{"text": "hook 1", "type": "post", "date": "2024-01"}},
+  {{"text": "hook 2", "type": "certification", "date": "2024-02"}}
+]
+"""
+        
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        tracker.track(message.usage, 'extract_hooks_with_claude')
+        
+        result = message.content[0].text.strip()
+        
+        # Parser le JSON retourné
+        import json
+        try:
+            hooks = json.loads(result)
+            log_event('extract_hooks_success', {'hooks_count': len(hooks)})
+            return hooks
+        except json.JSONDecodeError:
+            log_event('extract_hooks_json_error', {'raw_result': result})
+            return "NOT_FOUND"
+        
+    except Exception as e:
+        log_error('extract_hooks_error', str(e), {'full_name': full_name})
+        return "NOT_FOUND"
+
+
+def format_posts_for_extraction(posts_data):
+    """Formate les posts pour l'extraction de hooks"""
+    if not posts_data:
+        return "Aucun post disponible"
+    
+    formatted = []
+    for i, post in enumerate(posts_data[:5]):  # Prendre les 5 derniers posts
+        text = post.get('text', '')
+        date = post.get('date', 'N/A')
+        formatted.append(f"Post {i+1} ({date}):\n{text[:300]}")
+    
+    return "\n\n".join(formatted)
+
+
+def format_profile_for_extraction(profile_data):
+    """Formate le profil pour l'extraction de hooks"""
+    if not profile_data:
+        return "Aucune donnée de profil disponible"
+    
+    return f"""
+Titre : {profile_data.get('headline', 'N/A')}
+Entreprise : {profile_data.get('company', 'N/A')}
+Expériences : {profile_data.get('experiences', [])}
+Certifications : {profile_data.get('certifications', [])}
+"""
+
+
+def generate_advanced_icebreaker(prospect_data, hooks_data, job_posting_data):
+    """
+    Wrapper pour appeler generate_icebreaker (pour compatibilité avec app_streamlit.py)
+    """
+    return generate_icebreaker(prospect_data, hooks_data, job_posting_data)
 
 
 # ========================================
