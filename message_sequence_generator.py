@@ -478,8 +478,11 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
         tool_keywords = [
             'tagetik', 'sap', 'anaplan', 'hyperion', 'oracle', 'sage', 'louma', 
             'power bi', 'powerbi', 'tableau', 'excel', 'python', 'r', 'sql', 'onestream',
-            'agile', 'scrum', 'kanban', 'safe', 'prince2',  # Méthodologies
-            'copilot', 'chatgpt', 'ia', 'ai', 'machine learning'  # IA
+            'agile', 'scrum', 'kanban', 'safe', 'prince2', 'pmp',  # Méthodologies
+            'copilot', 'chatgpt', 'ia', 'ai', 'intelligence artificielle',  # IA
+            'machine learning', 'ml', 'deep learning', 'data science',  # Data Science
+            'jupyter', 'pandas', 'numpy', 'tensorflow', 'scikit-learn',  # Outils Python
+            'azure', 'aws', 'gcp', 'cloud'  # Cloud
         ]
         tools = [tool for tool in tool_keywords if flexible_match(tool, job_text)]
         
@@ -531,17 +534,6 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
                 log_event('fallback_extraction_success', {'terms': extracted_terms})
             else:
                 log_event('fallback_extraction_failed', {'desc_length': len(job_desc)})
-            # ========== DEBUG START ==========
-                print("\n" + "="*80)
-                print("🔍 DEBUG EXTRACTION DES COMPÉTENCES")
-                print("="*80)
-                print(f"📄 Job title: {job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'}")
-                print(f"📝 Job desc length: {len(str(job_posting_data.get('description', ''))) if job_posting_data else 0} chars")
-                print(f"\n🔧 Tools détectés ({len(tools)}): {tools[:5]}")
-                print(f"🎯 Technical skills détectés ({len(technical_skills)}): {technical_skills[:5]}")
-                print(f"💡 Soft skills détectés ({len(soft_skills)}): {soft_skills[:3]}")
-                print("="*80 + "\n")
-            # ========== DEBUG END ==========            
     
     expertises_detected = f"Outils: {', '.join(tools[:3]) if tools else 'N/A'} | Techniques: {', '.join(technical_skills[:3]) if technical_skills else 'N/A'} | Transverses: {', '.join(soft_skills[:2]) if soft_skills else 'N/A'}"
     
@@ -686,17 +678,7 @@ VALIDATION CRITIQUE AVANT ENVOI :
 
 Génère le message 2 selon ces règles STRICTES.
 """
-            # ========== DEBUG START ==========
-    print("\n" + "="*80)
-    print("🔍 DEBUG EXTRACTION DES COMPÉTENCES")
-    print("="*80)
-    print(f"📄 Job title: {job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'}")
-    print(f"📝 Job desc length: {len(str(job_posting_data.get('description', ''))) if job_posting_data else 0} chars")
-    print(f"\n🔧 Tools détectés ({len(tools)}): {tools[:5]}")
-    print(f"🎯 Technical skills détectés ({len(technical_skills)}): {technical_skills[:5]}")
-    print(f"💡 Soft skills détectés ({len(soft_skills)}): {soft_skills[:3]}")
-    print("="*80 + "\n")
-    # ========== DEBUG END ==========   
+    
     try:
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -706,15 +688,6 @@ Génère le message 2 selon ces règles STRICTES.
         
         tracker.track(message.usage, 'generate_message_2')
         result = message.content[0].text
-             # ========== DEBUG RESPONSE ==========
-        print("\n" + "="*80)
-        print("📨 RÉPONSE DE CLAUDE API")
-        print("="*80)
-        print(f"Longueur: {len(result)} caractères")
-        print(f"Contient 'J'ai identifié 2 profils': {'OUI' if 'identifié 2 profils' in result.lower() else 'NON'}")
-        print(f"Contient 'rapide créneau': {'OUI ❌' if 'rapide créneau' in result.lower() or '15 min' in result.lower() else 'NON ✅'}")
-        print("="*80 + "\n")
-            # ========== DEBUG END ==========
         
         log_event('generate_message_2_success', {'length': len(result)})
         return result
@@ -816,4 +789,3 @@ def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_
         print(f"❌ Erreur lors de la génération : {e}")
         print("🔄 Génération d'une séquence de fallback...")
         return generate_fallback_sequence(prospect_data, job_posting_data, message_1_content)
-    

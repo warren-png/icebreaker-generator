@@ -60,12 +60,13 @@ def scrape_linkedin_profile(apify_client, linkedin_url):
         log_event('scrape_linkedin_profile_start', {'url': linkedin_url})
         
         # Lancer l'actor Apify pour scraper le profil
+        # Utilise dev_fusion/Linkedin-Profile-Scraper (No Cookies)
         run_input = {
-            "startUrls": [{"url": linkedin_url}],
+            "startUrls": [linkedin_url],
             "proxyConfiguration": {"useApifyProxy": True}
         }
         
-        run = apify_client.actor("apify/linkedin-profile-scraper").call(run_input=run_input)
+        run = apify_client.actor("dev_fusion/Linkedin-Profile-Scraper").call(run_input=run_input)
         
         # Récupérer les résultats
         items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
@@ -90,16 +91,14 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
     try:
         log_event('scrape_linkedin_posts_start', {'url': linkedin_url})
         
-        # Extraire l'ID du profil depuis l'URL
-        profile_id = linkedin_url.rstrip('/').split('/')[-1]
-        
+        # Utilise supreme_coder/linkedin-post
         run_input = {
-            "startUrls": [{"url": f"https://www.linkedin.com/in/{profile_id}/recent-activity/all/"}],
-            "maxPosts": 10,
+            "startUrls": [linkedin_url],
+            "resultsLimit": 10,
             "proxyConfiguration": {"useApifyProxy": True}
         }
         
-        run = apify_client.actor("apify/linkedin-posts-scraper").call(run_input=run_input)
+        run = apify_client.actor("supreme_coder/linkedin-post").call(run_input=run_input)
         items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
         
         if items:
@@ -719,3 +718,4 @@ Le défi principal que nous observons est de trouver des profils qui allient exp
 Seriez-vous ouvert à échanger sur vos enjeux actuels ?
 
 Bien à vous,"""
+    
