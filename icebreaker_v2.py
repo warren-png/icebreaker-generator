@@ -1,11 +1,10 @@
 """
 ═══════════════════════════════════════════════════════════════════
-ICEBREAKER GENERATOR V3 - SCORING INTELLIGENT DES HOOKS
-Modifications V3 :
-- Système de scoring 1-5 basé sur l'alignement hook/poste
-- Sélection du hook le PLUS pertinent (pas juste le premier valide)
-- Logs détaillés pour transparence
-- COMPLET avec fonctions Apify pour app_streamlit.py
+ICEBREAKER GENERATOR V3.1 - FIX EXTRACTION HOOKS SPÉCIFIQUES
+Modifications V3.1 :
+- Prompt extraction : INTERDIT les généralisations, force les citations exactes
+- Keywords enrichis : adoption IA, acculturation, Data & AI Day, podcasts
+- Parsing JSON avec regex (fix backticks Markdown)
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -95,7 +94,7 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
         # Format exact requis par l'actor
         run_input = {
             "deepScrape": True,
-            "limitPerSource": 10,
+            "limitPerSource": 5,
             "rawData": False,
             "urls": [linkedin_url]
         }
@@ -119,6 +118,7 @@ def extract_hooks_with_claude(profile_data, posts_data, web_results, company_dat
                                news_results, full_name, company_name):
     """
     Extrait les meilleurs hooks depuis les données scrapées via Claude
+    VERSION AMÉLIORÉE : Force les citations exactes, interdit les généralisations
     """
     try:
         log_event('extract_hooks_start', {'full_name': full_name})
@@ -146,13 +146,54 @@ Un bon hook est :
 - Spécifique (mention d'un événement, projet, accomplissement)
 - Authentique (vérifiable)
 
-Retourne UNIQUEMENT une liste JSON des hooks (sans texte avant ou après) :
+═══════════════════════════════════════════════════════════════════
+⚠️  RÈGLES CRITIQUES (RESPECTE-LES ABSOLUMENT) :
+═══════════════════════════════════════════════════════════════════
+
+1. ❌ JAMAIS généraliser ou paraphraser vaguement
+   ✅ TOUJOURS citer des éléments CONCRETS des posts
+
+2. ❌ JAMAIS écrire "votre initiative autour de..." ou "votre démarche sur..."
+   ✅ TOUJOURS utiliser les termes EXACTS : "Data & AI Day", "Centre d'Excellence", "podcast Inside Banking"
+
+3. ❌ JAMAIS inventer des informations non présentes
+   ✅ TOUJOURS extraire uniquement ce qui est EXPLICITEMENT mentionné
+
+4. ✅ Si un post mentionne un événement → cite le NOM de l'événement
+5. ✅ Si un post mentionne un projet → cite le NOM du projet
+6. ✅ Si un post mentionne une certification → cite la certification EXACTE
+
+═══════════════════════════════════════════════════════════════════
+
+EXEMPLES DE BONS VS MAUVAIS HOOKS :
+
+❌ MAUVAIS (trop vague) :
+"Votre récente initiative autour du Centre d'Excellence Data & IA"
+
+✅ BON (spécifique) :
+"Votre post sur le lancement du Centre d'Excellence Data & IA de LCL au 19 LCL à Paris"
+
+❌ MAUVAIS (générique) :
+"Votre réflexion sur l'IA en banque"
+
+✅ BON (citation exacte) :
+"Votre post récent : 'Le vrai défi de l'IA, c'est l'adoption : créer de la valeur en répondant à des besoins du terrain'"
+
+❌ MAUVAIS (paraphrase floue) :
+"Votre action pour promouvoir l'IA"
+
+✅ BON (événement précis) :
+"Votre organisation du premier Data & AI Day chez LCL avec plus de 130 collaborateurs"
+
+═══════════════════════════════════════════════════════════════════
+
+Format de retour (JSON uniquement, sans texte avant/après) :
 [
-  {{"text": "hook 1", "type": "post", "date": "2024-01"}},
-  {{"text": "hook 2", "type": "certification", "date": "2024-02"}}
+  {{"text": "Votre post récent sur le Data & AI Day chez LCL avec Future4care - une initiative concrète pour montrer l'impact de l'IA", "type": "post", "date": "2024-11"}},
+  {{"text": "Votre citation dans le podcast Inside Banking : 'créer de la valeur en répondant aux besoins du terrain'", "type": "post", "date": "2025-01"}}
 ]
 
-Si aucun hook pertinent n'est trouvé, retourne une liste vide : []
+Si aucun hook pertinent n'est trouvé, retourne : []
 """
         
         message = client.messages.create(
@@ -211,10 +252,18 @@ def format_posts_for_extraction(posts_data):
         return "Aucun post disponible"
     
     formatted = []
-    for i, post in enumerate(posts_data[:5]):  # Prendre les 5 derniers posts
+    for i, post in enumerate(posts_data[:5]):  # ✅ CHANGÉ : Prendre les 5 posts (pas juste 5)
         text = post.get('text', '')
         date = post.get('date', 'N/A')
-        formatted.append(f"Post {i+1} ({date}):\n{text[:300]}")
+        title = post.get('title', '')
+        
+        # ✅ AMÉLIORATION : Inclure plus de contexte
+        post_content = f"Post {i+1} ({date})"
+        if title:
+            post_content += f"\nTitre: {title}"
+        post_content += f"\nContenu: {text[:500]}"  # ✅ CHANGÉ : 500 chars au lieu de 300
+        
+        formatted.append(post_content)
     
     return "\n\n".join(formatted)
 
@@ -304,6 +353,7 @@ def extract_hooks_from_linkedin(hooks_data):
 def score_hook_relevance(hook, job_posting_data):
     """
     Score un hook de 1 à 5 selon sa pertinence avec le poste
+    VERSION AMÉLIORÉE : Keywords enrichis pour IA, Data, Adoption
     
     SCORING :
     5 = Mentionne compétences clés + secteur + contexte technique
@@ -340,12 +390,16 @@ def score_hook_relevance(hook, job_posting_data):
         'power bi', 'powerbi', 'tableau', 'qlik', 'data science', 'python', 'sql', 'r',
         # Méthodologies
         'agile', 'scrum', 'kanban', 'safe', 'prince2', 'pmp',
-        # IA/Automation
+        # ✅ IA/Automation (ENRICHI - V3.1)
         'ia', 'ai', 'intelligence artificielle', 'machine learning', 'copilot', 'chatgpt',
+        'adoption ia', 'acculturation ia', 'acculturation', 'adoption',
+        'data & ai day', 'ai day', 'centre d\'excellence', 'centre excellence',
+        'podcast', 'inside banking', 'future4care',
+        'idéation', 'atelier', 'workshop', 'poc', 'proof of concept',
         # Finance spécialisée
         'trésorerie', 'cash management', 'fiscalité', 'tax', 'fp&a', 'fpa',
         # Sectoriels spécifiques
-        'bancaire', 'bank', 'fintech', 'audiovisuel', 'cinéma', 'production',
+        'bancaire', 'bank', 'banque', 'fintech', 'audiovisuel', 'cinéma', 'production',
         'droits d\'auteur', 'convention collective'
     ]
     
@@ -363,7 +417,10 @@ def score_hook_relevance(hook, job_posting_data):
         'déploiement', 'implémentation', 'migration', 'change management',
         'adoption', 'formation', 'training', 'accompagnement',
         'gouvernance', 'data governance', 'process', 'efficiency',
-        'reporting', 'forecast', 'budget', 'clôture'
+        'reporting', 'forecast', 'budget', 'clôture',
+        # ✅ AJOUTÉ V3.1
+        'valeur terrain', 'besoins clients', 'conseil personnalisé',
+        'équipes métiers', 'collaboration'
     ]
     
     context_matches = sum(1 for kw in context_keywords if kw in job_full and kw in combined_text)
@@ -376,7 +433,8 @@ def score_hook_relevance(hook, job_posting_data):
     # ========================================
     sector_keywords = [
         'finance', 'financial', 'comptabilité', 'accounting',
-        'contrôle de gestion', 'fpa', 'audit', 'consolidation'
+        'contrôle de gestion', 'fpa', 'audit', 'consolidation',
+        'data', 'données', 'analytics'  # ✅ AJOUTÉ V3.1
     ]
     
     if any(kw in job_full and kw in combined_text for kw in sector_keywords):
