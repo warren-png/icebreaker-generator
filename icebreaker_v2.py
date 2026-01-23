@@ -146,11 +146,13 @@ Un bon hook est :
 - Spécifique (mention d'un événement, projet, accomplissement)
 - Authentique (vérifiable)
 
-Retourne UNIQUEMENT une liste JSON des hooks :
+Retourne UNIQUEMENT une liste JSON des hooks (sans texte avant ou après) :
 [
   {{"text": "hook 1", "type": "post", "date": "2024-01"}},
   {{"text": "hook 2", "type": "certification", "date": "2024-02"}}
 ]
+
+Si aucun hook pertinent n'est trouvé, retourne une liste vide : []
 """
         
         message = client.messages.create(
@@ -163,19 +165,44 @@ Retourne UNIQUEMENT une liste JSON des hooks :
         
         result = message.content[0].text.strip()
         
-        # Parser le JSON retourné
+        # ✅ CORRECTION : Parser le JSON en gérant les backticks Markdown
         import json
+        
+        # Essayer d'extraire le JSON depuis les backticks Markdown
+        json_match = re.search(r'```json\s*(\[.*?\])\s*```', result, re.DOTALL)
+        
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # Si pas de backticks, chercher directement le tableau JSON
+            json_array_match = re.search(r'(\[.*?\])', result, re.DOTALL)
+            if json_array_match:
+                json_str = json_array_match.group(1)
+            else:
+                json_str = result
+        
         try:
-            hooks = json.loads(result)
+            hooks = json.loads(json_str)
+            
+            # Valider que c'est bien une liste
+            if not isinstance(hooks, list):
+                log_event('extract_hooks_invalid_format', {'type': type(hooks).__name__})
+                return []
+            
             log_event('extract_hooks_success', {'hooks_count': len(hooks)})
             return hooks
-        except json.JSONDecodeError:
-            log_event('extract_hooks_json_error', {'raw_result': result})
-            return "NOT_FOUND"
+            
+        except json.JSONDecodeError as e:
+            log_event('extract_hooks_json_error', {
+                'raw_result': result[:500],
+                'cleaned_json': json_str[:500] if 'json_str' in locals() else 'N/A',
+                'error': str(e)
+            })
+            return []
         
     except Exception as e:
         log_error('extract_hooks_error', str(e), {'full_name': full_name})
-        return "NOT_FOUND"
+        return []
 
 
 def format_posts_for_extraction(posts_data):
@@ -720,4 +747,3 @@ Le défi principal que nous observons est de trouver des profils qui allient exp
 Seriez-vous ouvert à échanger sur vos enjeux actuels ?
 
 Bien à vous,"""
-    
