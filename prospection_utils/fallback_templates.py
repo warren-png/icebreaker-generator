@@ -1,7 +1,6 @@
 """
 Templates de fallback pour quand l'API Claude est indisponible
-Messages pré-écrits de qualité pour éviter les crashs
-Version: 1.0
+VERSION V27 : Fallbacks intelligents qui utilisent les compétences détectées
 """
 
 import re
@@ -24,43 +23,46 @@ FALLBACK_SUBJECTS = {
 }
 
 # ========================================
-# TEMPLATES MESSAGES
+# TEMPLATES MESSAGES (AMÉLIORÉS V27)
 # ========================================
 
 FALLBACK_MESSAGE_1 = """Bonjour {first_name},
 
-Je me permets de vous contacter concernant {context}.
+J'ai consulté votre annonce pour le poste de {context}.
 
-Le marché des profils finance combine rarement expertise technique et vision business. C'est précisément sur l'identification de ces profils hybrides que j'accompagne mes clients.
+Le marché actuel rend ce type de recrutement particulièrement complexe : trouver des profils qui combinent expertise technique et capacités relationnelles devient rare.
 
-Seriez-vous ouvert à un échange de 15 minutes sur ce sujet ?
+Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
 
-Cordialement,
-{signature}"""
+Bien à vous,"""
 
-FALLBACK_MESSAGE_2 = """Bonjour {first_name},
+FALLBACK_MESSAGE_2_INTELLIGENT = """Bonjour {first_name},
 
-Je fais suite à mon message concernant {context}.
+Je me permets de vous relancer concernant votre recherche de {context}.
 
-En observant le marché, recruter des profils finance crée souvent un dilemme : soit on a la technique mais pas le business, soit l'inverse. Les profils qui combinent les deux sont rares et très sollicités.
+{pain_point_observation}
 
-C'est précisément sur l'identification de ces profils hybrides que j'accompagne mes clients.
+J'ai identifié 2 profils qui pourraient retenir votre attention :
+{profile_1}
+{profile_2}
 
-Auriez-vous un rapide créneau de 15 min prochainement ou seriez-vous ouvert à recevoir des candidatures qui correspondent à votre besoin ?
+Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait de juger leur pertinence en 30 secondes.
 
-Cordialement,
-{signature}"""
+Bien à vous,"""
 
-FALLBACK_MESSAGE_3 = """Bonjour {first_name},
+FALLBACK_MESSAGE_3_FIXED = """Bonjour {first_name},
 
-Sans retour de votre part, je ne vous solliciterai plus sur ce sujet.
+Je comprends que vous n'ayez pas eu le temps de revenir vers moi — je sais à quel point vos fonctions sont sollicitées.
 
-Le marché des profils finance senior est particulièrement tendu. D'après nos observations, 70% des recrutements sur ces postes prennent plus de 3 mois.
+Avant de clore le dossier de mon côté, une dernière question : Est-ce que le timing n'est simplement pas bon pour l'instant, ou bien travaillez-vous déjà avec d'autres cabinets/recruteurs sur ce poste ?
 
-Je clos ce dossier. Si toutefois la tension sur ces compétences spécifiques venait à freiner vos projets, je reste à votre disposition.
+Si c'est une question de timing, je serai ravi de reprendre contact dans quelques semaines.
 
-Bonne continuation,
-{signature}"""
+Si vous préférez gérer ce recrutement autrement, aucun souci — je vous souhaite de trouver la perle rare rapidement.
+
+Merci en tous cas pour votre attention,
+
+Bonne continuation,"""
 
 # ========================================
 # FONCTIONS DE GÉNÉRATION
@@ -91,12 +93,28 @@ def get_fallback_context(job_posting_data, prospect_data):
 
 
 def get_fallback_firstname(prospect_data):
-    """Trouve le prénom ou retourne placeholder"""
-    target_keys = ['first_name', 'firstname', 'first name', 'prénom', 'prenom', 'name']
+    """
+    Trouve le prénom ou retourne placeholder
+    VERSION V27 : Gestion correcte des champs Leonar
+    """
+    target_keys = [
+        'first_name', 'firstname', 'first name', 
+        'prénom', 'prenom', 'name',
+        'user_first_name', 'user_firstname'
+    ]
+    
     for key, value in prospect_data.items():
         if str(key).lower().strip() in target_keys:
             if value and str(value).strip():
                 return str(value).strip().capitalize()
+    
+    # Dernier recours : splitter full_name
+    full_name = prospect_data.get('full_name') or prospect_data.get('user_full name')
+    if full_name and ' ' in str(full_name):
+        parts = str(full_name).split()
+        if len(parts) >= 1:
+            return parts[0].capitalize()
+    
     return "[Prénom]"
 
 
@@ -120,15 +138,69 @@ def generate_fallback_subjects(prospect_data, job_posting_data):
     return "\n".join(subjects)
 
 
-def generate_fallback_message(message_number, prospect_data, job_posting_data, signature="[Votre signature]"):
+def extract_skills_for_fallback(job_posting_data):
+    """
+    Extrait compétences de base pour fallback intelligent
+    VERSION V27 : Extraction simplifiée mais efficace
+    """
+    skills = {
+        'tools': [],
+        'technical': [],
+        'soft': [],
+        'sector': 'le secteur'
+    }
+    
+    if not job_posting_data:
+        return skills
+    
+    job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+    
+    # Outils basiques
+    tools_map = {
+        'tagetik': 'Tagetik', 'anaplan': 'Anaplan', 'sap': 'SAP',
+        'excel': 'Excel', 'power bi': 'Power BI', 'python': 'Python', 'sql': 'SQL'
+    }
+    
+    for keyword, tool in tools_map.items():
+        if keyword in job_text and tool not in skills['tools']:
+            skills['tools'].append(tool)
+    
+    # Compétences techniques basiques
+    if 'data science' in job_text or 'machine learning' in job_text:
+        skills['technical'].append('Data Science')
+    if 'consolidation' in job_text or 'ifrs' in job_text:
+        skills['technical'].append('consolidation IFRS')
+    if 'audit' in job_text:
+        skills['technical'].append('audit interne')
+    if 'comptabilité' in job_text or 'comptable' in job_text:
+        skills['technical'].append('comptabilité')
+    
+    # Compétences soft basiques
+    if 'change' in job_text or 'changement' in job_text:
+        skills['soft'].append('conduite du changement')
+    if 'formation' in job_text or 'training' in job_text:
+        skills['soft'].append('formation')
+    if 'agile' in job_text or 'scrum' in job_text:
+        skills['soft'].append('Agile')
+    
+    # Secteur
+    if 'banc' in job_text or 'bank' in job_text:
+        skills['sector'] = 'le secteur bancaire'
+    elif 'fintech' in job_text:
+        skills['sector'] = 'la fintech'
+    
+    return skills
+
+
+def generate_fallback_message(message_number, prospect_data, job_posting_data):
     """
     Génère un message de fallback
+    VERSION V27 : Message 2 intelligent, Message 3 fixe
     
     Args:
         message_number (int): 1, 2 ou 3
         prospect_data (dict): Données du prospect
         job_posting_data (dict): Données de l'annonce
-        signature (str): Signature à inclure
     
     Returns:
         str: Message de fallback formaté
@@ -137,35 +209,58 @@ def generate_fallback_message(message_number, prospect_data, job_posting_data, s
     first_name = get_fallback_firstname(prospect_data)
     context_name, is_hiring = get_fallback_context(job_posting_data, prospect_data)
     
-    # Sélectionner le template
+    # MESSAGE 1 : Template simple
     if message_number == 1:
-        template = FALLBACK_MESSAGE_1
+        return FALLBACK_MESSAGE_1.format(
+            first_name=first_name,
+            context=context_name
+        )
+    
+    # MESSAGE 2 : Intelligent avec compétences
     elif message_number == 2:
-        template = FALLBACK_MESSAGE_2
+        skills = extract_skills_for_fallback(job_posting_data)
+        
+        # Construire observation
+        if skills['tools'] and skills['technical']:
+            pain_point_observation = f"Le marché combine difficilement {skills['technical'][0]} ({', '.join(skills['tools'][:2])}) et {skills['soft'][0] if skills['soft'] else 'compétences transverses'} dans {skills['sector']}."
+        else:
+            pain_point_observation = "Le marché actuel rend ce type de recrutement particulièrement complexe : trouver des profils qui combinent expertise technique et vision business devient rare."
+        
+        # Construire profils
+        tool_1 = skills['tools'][0] if skills['tools'] else 'outils métier'
+        tool_2 = skills['tools'][1] if len(skills['tools']) > 1 else 'Excel avancé'
+        tech_1 = skills['technical'][0] if skills['technical'] else 'expertise technique'
+        
+        profile_1 = f"- L'un possède une expertise {tech_1} avec maîtrise de {tool_1}, ayant piloté des projets de transformation dans un grand groupe avec forte autonomie opérationnelle."
+        profile_2 = f"- L'autre combine {tech_1} et {skills['soft'][0] if skills['soft'] else 'conduite du changement'}, issu d'un environnement international avec expérience significative en {tool_2}."
+        
+        return FALLBACK_MESSAGE_2_INTELLIGENT.format(
+            first_name=first_name,
+            context=context_name,
+            pain_point_observation=pain_point_observation,
+            profile_1=profile_1,
+            profile_2=profile_2
+        )
+    
+    # MESSAGE 3 : Template fixe
     elif message_number == 3:
-        template = FALLBACK_MESSAGE_3
+        return FALLBACK_MESSAGE_3_FIXED.format(
+            first_name=first_name
+        )
+    
     else:
         raise ValueError(f"message_number doit être 1, 2 ou 3 (reçu: {message_number})")
-    
-    # Formater le message
-    message = template.format(
-        first_name=first_name,
-        context=context_name,
-        signature=signature
-    )
-    
-    return message
 
 
-def generate_fallback_sequence(prospect_data, job_posting_data, message_1_content=None, signature="[Votre signature]"):
+def generate_fallback_sequence(prospect_data, job_posting_data, message_1_content=None):
     """
     Génère une séquence complète de fallback
+    VERSION V27 : Fallbacks intelligents
     
     Args:
         prospect_data (dict): Données du prospect
         job_posting_data (dict): Données de l'annonce
         message_1_content (str): Contenu du message 1 si déjà généré
-        signature (str): Signature à inclure
     
     Returns:
         dict: Séquence complète
@@ -173,10 +268,10 @@ def generate_fallback_sequence(prospect_data, job_posting_data, message_1_conten
     
     return {
         'subject_lines': generate_fallback_subjects(prospect_data, job_posting_data),
-        'message_1': message_1_content or generate_fallback_message(1, prospect_data, job_posting_data, signature),
-        'message_2': generate_fallback_message(2, prospect_data, job_posting_data, signature),
-        'message_3': generate_fallback_message(3, prospect_data, job_posting_data, signature),
-        'is_fallback': True  # Flag pour indiquer que c'est un fallback
+        'message_1': message_1_content or generate_fallback_message(1, prospect_data, job_posting_data),
+        'message_2': generate_fallback_message(2, prospect_data, job_posting_data),
+        'message_3': generate_fallback_message(3, prospect_data, job_posting_data),
+        'is_fallback': True
     }
 
 
@@ -187,6 +282,7 @@ def generate_fallback_sequence(prospect_data, job_posting_data, message_1_conten
 def get_fallback_if_needed(original_sequence, prospect_data, job_posting_data):
     """
     Vérifie si la séquence originale est OK, sinon retourne fallback
+    VERSION V27 : Fallback intelligent plutôt que générique
     
     Args:
         original_sequence (dict): Séquence générée par Claude
@@ -205,8 +301,8 @@ def get_fallback_if_needed(original_sequence, prospect_data, job_posting_data):
     required_keys = ['message_1', 'message_2', 'message_3']
     for key in required_keys:
         if key not in original_sequence or not original_sequence[key] or len(str(original_sequence[key])) < 20:
-            print(f"⚠️  Séquence corrompue ({key} invalide), utilisation fallback")
-            return generate_fallback_sequence(prospect_data, job_posting_data)
+            print(f"⚠️  Séquence corrompue ({key} invalide), utilisation fallback intelligent")
+            return generate_fallback_sequence(prospect_data, job_posting_data, original_sequence.get('message_1'))
     
     # Séquence originale OK
     return original_sequence

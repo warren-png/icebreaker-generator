@@ -1,6 +1,6 @@
 """
 Application Web Streamlit pour Icebreaker Generator
-VERSION CORRIGÉE v5.1 - Avec statistiques de génération
+VERSION V27 - Avec mapping prénom corrigé et statistiques de génération
 """
 
 import streamlit as st
@@ -39,29 +39,57 @@ except:
 PROCESSED_FILE = "processed_prospects.txt"
 
 def clean_message_format(message, first_name):
+    """
+    Nettoie le format du message
+    VERSION V27 : Nettoyage amélioré
+    """
     if not message: 
         return ""
+    
+    # S'assurer d'une ligne vide après "Bonjour {prénom},"
     pattern = r'(Bonjour ' + re.escape(first_name) + r',)\s*'
     message = re.sub(pattern, r'\1\n\n', message, count=1, flags=re.IGNORECASE)
+    
+    # Supprimer les lignes vides excessives
     message = re.sub(r'\n{3,}', '\n\n', message)
+    
+    # Capitaliser la première lettre après le bonjour
     pattern_lowercase = r'(Bonjour ' + re.escape(first_name) + r',\n\n)([a-zà-ÿ])'
     message = re.sub(pattern_lowercase, lambda m: m.group(1) + m.group(2).upper(), message, count=1, flags=re.IGNORECASE)
+    
+    # Supprimer les signatures parasites
     patterns_to_remove = [
         r'\n\nBien cordialement,?\s*\n+\[Prénom\]', 
         r'\nBien cordialement,\s*\[Prénom\]', 
         r'\n\[Prénom\]\s*$', 
-        r'Cordialement,\s*\[Prénom\]'
+        r'Cordialement,\s*\[Prénom\]',
+        r'\[Votre signature\]'
     ]
     for p in patterns_to_remove: 
-        message = re.sub(p, '\n\nBien cordialement', message)
+        message = re.sub(p, '', message)
+    
+    # S'assurer qu'on finit bien par "Bien à vous," ou "Bonne continuation,"
+    message = message.strip()
+    if not message.endswith('Bien à vous,') and not message.endswith('Bonne continuation,'):
+        if 'Bien à vous' in message:
+            message = message.rsplit('Bien à vous', 1)[0].strip() + '\n\nBien à vous,'
+        elif 'Bonne continuation' in message:
+            message = message.rsplit('Bonne continuation', 1)[0].strip() + '\n\nBonne continuation,'
+    
     return message.strip()
 
+
 def update_prospect_leonar(token, prospect_id, sequence_data):
+    """
+    Met à jour le prospect dans Leonar avec la séquence générée
+    VERSION V27 : Format amélioré
+    """
     try:
         subject_lines = sequence_data.get('subject_lines', '').strip()
         msg1 = sequence_data.get('message_1', '').strip()
         msg2 = sequence_data.get('message_2', '').strip()
         msg3 = sequence_data.get('message_3', '').strip()
+        
         formatted_notes = f"""═══════════════════════════════════════════════════════════════
 OBJETS SUGGÉRÉS (Choisir 1)
 ═══════════════════════════════════════════════════════════════
@@ -75,13 +103,13 @@ MESSAGE 1 (ICEBREAKER - J+0)
 {msg1}
 
 ═══════════════════════════════════════════════════════════════
-MESSAGE 2 (LE DILEMME - J+5)
+MESSAGE 2 (LA PROPOSITION - J+5)
 ═══════════════════════════════════════════════════════════════
 
 {msg2}
 
 ═══════════════════════════════════════════════════════════════
-MESSAGE 3 (BREAK-UP EXPERT - J+12)
+MESSAGE 3 (BREAK-UP - J+12)
 ═══════════════════════════════════════════════════════════════
 
 {msg3}
@@ -89,6 +117,7 @@ MESSAGE 3 (BREAK-UP EXPERT - J+12)
 ═══════════════════════════════════════════════════════════════
 FIN DE SÉQUENCE
 ═══════════════════════════════════════════════════════════════"""
+        
         requests.patch(
             f'https://dashboard.leonar.app/api/1.1/obj/matching/{prospect_id}', 
             headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}, 
@@ -96,10 +125,13 @@ FIN DE SÉQUENCE
             timeout=10
         )
         return True
-    except: 
+    except Exception as e:
+        print(f"❌ Erreur update Leonar: {e}")
         return False
 
+
 def get_leonar_token():
+    """Obtient un token d'authentification Leonar"""
     try:
         r = requests.post(
             'https://dashboard.leonar.app/api/1.1/wf/auth', 
@@ -110,17 +142,26 @@ def get_leonar_token():
     except: 
         return None
 
+
 def load_processed():
+    """Charge la liste des prospects déjà traités"""
     if os.path.exists(PROCESSED_FILE):
         with open(PROCESSED_FILE, 'r') as f: 
             return set(f.read().splitlines())
     return set()
 
+
 def save_processed(pid):
+    """Sauvegarde un prospect comme traité"""
     with open(PROCESSED_FILE, 'a') as f: 
         f.write(f"{pid}\n")
 
+
 def get_new_prospects_leonar(token):
+    """
+    Récupère les nouveaux prospects depuis Leonar
+    VERSION V27 : Meilleure extraction des données
+    """
     try:
         r = requests.get(
             f'https://dashboard.leonar.app/api/1.1/obj/matching?constraints=[{{"key":"campaign","constraint_type":"equals","value":"{LEONAR_CAMPAIGN_ID}"}}]&cursor=0', 
@@ -129,7 +170,10 @@ def get_new_prospects_leonar(token):
         )
         if r.status_code != 200: 
             return []
+        
         processed = load_processed()
+        
+        # Filtrer les prospects non traités
         return [
             p for p in r.json()['response']['results'] 
             if p['_id'] not in processed and (
@@ -138,15 +182,50 @@ def get_new_prospects_leonar(token):
                 'MESSAGE 1' not in p.get('notes', '')
             )
         ]
-    except: 
+    except Exception as e:
+        print(f"❌ Erreur get prospects: {e}")
         return []
+
+
+def extract_prospect_data(leonar_prospect):
+    """
+    Extrait les données du prospect depuis Leonar
+    VERSION V27 : Mapping correct des champs
+    """
+    # Extraire le prénom et nom depuis user_full name
+    full_name = leonar_prospect.get('user_full name', '')
+    first_name = ''
+    last_name = ''
+    
+    if full_name and ' ' in str(full_name):
+        parts = str(full_name).split()
+        first_name = parts[0] if len(parts) > 0 else ''
+        last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
+    
+    # Construire le dictionnaire de données
+    prospect_data = {
+        '_id': leonar_prospect.get('_id', ''),
+        'full_name': full_name,
+        'user_full name': full_name,  # Conserver le champ original
+        'first_name': first_name,
+        'last_name': last_name,
+        'company': leonar_prospect.get('linkedin_company', ''),
+        'linkedin_company': leonar_prospect.get('linkedin_company', ''),
+        'linkedin_url': leonar_prospect.get('linkedin_url', ''),
+        'headline': leonar_prospect.get('linkedin_headline', ''),
+        'title': leonar_prospect.get('linkedin_headline', ''),
+        'job_posting_url': ''  # Sera rempli plus tard
+    }
+    
+    return prospect_data
+
 
 # ========================================
 # INTERFACE PRINCIPALE
 # ========================================
 
 st.title("🎯 Icebreaker Generator + Leonar")
-st.markdown("*Génération automatique Séquence 3 Messages (Dilemme & Break-up)*")
+st.markdown("*Génération automatique Séquence 3 Messages optimisée V27*")
 st.divider()
 
 with st.sidebar:
@@ -168,12 +247,13 @@ tab1, tab2, tab3, tab4 = st.tabs(["📝 Test Manuel", "📊 Résultats Test", "�
 # ========================================
 with tab1:
     st.header("Test Manuel")
+    
     c1, c2 = st.columns(2)
     with c1: 
-        t_first = st.text_input("Prénom", "Thomas")
-        t_comp = st.text_input("Entreprise", "Green Energy")
+        t_first = st.text_input("Prénom", "Guillaume")
+        t_comp = st.text_input("Entreprise", "LCL")
     with c2: 
-        t_last = st.text_input("Nom", "Durand")
+        t_last = st.text_input("Nom", "Mullier")
         t_lnk = st.text_input("URL LinkedIn")
     
     t_job = st.text_input("URL Annonce")
@@ -183,7 +263,8 @@ with tab1:
             # Préparation des données
             prospect = {
                 'first_name': t_first, 
-                'last_name': t_last, 
+                'last_name': t_last,
+                'full_name': f"{t_first} {t_last}",
                 'company': t_comp, 
                 'linkedin_url': t_lnk, 
                 'job_posting_url': t_job
@@ -216,7 +297,7 @@ with tab1:
             st.subheader("✉️ Message 1 (Icebreaker)")
             st.info(clean_message_format(seq['message_1'], t_first))
             
-            st.subheader("✉️ Message 2 (Le Dilemme)")
+            st.subheader("✉️ Message 2 (La Proposition)")
             st.info(clean_message_format(seq['message_2'], t_first))
             
             st.subheader("✉️ Message 3 (Break-up)")
@@ -285,11 +366,13 @@ with tab4:
     job_urls_list = []
     if enable_job_scraping:
         st.subheader("📄 URLs des fiches de poste")
-        urls_input = st.text_area("URLs (une par ligne, ordre Leonar)", height=100)
+        st.caption("⚠️ IMPORTANT : Les URLs doivent être dans le MÊME ORDRE que les prospects dans Leonar")
+        urls_input = st.text_area("URLs (une par ligne, ordre Leonar)", height=150)
         if urls_input: 
             job_urls_list = [u.strip() for u in urls_input.split('\n') if u.strip()]
+            st.success(f"✅ {len(job_urls_list)} URLs détectées")
 
-    if st.button("🔄 Rafraîchir Liste"):
+    if st.button("🔄 Rafraîchir Liste des Prospects"):
         st.session_state.leonar_prospects = get_new_prospects_leonar(token)
     
     # Liste des prospects
@@ -298,9 +381,12 @@ with tab4:
         
         with st.expander("👥 Voir la liste des prospects (Cliquer pour dérouler)", expanded=True):
             for i, p in enumerate(st.session_state.leonar_prospects):
-                lnk = "✅" if p.get('linkedin_url') else "⚠️"
-                job_stat = "📄 Annonce dispo" if (job_urls_list and i < len(job_urls_list)) else "❌ Pas d'annonce"
-                st.write(f"**{i+1}. {p.get('user_full name', 'Inconnu')}** | {p.get('linkedin_company', '')} | {lnk} | {job_stat}")
+                full_name = p.get('user_full name', 'Inconnu')
+                company = p.get('linkedin_company', 'N/A')
+                lnk = "✅ LinkedIn" if p.get('linkedin_url') else "⚠️ Pas de LinkedIn"
+                job_stat = f"📄 URL {i+1}" if (job_urls_list and i < len(job_urls_list)) else "❌ Pas d'URL annonce"
+                
+                st.write(f"**{i+1}. {full_name}** | {company} | {lnk} | {job_stat}")
 
         if st.button("🚀 LANCER LA GÉNÉRATION COMPLÈTE", type="primary"):
             bar = st.progress(0)
@@ -309,46 +395,69 @@ with tab4:
             
             for i, p in enumerate(st.session_state.leonar_prospects):
                 bar.progress(i / len(st.session_state.leonar_prospects))
-                name = p.get('user_full name', 'Inconnu')
-                st_txt.write(f"⚙️ Traitement de **{name}**...")
+                
+                full_name = p.get('user_full name', 'Inconnu')
+                st_txt.write(f"⚙️ Traitement de **{full_name}**...")
                 
                 try:
+                    # Extraire les données du prospect
+                    p_data = extract_prospect_data(p)
+                    
+                    # Ajouter l'URL de l'annonce si disponible
                     j_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
-                    p_data = {
-                        'first_name': p.get('first_name', ''), 
-                        'last_name': p.get('last_name', ''), 
-                        'company': p.get('linkedin_company', ''), 
-                        'linkedin_url': p.get('linkedin_url', ''), 
-                        'job_posting_url': j_url
-                    }
+                    p_data['job_posting_url'] = j_url
                     
+                    # Scraping de l'annonce
                     j_data = scrape_job_posting(j_url) if j_url else None
-                    hooks = "NOT_FOUND"
                     
+                    # Extraction des hooks
+                    hooks = "NOT_FOUND"
                     if p_data['linkedin_url']:
                         prof = scrape_linkedin_profile(ac, p_data['linkedin_url'])
                         posts = scrape_linkedin_posts(ac, p_data['linkedin_url'])
-                        hooks = extract_hooks_with_claude(prof, posts, [], None, [], name, p_data['company'])
+                        hooks = extract_hooks_with_claude(
+                            prof, posts, [], None, [], 
+                            full_name, p_data['company']
+                        )
                     
+                    # Génération du message 1
                     m1 = generate_advanced_icebreaker(p_data, hooks, j_data)
                     m1 = clean_message_format(m1, p_data['first_name'])
                     
+                    # Génération de la séquence complète
                     full = generate_full_sequence(p_data, hooks, j_data, m1)
                     
+                    # Nettoyage des messages
                     full['message_2'] = clean_message_format(full['message_2'], p_data['first_name'])
                     full['message_3'] = clean_message_format(full['message_3'], p_data['first_name'])
                     
+                    # Update dans Leonar
                     if update_prospect_leonar(token, p['_id'], full):
                         save_processed(p['_id'])
-                        st.toast(f"✅ {name} OK")
+                        st.toast(f"✅ {full_name} OK")
                     else: 
-                        st.error(f"Erreur API Leonar pour {name}")
+                        st.error(f"❌ Erreur API Leonar pour {full_name}")
                         
                 except Exception as e: 
-                    st.error(f"Erreur pour {name}: {e}")
+                    st.error(f"❌ Erreur pour {full_name}: {e}")
+                    print(f"Détail erreur: {e}")
             
             bar.progress(1.0)
             st.success("✅ Traitement terminé !")
             st.balloons()
+            
+            # Afficher les statistiques finales
+            st.divider()
+            st.subheader("📊 Statistiques de la session")
+            summary = tracker.get_summary()
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Appels API totaux", summary['total_calls'])
+            with col2:
+                st.metric("Tokens totaux", f"{summary['total_tokens']:,}")
+            with col3:
+                st.metric("Coût total", f"${summary['total_cost_usd']}")
+    
     else:
-        st.info("Aucun nouveau prospect à traiter.")
+        st.info("Aucun nouveau prospect à traiter. Cliquez sur 'Rafraîchir Liste' pour vérifier.")
