@@ -150,7 +150,7 @@ def flexible_match(keyword, text):
 def extract_key_skills_from_job(job_posting_data, job_category):
     """
     Extrait les compétences clés de la fiche de poste
-    VERSION V27 : Extraction ultra-enrichie pour profils crédibles
+    VERSION V27.1 : Extraction précise - Ne jamais inventer d'outils absents
     """
     skills = {
         'tools': [],
@@ -166,69 +166,134 @@ def extract_key_skills_from_job(job_posting_data, job_category):
     job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
     
     # ========================================
-    # OUTILS SPÉCIFIQUES (ENRICHI)
+    # OUTILS SPÉCIFIQUES (ORDRE DE PRIORITÉ)
     # ========================================
-    tools_keywords = {
+    
+    # 1. OUTILS EPM (Priorité haute)
+    epm_tools = {
+        'pigment': 'Pigment',
+        'jedox': 'Jedox',
+        'lucanet': 'Lucanet',
         'tagetik': 'Tagetik',
         'anaplan': 'Anaplan',
         'hyperion': 'Hyperion',
         'onestream': 'OneStream',
         'sap bpc': 'SAP BPC',
-        'sap': 'SAP',
-        's/4hana': 'S/4HANA',
-        'oracle': 'Oracle',
-        'sage': 'Sage',
-        'sage x3': 'Sage X3',
-        'power bi': 'Power BI',
-        'powerbi': 'Power BI',
-        'tableau': 'Tableau',
-        'qlik': 'Qlik',
-        'excel': 'Excel',
-        'vba': 'VBA',
-        'power query': 'Power Query',
-        'python': 'Python',
-        'r': 'R',
-        'sql': 'SQL',
-        'spotfire': 'Spotfire',
-        'louma': 'Louma'
+        'board': 'Board'
     }
     
-    for keyword, tool_name in tools_keywords.items():
+    for keyword, tool_name in epm_tools.items():
         if flexible_match(keyword, job_text):
             if tool_name not in skills['tools']:
                 skills['tools'].append(tool_name)
     
+    # 2. ERP (Priorité haute)
+    erp_tools = {
+        'sap': 'SAP',
+        's/4hana': 'S/4HANA',
+        's4hana': 'S/4HANA',
+        'oracle': 'Oracle',
+        'sage': 'Sage',
+        'sage x3': 'Sage X3',
+        'dynamics': 'Dynamics'
+    }
+    
+    for keyword, tool_name in erp_tools.items():
+        if flexible_match(keyword, job_text):
+            if tool_name not in skills['tools']:
+                skills['tools'].append(tool_name)
+    
+    # 3. BI / DATA ANALYTICS (Seulement si explicitement mentionnés)
+    bi_tools = {
+        'power bi': 'Power BI',
+        'powerbi': 'Power BI',
+        'tableau': 'Tableau',
+        'qlik': 'Qlik',
+        'spotfire': 'Spotfire',
+        'looker': 'Looker'
+    }
+    
+    for keyword, tool_name in bi_tools.items():
+        if flexible_match(keyword, job_text):
+            if tool_name not in skills['tools']:
+                skills['tools'].append(tool_name)
+    
+    # 4. LANGAGES PROGRAMMATION (Seulement si explicitement mentionnés)
+    # ATTENTION : Ne pas détecter "R" tout seul (trop de faux positifs)
+    if 'python' in job_text:
+        skills['tools'].append('Python')
+    
+    if ' r ' in job_text or 'langage r' in job_text or ', r' in job_text or 'r,' in job_text:
+        skills['tools'].append('R')
+    
+    if 'sql' in job_text:
+        skills['tools'].append('SQL')
+    
+    # 5. EXCEL / OFFICE (Toujours présent dans finance)
+    if 'excel' in job_text:
+        skills['tools'].append('Excel')
+        
+        # Détecter niveau Excel
+        if 'vba' in job_text or 'macro' in job_text:
+            if 'VBA' not in skills['tools']:
+                skills['tools'].append('VBA')
+        
+        if 'power query' in job_text or 'powerquery' in job_text:
+            if 'Power Query' not in skills['tools']:
+                skills['tools'].append('Power Query')
+    
     # ========================================
     # COMPÉTENCES TECHNIQUES PAR MÉTIER
+    # VERSION V27.1 : Détection précise selon fiche de poste
     # ========================================
-    if job_category == 'data_ia':
-        tech_keywords = ['data science', 'machine learning', 'ml', 'deep learning', 'python', 'sql', 
-                        'acculturation ia', 'centre d\'excellence', 'cas d\'usage', 'poc']
-    elif job_category == 'epm':
-        tech_keywords = ['consolidation', 'reporting statutaire', 'forecast', 'budget', 'planning',
-                        'intégration erp', 'paramétrage', 'formation utilisateurs']
-    elif job_category == 'comptabilite':
-        tech_keywords = ['comptabilité générale', 'clôture', 'réconciliations', 'pcb', 'comptabilité bancaire',
-                        'ifrs', 'gaap', 'fiscalité', 'is', 'tva', 'droits d\'auteurs', 'notes de frais']
-    elif job_category == 'audit':
-        tech_keywords = ['audit interne', 'contrôles sox', 'gestion des risques', 'alm', 'actif-passif',
-                        'data analytics', 'liquidity', 'refinancement']
-    elif job_category == 'consolidation':
-        tech_keywords = ['consolidation ifrs', 'normes ifrs', 'ifrs 9', 'ifrs 15', 'ifrs 16',
-                        'montée en compétence filiales', 'migration outil']
-    elif job_category == 'controle_gestion':
-        tech_keywords = ['contrôle de gestion', 'fp&a', 'business partnering', 'variance analysis',
-                        'modélisation financière']
-    elif job_category == 'fpna':
-        tech_keywords = ['fp&a', 'forecast', 'budget', 'variance analysis', 'modélisation',
-                        'business partnering']
-    else:
-        tech_keywords = ['expertise technique', 'maîtrise opérationnelle']
     
-    for keyword in tech_keywords:
+    # Détection générale (tous métiers)
+    general_tech = {
+        'consolidation': 'consolidation',
+        'ifrs': 'normes IFRS',
+        'gaap': 'normes GAAP',
+        'sox': 'contrôles SOX',
+        'budget': 'budget',
+        'forecast': 'forecast',
+        'clôture': 'clôture',
+        'reporting': 'reporting',
+        'fp&a': 'FP&A',
+        'business partnering': 'business partnering',
+        'variance analysis': 'analyse des écarts',
+        'comptabilité générale': 'comptabilité générale',
+        'audit interne': 'audit interne',
+        'contrôle interne': 'contrôle interne',
+        'alm': 'ALM (actif-passif)',
+        'liquidité': 'gestion de liquidité',
+        'trésorerie': 'trésorerie',
+        'fiscalité': 'fiscalité',
+        'pcb': 'plan comptable bancaire',
+        'valorisation stocks': 'valorisation des stocks',
+        'kpi': 'construction de KPI',
+        'tableaux de bord': 'tableaux de bord'
+    }
+    
+    for keyword, tech_name in general_tech.items():
         if flexible_match(keyword, job_text):
-            if keyword not in skills['technical']:
-                skills['technical'].append(keyword)
+            if tech_name not in skills['technical']:
+                skills['technical'].append(tech_name)
+    
+    # Compétences spécifiques Data/IA (seulement si explicitement mentionnées)
+    if job_category == 'data_ia':
+        data_keywords = {
+            'data science': 'Data Science',
+            'machine learning': 'Machine Learning',
+            'deep learning': 'Deep Learning',
+            'acculturation ia': 'acculturation IA',
+            'centre d\'excellence': 'centre d\'excellence',
+            'cas d\'usage': 'cas d\'usage IA',
+            'poc': 'POCs'
+        }
+        
+        for keyword, tech_name in data_keywords.items():
+            if flexible_match(keyword, job_text):
+                if tech_name not in skills['technical']:
+                    skills['technical'].append(tech_name)
     
     # ========================================
     # COMPÉTENCES SOFT (ENRICHI)
@@ -248,7 +313,11 @@ def extract_key_skills_from_job(job_posting_data, job_category):
         'scrum': 'Scrum',
         'safe': 'SAFe',
         'pmp': 'PMP',
-        'project management': 'project management'
+        'project management': 'project management',
+        'structuration': 'structuration',
+        'autonomie': 'autonomie',
+        'esprit d\'équipe': 'esprit d\'équipe',
+        'animation': 'animation d\'équipe'
     }
     
     for keyword, soft_name in soft_keywords.items():
@@ -257,23 +326,48 @@ def extract_key_skills_from_job(job_posting_data, job_category):
                 skills['soft'].append(soft_name)
     
     # ========================================
-    # SECTEUR (ENRICHI)
+    # SECTEUR (AMÉLIORATION V27.1)
     # ========================================
-    if any(kw in job_text for kw in ['banc', 'bank', 'banque']):
+    
+    # Secteur Bancaire / Finance
+    if any(kw in job_text for kw in ['banque', 'bank', 'bancaire', 'cib', 'corporate banking', 'banque d\'investissement']):
         skills['sector'] = 'le secteur bancaire'
-        skills['context'] = ['banque d\'investissement', 'corporate banking', 'banque de détail']
-    elif 'fintech' in job_text:
+        if 'cib' in job_text or 'corporate & investment banking' in job_text:
+            skills['context'] = ['banque d\'investissement', 'CIB', 'environnement international']
+        else:
+            skills['context'] = ['banque de détail', 'corporate banking', 'environnement réglementé']
+    
+    # Fintech
+    elif 'fintech' in job_text or 'neo-banque' in job_text or 'neobanque' in job_text:
         skills['sector'] = 'la fintech'
-        skills['context'] = ['startup fintech', 'scale-up tech', 'néo-banque']
-    elif any(kw in job_text for kw in ['audiovisuel', 'cinéma', 'production']):
+        skills['context'] = ['startup fintech', 'scale-up tech', 'environnement agile']
+    
+    # Assurance
+    elif 'assurance' in job_text or 'actuariat' in job_text:
+        skills['sector'] = 'l\'assurance'
+        skills['context'] = ['compagnie d\'assurance', 'gestion de risques', 'réglementation Solvabilité II']
+    
+    # Industrie manufacturière
+    elif any(kw in job_text for kw in ['industrie', 'industrial', 'manufacturing', 'production', 'usine', 'site de production']):
+        skills['sector'] = 'l\'industrie'
+        skills['context'] = ['groupe industriel', 'sites de production', 'environnement manufacturier']
+    
+    # Retail / Distribution
+    elif any(kw in job_text for kw in ['retail', 'distribution', 'réseau', 'agences', 'magasins', 'points de vente']):
+        skills['sector'] = 'le retail'
+        skills['context'] = ['réseau multi-sites', 'distribution', 'gestion de réseau']
+    
+    # Négoce
+    elif 'négoce' in job_text or 'negoce' in job_text or 'trading' in job_text:
+        skills['sector'] = 'le négoce'
+        skills['context'] = ['négoce international', 'trading', 'gestion stocks']
+    
+    # Audiovisuel / Média
+    elif any(kw in job_text for kw in ['audiovisuel', 'cinéma', 'production', 'média', 'media']):
         skills['sector'] = 'l\'audiovisuel'
         skills['context'] = ['production cinématographique', 'groupe média', 'droits d\'auteurs']
-    elif any(kw in job_text for kw in ['industrie', 'industrial', 'manufacturing']):
-        skills['sector'] = 'l\'industrie'
-        skills['context'] = ['grand groupe industriel', 'environnement manufacturier']
-    elif 'assurance' in job_text:
-        skills['sector'] = 'l\'assurance'
-        skills['context'] = ['compagnie d\'assurance', 'actuariat', 'gestion de risques']
+    
+    # Contexte générique si rien de détecté
     else:
         skills['sector'] = 'le secteur'
         skills['context'] = ['grand groupe', 'environnement international']
@@ -282,7 +376,8 @@ def extract_key_skills_from_job(job_posting_data, job_category):
         'tools_count': len(skills['tools']),
         'technical_count': len(skills['technical']),
         'soft_count': len(skills['soft']),
-        'sector': skills['sector']
+        'sector': skills['sector'],
+        'tools_detected': skills['tools'][:5]
     })
     
     return skills
@@ -532,11 +627,16 @@ Type : {'Recrutement actif' if is_hiring else 'Approche spontanée'}
 ANALYSE DE LA FICHE DE POSTE :
 Titre exact : {job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'}
 
-COMPÉTENCES CLÉS DÉTECTÉES (À UTILISER OBLIGATOIREMENT) :
-- Outils : {tools_str}
-- Techniques : {technical_str}
-- Transverses : {soft_str}
-- Secteur : {skills['sector']}
+⚠️  COMPÉTENCES DÉTECTÉES DANS LA FICHE (UTILISE UNIQUEMENT CELLES-CI) :
+- Outils détectés : {tools_str}
+- Compétences techniques détectées : {technical_str}
+- Compétences transverses détectées : {soft_str}
+- Secteur détecté : {skills['sector']}
+
+🚨 RÈGLE ABSOLUE : N'INVENTE AUCUN OUTIL NON LISTÉ CI-DESSUS
+Si la fiche mentionne "SAP" → utilise SAP (pas Python/R)
+Si la fiche mentionne "Jedox" → utilise Jedox (pas Tableau)
+Si la fiche mentionne "Excel" → utilise Excel (pas Python/R)
 
 Description complète (extraits) :
 {str(job_posting_data.get('description', ''))[:800] if job_posting_data else 'N/A'}
@@ -563,14 +663,20 @@ STRUCTURE STRICTE DU MESSAGE (100-120 mots max)
    
    EXEMPLES DE BONNES OBSERVATIONS :
    
-   Pour Data & IA Officer :
+   Pour Data & IA Officer (avec Python, R détectés) :
    "Le défi principal sur ce type de poste réside dans la capacité à allier expertise technique (Python, R, Machine Learning) et compétences d'acculturation métier pour accompagner les transformations IA dans le secteur bancaire (ateliers d'idéation, formations, gouvernance data)."
    
-   Pour EPM Tagetik + Agile :
+   Pour EPM Tagetik (si Tagetik détecté) :
    "Le marché combine difficilement expertise Tagetik (consolidation, reporting) et capacité à piloter des projets en méthodologie Agile/SAFe tout en garantissant l'adoption utilisateurs dans un environnement international."
+   
+   Pour EPM Pigment/Jedox (si Pigment ou Jedox détectés) :
+   "Le défi principal réside dans la capacité à allier expertise en outils EPM (Pigment, Jedox) et compétences en structuration financière pour bâtir from scratch le pilotage d'un réseau multi-sites, tout en fiabilisant les données et accélérant la production d'indicateurs."
    
    Pour Comptable Fintech :
    "Le marché combine difficilement expertise comptable bancaire (clôtures réglementaires, réconciliations complexes) et agilité technologique pour accompagner les lancements produits en fintech (automatisation Excel/VBA, reporting temps réel, projets transverses)."
+   
+   Pour Auditeur avec SAP (si SAP détecté) :
+   "Le défi principal dans un groupe industriel international réside dans la capacité à allier expertise audit financier et opérationnel avec une forte compréhension des enjeux industriels (sites de production, réseaux internationaux) et la maîtrise de SAP pour analyser efficacement les processus."
    
    Pour Auditeur ALM Bancaire :
    "Le défi principal réside dans la capacité à allier expertise des risques ALM (gestion actif-passif, liquidité, refinancement) et connaissance approfondie de l'environnement CIB (financement structuré, produits de marché)."
@@ -596,13 +702,21 @@ STRUCTURE STRICTE DU MESSAGE (100-120 mots max)
    "- L'un possède une expertise Data Science (Python, R, SQL) acquise en banque d'investissement, ayant piloté des projets d'acculturation IA auprès des équipes trading (ateliers idéation, POCs métier).
    - L'autre vient du corporate banking avec une solide maîtrise de Sage et Excel avancé, reconverti en Data Science et spécialisé dans l'accompagnement au changement pour les transformations digitales."
    
-   Pour EPM Tagetik + Agile :
+   Pour EPM Tagetik + Agile (si Tagetik détecté) :
    "- L'un combine expertise Tagetik (consolidation statutory, reporting) et certification SAFe/PMP, ayant piloté l'intégration EPM/SAP en environnement international (30+ filiales).
    - L'autre vient du conseil EPM (Big 4) avec forte capacité en Change Management et animation de formations utilisateurs multi-pays (stakeholder engagement, documentation processus)."
    
+   Pour EPM Jedox (si Jedox détecté) :
+   "- L'un possède une expertise contrôle de gestion retail multi-sites avec maîtrise de Jedox, ayant structuré le reporting d'un réseau de 50+ agences et déployé le processus budgétaire dans un environnement négoce.
+   - L'autre combine expérience Big 4 en transformation Finance et expertise Excel avancée (macros, Power Query), spécialisé dans la mise en place de référentiels financiers et l'accompagnement au changement dans les PME en forte croissance."
+   
    Pour Comptable Fintech :
    "- L'un possède une expérience en comptabilité bancaire (PCB, fiscalité IS/TVA) avec forte maîtrise Excel/VBA pour l'automatisation des réconciliations et participation active aux projets Agile.
-   - L'autre combine expertise comptable en environnement tech (clôtures mensuelles, trésorerie) et compétences en reporting automatisé (Power BI, R) avec excellente communication transverse."
+   - L'autre combine expertise comptable en environnement tech (clôtures mensuelles, trésorerie) et compétences en reporting automatisé (Power BI) avec excellente communication transverse."
+   
+   Pour Auditeur avec SAP (si SAP détecté) :
+   "- L'un possède une expertise audit interne acquise en Big 4 avec forte expérience en environnement industriel international (manufacturing, supply chain) et maîtrise de SAP, ayant audité des sites de production dans 15+ pays.
+   - L'autre combine expérience opérationnelle en contrôle financier industriel et reconversion vers l'audit, apportant une compréhension terrain des processus de clôture et de contrôle interne avec excellentes capacités relationnelles multilingues."
    
    Pour Auditeur ALM Bancaire :
    "- L'un possède une expertise ALM (gestion actif-passif, liquidité, ratios réglementaires) acquise dans une grande banque internationale, avec 7+ ans en audit des risques de marché.
