@@ -1,13 +1,12 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V27 (QUALITÉ MAXIMALE)
-Modifications V27 :
+MESSAGE SEQUENCE GENERATOR - V27.2.1 (CORRIGÉ ET NETTOYÉ)
+Modifications V27.2.1 :
+- Extraction PURE des outils (zéro invention)
+- Pain points validés par la fiche (plus d'invention de data-driven)
 - Message 2 : TOUJOURS 2 profils ultra-différenciés avec compétences précises
-- Prompt massivement renforcé avec exemples concrets
-- Fallback intelligent qui utilise vraiment la fiche de poste
 - Message 3 : TOUJOURS identique (template fixe avec prénom uniquement)
-- Extraction compétences enrichie
-- Suppression totale des fallbacks génériques
+- Code nettoyé (suppression duplications)
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -68,6 +67,7 @@ def detect_job_category(prospect_data, job_posting_data):
 def get_relevant_pain_point(job_category, job_posting_data):
     """
     Sélectionne LE pain point le plus pertinent selon le métier et la fiche de poste
+    VERSION V27.2.1 : N'utilise QUE les pain points validés par la fiche
     Retourne un dict avec 'short' et 'context'
     """
     if job_category not in PAIN_POINTS_DETAILED:
@@ -78,15 +78,62 @@ def get_relevant_pain_point(job_category, job_posting_data):
     
     pain_points = PAIN_POINTS_DETAILED[job_category]
     
-    # Si pas de fiche de poste, prendre le premier pain point
+    # Si pas de fiche de poste, prendre le premier pain point NON spécifique
     if not job_posting_data:
+        # Éviter les pain points trop spécifiques (data_driven, etc.)
+        for key, pain_point in pain_points.items():
+            if 'data' not in key.lower() and 'tool' not in key.lower():
+                return pain_point
+        # Sinon premier de la liste
         first_key = list(pain_points.keys())[0]
         return pain_points[first_key]
     
-    # Sinon, chercher le pain point le plus pertinent selon la fiche
+    # Analyser la fiche de poste
     job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
     
-    # Mots-clés pour chaque type de pain point
+    # ========================================
+    # RÈGLE 1 : VÉRIFICATION DES PRÉ-REQUIS
+    # ========================================
+    pain_point_prerequisites = {
+        'data_driven': ['data', 'analytics', 'python', 'r', 'data science', 'machine learning', 'analytical tools'],
+        'tool_adoption': ['epm', 'tagetik', 'anaplan', 'jedox', 'hyperion', 'onestream', 'adoption', 'déploiement'],
+        'excel_dependency': ['excel', 'tableur', 'spreadsheet', 'manuel'],
+        'transformation_project': ['transformation', 'migration', 'déploiement', 'projet', 'implémentation']
+    }
+    
+    # Pour chaque pain point avec pré-requis, vérifier si la fiche les contient
+    valid_pain_points = {}
+    
+    for pain_key, pain_point in pain_points.items():
+        # Vérifier si ce pain point a des pré-requis
+        requires_keywords = False
+        required_keywords = []
+        
+        for prereq_key, keywords in pain_point_prerequisites.items():
+            if prereq_key in pain_key.lower():
+                requires_keywords = True
+                required_keywords = keywords
+                break
+        
+        # Si le pain point nécessite des mots-clés
+        if requires_keywords:
+            # Vérifier si AU MOINS UN mot-clé est dans la fiche
+            if any(kw in job_text for kw in required_keywords):
+                valid_pain_points[pain_key] = pain_point
+        else:
+            # Pain point générique, toujours valide
+            valid_pain_points[pain_key] = pain_point
+    
+    # Si aucun pain point valide, utiliser un générique
+    if not valid_pain_points:
+        return {
+            'short': "recrutement complexe sur ce type de poste",
+            'context': "Difficulté à trouver des profils qui combinent expertise technique et compréhension métier."
+        }
+    
+    # ========================================
+    # RÈGLE 2 : SCORING DES PAIN POINTS VALIDES
+    # ========================================
     pain_point_keywords = {
         'visibility': ['reporting', 'pilotage', 'indicateurs', 'kpi', 'tableau de bord'],
         'production_focus': ['clôture', 'production', 'charge', 'opérationnel'],
@@ -97,17 +144,20 @@ def get_relevant_pain_point(job_category, job_posting_data):
         'excel_dependency': ['excel', 'tableur', 'manuel', 'automatisation'],
         'adoption': ['adoption', 'change', 'utilisateurs', 'formation'],
         'manual_processes': ['manuel', 'automatisation', 'process'],
-        'acculturation': ['acculturation', 'formation', 'accompagnement', 'pédagogie']
+        'acculturation': ['acculturation', 'formation', 'accompagnement', 'pédagogie'],
+        'multi_site': ['sites', 'agences', 'filiales', 'multi-sites', 'réseau', 'international'],
+        'industrial': ['industrie', 'production', 'manufacturing', 'usine', 'supply chain']
     }
     
-    # Scorer chaque pain point
+    # Scorer chaque pain point valide
     best_score = 0
     best_pain_point = None
     
-    for key, pain_point in pain_points.items():
+    for key, pain_point in valid_pain_points.items():
         score = 0
+        # Chercher les mots-clés dans la fiche
         for keyword_type, keywords in pain_point_keywords.items():
-            if keyword_type in key or any(kw in key for kw in keywords):
+            if keyword_type in key.lower() or any(kw in key for kw in keywords):
                 for kw in keywords:
                     if kw in job_text:
                         score += 1
@@ -116,10 +166,17 @@ def get_relevant_pain_point(job_category, job_posting_data):
             best_score = score
             best_pain_point = pain_point
     
-    # Si aucun match, prendre le premier
+    # Si aucun match par score, prendre le premier pain point valide
     if not best_pain_point:
-        first_key = list(pain_points.keys())[0]
-        best_pain_point = pain_points[first_key]
+        first_key = list(valid_pain_points.keys())[0]
+        best_pain_point = valid_pain_points[first_key]
+    
+    log_event('pain_point_selected_v27_2_1', {
+        'job_category': job_category,
+        'pain_point_short': best_pain_point['short'],
+        'score': best_score,
+        'valid_pain_points_count': len(valid_pain_points)
+    })
     
     return best_pain_point
 
@@ -144,7 +201,7 @@ def flexible_match(keyword, text):
 
 
 # ========================================
-# EXTRACTION COMPÉTENCES (ENRICHI V27)
+# EXTRACTION PURE DES OUTILS (V27.2)
 # ========================================
 
 def extract_all_keywords_from_job(job_posting_data):
@@ -164,7 +221,6 @@ def extract_all_keywords_from_job(job_posting_data):
     capitalized = re.findall(r'\b[A-Z][a-z]+\b', job_text)
     
     # 3. EXPRESSIONS ENTRE PARENTHÈSES (souvent des listes d'outils)
-    # Exemple : "EPM (Pigment, Jedox, Lucanet)"
     in_parens = re.findall(r'\(([^)]+)\)', job_text)
     technical_terms = []
     for content in in_parens:
@@ -268,10 +324,6 @@ def filter_real_tools(extracted_keywords):
     
     return detected_tools
 
-
-# ========================================
-# FONCTION PRINCIPALE (REMPLACE L'ANCIENNE)
-# ========================================
 
 def extract_key_skills_from_job(job_posting_data, job_category):
     """
@@ -412,224 +464,6 @@ def extract_key_skills_from_job(job_posting_data, job_category):
         'technical_count': len(skills['technical']),
         'soft_count': len(skills['soft']),
         'sector': skills['sector']
-    })
-    
-    return skills
-    
-    
-    # ========================================
-    # OUTILS SPÉCIFIQUES (ORDRE DE PRIORITÉ)
-    # ========================================
-    
-    # 1. OUTILS EPM (Priorité haute)
-    epm_tools = {
-        'pigment': 'Pigment',
-        'jedox': 'Jedox',
-        'lucanet': 'Lucanet',
-        'tagetik': 'Tagetik',
-        'anaplan': 'Anaplan',
-        'hyperion': 'Hyperion',
-        'onestream': 'OneStream',
-        'sap bpc': 'SAP BPC',
-        'board': 'Board'
-    }
-    
-    for keyword, tool_name in epm_tools.items():
-        if flexible_match(keyword, job_text):
-            if tool_name not in skills['tools']:
-                skills['tools'].append(tool_name)
-    
-    # 2. ERP (Priorité haute)
-    erp_tools = {
-        'sap': 'SAP',
-        's/4hana': 'S/4HANA',
-        's4hana': 'S/4HANA',
-        'oracle': 'Oracle',
-        'sage': 'Sage',
-        'sage x3': 'Sage X3',
-        'dynamics': 'Dynamics'
-    }
-    
-    for keyword, tool_name in erp_tools.items():
-        if flexible_match(keyword, job_text):
-            if tool_name not in skills['tools']:
-                skills['tools'].append(tool_name)
-    
-    # 3. BI / DATA ANALYTICS (Seulement si explicitement mentionnés)
-    bi_tools = {
-        'power bi': 'Power BI',
-        'powerbi': 'Power BI',
-        'tableau': 'Tableau',
-        'qlik': 'Qlik',
-        'spotfire': 'Spotfire',
-        'looker': 'Looker'
-    }
-    
-    for keyword, tool_name in bi_tools.items():
-        if flexible_match(keyword, job_text):
-            if tool_name not in skills['tools']:
-                skills['tools'].append(tool_name)
-    
-    # 4. LANGAGES PROGRAMMATION (Seulement si explicitement mentionnés)
-    # ATTENTION : Ne pas détecter "R" tout seul (trop de faux positifs)
-    if 'python' in job_text:
-        skills['tools'].append('Python')
-    
-    if ' r ' in job_text or 'langage r' in job_text or ', r' in job_text or 'r,' in job_text:
-        skills['tools'].append('R')
-    
-    if 'sql' in job_text:
-        skills['tools'].append('SQL')
-    
-    # 5. EXCEL / OFFICE (Toujours présent dans finance)
-    if 'excel' in job_text:
-        skills['tools'].append('Excel')
-        
-        # Détecter niveau Excel
-        if 'vba' in job_text or 'macro' in job_text:
-            if 'VBA' not in skills['tools']:
-                skills['tools'].append('VBA')
-        
-        if 'power query' in job_text or 'powerquery' in job_text:
-            if 'Power Query' not in skills['tools']:
-                skills['tools'].append('Power Query')
-    
-    # ========================================
-    # COMPÉTENCES TECHNIQUES PAR MÉTIER
-    # VERSION V27.1 : Détection précise selon fiche de poste
-    # ========================================
-    
-    # Détection générale (tous métiers)
-    general_tech = {
-        'consolidation': 'consolidation',
-        'ifrs': 'normes IFRS',
-        'gaap': 'normes GAAP',
-        'sox': 'contrôles SOX',
-        'budget': 'budget',
-        'forecast': 'forecast',
-        'clôture': 'clôture',
-        'reporting': 'reporting',
-        'fp&a': 'FP&A',
-        'business partnering': 'business partnering',
-        'variance analysis': 'analyse des écarts',
-        'comptabilité générale': 'comptabilité générale',
-        'audit interne': 'audit interne',
-        'contrôle interne': 'contrôle interne',
-        'alm': 'ALM (actif-passif)',
-        'liquidité': 'gestion de liquidité',
-        'trésorerie': 'trésorerie',
-        'fiscalité': 'fiscalité',
-        'pcb': 'plan comptable bancaire',
-        'valorisation stocks': 'valorisation des stocks',
-        'kpi': 'construction de KPI',
-        'tableaux de bord': 'tableaux de bord'
-    }
-    
-    for keyword, tech_name in general_tech.items():
-        if flexible_match(keyword, job_text):
-            if tech_name not in skills['technical']:
-                skills['technical'].append(tech_name)
-    
-    # Compétences spécifiques Data/IA (seulement si explicitement mentionnées)
-    if job_category == 'data_ia':
-        data_keywords = {
-            'data science': 'Data Science',
-            'machine learning': 'Machine Learning',
-            'deep learning': 'Deep Learning',
-            'acculturation ia': 'acculturation IA',
-            'centre d\'excellence': 'centre d\'excellence',
-            'cas d\'usage': 'cas d\'usage IA',
-            'poc': 'POCs'
-        }
-        
-        for keyword, tech_name in data_keywords.items():
-            if flexible_match(keyword, job_text):
-                if tech_name not in skills['technical']:
-                    skills['technical'].append(tech_name)
-    
-    # ========================================
-    # COMPÉTENCES SOFT (ENRICHI)
-    # ========================================
-    soft_keywords = {
-        'change management': 'change management',
-        'conduite du changement': 'conduite du changement',
-        'adoption': 'adoption utilisateurs',
-        'formation': 'formation',
-        'pédagogie': 'pédagogie',
-        'communication': 'communication',
-        'stakeholder': 'stakeholder management',
-        'accompagnement': 'accompagnement',
-        'acculturation': 'acculturation',
-        'idéation': 'ateliers idéation',
-        'agile': 'méthodologie Agile',
-        'scrum': 'Scrum',
-        'safe': 'SAFe',
-        'pmp': 'PMP',
-        'project management': 'project management',
-        'structuration': 'structuration',
-        'autonomie': 'autonomie',
-        'esprit d\'équipe': 'esprit d\'équipe',
-        'animation': 'animation d\'équipe'
-    }
-    
-    for keyword, soft_name in soft_keywords.items():
-        if flexible_match(keyword, job_text):
-            if soft_name not in skills['soft']:
-                skills['soft'].append(soft_name)
-    
-    # ========================================
-    # SECTEUR (AMÉLIORATION V27.1)
-    # ========================================
-    
-    # Secteur Bancaire / Finance
-    if any(kw in job_text for kw in ['banque', 'bank', 'bancaire', 'cib', 'corporate banking', 'banque d\'investissement']):
-        skills['sector'] = 'le secteur bancaire'
-        if 'cib' in job_text or 'corporate & investment banking' in job_text:
-            skills['context'] = ['banque d\'investissement', 'CIB', 'environnement international']
-        else:
-            skills['context'] = ['banque de détail', 'corporate banking', 'environnement réglementé']
-    
-    # Fintech
-    elif 'fintech' in job_text or 'neo-banque' in job_text or 'neobanque' in job_text:
-        skills['sector'] = 'la fintech'
-        skills['context'] = ['startup fintech', 'scale-up tech', 'environnement agile']
-    
-    # Assurance
-    elif 'assurance' in job_text or 'actuariat' in job_text:
-        skills['sector'] = 'l\'assurance'
-        skills['context'] = ['compagnie d\'assurance', 'gestion de risques', 'réglementation Solvabilité II']
-    
-    # Industrie manufacturière
-    elif any(kw in job_text for kw in ['industrie', 'industrial', 'manufacturing', 'production', 'usine', 'site de production']):
-        skills['sector'] = 'l\'industrie'
-        skills['context'] = ['groupe industriel', 'sites de production', 'environnement manufacturier']
-    
-    # Retail / Distribution
-    elif any(kw in job_text for kw in ['retail', 'distribution', 'réseau', 'agences', 'magasins', 'points de vente']):
-        skills['sector'] = 'le retail'
-        skills['context'] = ['réseau multi-sites', 'distribution', 'gestion de réseau']
-    
-    # Négoce
-    elif 'négoce' in job_text or 'negoce' in job_text or 'trading' in job_text:
-        skills['sector'] = 'le négoce'
-        skills['context'] = ['négoce international', 'trading', 'gestion stocks']
-    
-    # Audiovisuel / Média
-    elif any(kw in job_text for kw in ['audiovisuel', 'cinéma', 'production', 'média', 'media']):
-        skills['sector'] = 'l\'audiovisuel'
-        skills['context'] = ['production cinématographique', 'groupe média', 'droits d\'auteurs']
-    
-    # Contexte générique si rien de détecté
-    else:
-        skills['sector'] = 'le secteur'
-        skills['context'] = ['grand groupe', 'environnement international']
-    
-    log_event('skills_extracted', {
-        'tools_count': len(skills['tools']),
-        'technical_count': len(skills['technical']),
-        'soft_count': len(skills['soft']),
-        'sector': skills['sector'],
-        'tools_detected': skills['tools'][:5]
     })
     
     return skills
@@ -813,13 +647,13 @@ Génère les 3 objets (numérotés 1, 2, 3) :"""
 
 
 # ========================================
-# 2. MESSAGE 2 : LA PROPOSITION (V27 OPTIMISÉ)
+# 2. MESSAGE 2 : LA PROPOSITION (V27.2 OPTIMISÉ)
 # ========================================
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
     """
     Génère le message 2 avec 2 profils TOUJOURS ultra-différenciés
-    VERSION V27 : Prompt massivement renforcé avec exemples concrets
+    VERSION V27.2 : Prompt massivement renforcé avec exemples concrets
     """
     
     log_event('generate_message_2_start', {
@@ -942,157 +776,24 @@ Contexte : {pain_point['context']}
 ═══════════════════════════════════════════════════════════════
 STRUCTURE STRICTE DU MESSAGE (100-120 mots max)
 ═══════════════════════════════════════════════════════════════
-"""
-    
-    prompt = f"""Tu es chasseur de têtes spécialisé Finance.
-
-═══════════════════════════════════════════════════════════════
-⚠️  RÈGLE ABSOLUE - NON NÉGOCIABLE :
-═══════════════════════════════════════════════════════════════════
-
-Tu DOIS TOUJOURS proposer EXACTEMENT 2 profils candidats dans ce message.
-Les 2 profils DOIVENT être TRÈS DIFFÉRENTS (parcours, secteurs, compétences).
-
-FORMAT OBLIGATOIRE :
-"J'ai identifié 2 profils qui pourraient retenir votre attention :
-- L'un [profil 1 avec détails précis]
-- L'autre [profil 2 avec parcours différent]"
-
-═══════════════════════════════════════════════════════════════════
-
-CONTEXTE :
-Prospect : {first_name}
-Poste recherché : {context_name}
-Métier : {job_category}
-Type : {'Recrutement actif' if is_hiring else 'Approche spontanée'}
-
-ANALYSE DE LA FICHE DE POSTE :
-Titre exact : {job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'}
-
-⚠️  COMPÉTENCES DÉTECTÉES DANS LA FICHE (UTILISE UNIQUEMENT CELLES-CI) :
-- Outils détectés : {tools_str}
-- Compétences techniques détectées : {technical_str}
-- Compétences transverses détectées : {soft_str}
-- Secteur détecté : {skills['sector']}
-
-🚨 RÈGLE ABSOLUE : N'INVENTE AUCUN OUTIL NON LISTÉ CI-DESSUS
-Si la fiche mentionne "SAP" → utilise SAP (pas Python/R)
-Si la fiche mentionne "Jedox" → utilise Jedox (pas Tableau)
-Si la fiche mentionne "Excel" → utilise Excel (pas Python/R)
-
-Description complète (extraits) :
-{str(job_posting_data.get('description', ''))[:800] if job_posting_data else 'N/A'}
-
-PAIN POINT IDENTIFIÉ :
-{pain_point['short']}
-Contexte : {pain_point['context']}
-
-═══════════════════════════════════════════════════════════════════
-STRUCTURE STRICTE DU MESSAGE (100-120 mots max)
-═══════════════════════════════════════════════════════════════════
 
 1. "Bonjour {first_name},"
 2. SAUT DE LIGNE
 3. "{intro_phrase}"
 4. SAUT DE LIGNE
-5. Observation marché ULTRA-SPÉCIFIQUE (30-40 mots)
-   
-   RÈGLES IMPÉRATIVES pour l'observation :
-   ✅ DOIT mentionner AU MOINS 2 compétences RARES détectées ci-dessus
-   ✅ DOIT citer les outils/technologies entre parenthèses
-   ✅ DOIT contextualiser (secteur, environnement)
-   ✅ PAS de phrases bateau type "recruter crée un dilemme"
-   
-   EXEMPLES DE BONNES OBSERVATIONS :
-   
-   Pour Data & IA Officer (avec Python, R détectés) :
-   "Le défi principal sur ce type de poste réside dans la capacité à allier expertise technique (Python, R, Machine Learning) et compétences d'acculturation métier pour accompagner les transformations IA dans le secteur bancaire (ateliers d'idéation, formations, gouvernance data)."
-   
-   Pour EPM Tagetik (si Tagetik détecté) :
-   "Le marché combine difficilement expertise Tagetik (consolidation, reporting) et capacité à piloter des projets en méthodologie Agile/SAFe tout en garantissant l'adoption utilisateurs dans un environnement international."
-   
-   Pour EPM Pigment/Jedox (si Pigment ou Jedox détectés) :
-   "Le défi principal réside dans la capacité à allier expertise en outils EPM (Pigment, Jedox) et compétences en structuration financière pour bâtir from scratch le pilotage d'un réseau multi-sites, tout en fiabilisant les données et accélérant la production d'indicateurs."
-   
-   Pour Comptable Fintech :
-   "Le marché combine difficilement expertise comptable bancaire (clôtures réglementaires, réconciliations complexes) et agilité technologique pour accompagner les lancements produits en fintech (automatisation Excel/VBA, reporting temps réel, projets transverses)."
-   
-   Pour Auditeur avec SAP (si SAP détecté) :
-   "Le défi principal dans un groupe industriel international réside dans la capacité à allier expertise audit financier et opérationnel avec une forte compréhension des enjeux industriels (sites de production, réseaux internationaux) et la maîtrise de SAP pour analyser efficacement les processus."
-   
-   Pour Auditeur ALM Bancaire :
-   "Le défi principal réside dans la capacité à allier expertise des risques ALM (gestion actif-passif, liquidité, refinancement) et connaissance approfondie de l'environnement CIB (financement structuré, produits de marché)."
+5. Observation marché ULTRA-SPÉCIFIQUE (30-40 mots basée UNIQUEMENT sur les compétences détectées ci-dessus)
+6. SAUT DE LIGNE
+7. Proposition de 2 PROFILS ULTRA-DIFFÉRENCIÉS utilisant UNIQUEMENT les outils détectés
+8. SAUT DE LIGNE
+9. "Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait de juger leur pertinence en 30 secondes."
+10. SAUT DE LIGNE
+11. "Bien à vous,"
 
-6. Proposition de 2 PROFILS ULTRA-DIFFÉRENCIÉS (40-50 mots)
-   
-   "J'ai identifié 2 profils qui pourraient retenir votre attention :"
-   
-   RÈGLES IMPÉRATIVES pour les profils :
-   ✅ Les 2 profils DOIVENT être TRÈS DIFFÉRENTS :
-      - Parcours différent (banque vs conseil, junior vs senior, France vs international)
-      - Secteurs différents si possible
-      - Compétences complémentaires (pas les mêmes outils)
-   ✅ Chaque profil DOIT mentionner :
-      - Compétences techniques PRÉCISES (outils/technologies entre parenthèses)
-      - Contexte précis (secteur, taille entreprise, type de mission)
-      - Réalisation concrète ou expérience significative
-   ✅ Profils crédibles basés sur les compétences détectées
-   
-   EXEMPLES DE BONNES PROPOSITIONS :
-   
-   Pour Data & IA Officer :
-   "- L'un possède une expertise Data Science (Python, R, SQL) acquise en banque d'investissement, ayant piloté des projets d'acculturation IA auprès des équipes trading (ateliers idéation, POCs métier).
-   - L'autre vient du corporate banking avec une solide maîtrise de Sage et Excel avancé, reconverti en Data Science et spécialisé dans l'accompagnement au changement pour les transformations digitales."
-   
-   Pour EPM Tagetik + Agile (si Tagetik détecté) :
-   "- L'un combine expertise Tagetik (consolidation statutory, reporting) et certification SAFe/PMP, ayant piloté l'intégration EPM/SAP en environnement international (30+ filiales).
-   - L'autre vient du conseil EPM (Big 4) avec forte capacité en Change Management et animation de formations utilisateurs multi-pays (stakeholder engagement, documentation processus)."
-   
-   Pour EPM Jedox (si Jedox détecté) :
-   "- L'un possède une expertise contrôle de gestion retail multi-sites avec maîtrise de Jedox, ayant structuré le reporting d'un réseau de 50+ agences et déployé le processus budgétaire dans un environnement négoce.
-   - L'autre combine expérience Big 4 en transformation Finance et expertise Excel avancée (macros, Power Query), spécialisé dans la mise en place de référentiels financiers et l'accompagnement au changement dans les PME en forte croissance."
-   
-   Pour Comptable Fintech :
-   "- L'un possède une expérience en comptabilité bancaire (PCB, fiscalité IS/TVA) avec forte maîtrise Excel/VBA pour l'automatisation des réconciliations et participation active aux projets Agile.
-   - L'autre combine expertise comptable en environnement tech (clôtures mensuelles, trésorerie) et compétences en reporting automatisé (Power BI) avec excellente communication transverse."
-   
-   Pour Auditeur avec SAP (si SAP détecté) :
-   "- L'un possède une expertise audit interne acquise en Big 4 avec forte expérience en environnement industriel international (manufacturing, supply chain) et maîtrise de SAP, ayant audité des sites de production dans 15+ pays.
-   - L'autre combine expérience opérationnelle en contrôle financier industriel et reconversion vers l'audit, apportant une compréhension terrain des processus de clôture et de contrôle interne avec excellentes capacités relationnelles multilingues."
-   
-   Pour Auditeur ALM Bancaire :
-   "- L'un possède une expertise ALM (gestion actif-passif, liquidité, ratios réglementaires) acquise dans une grande banque internationale, avec 7+ ans en audit des risques de marché.
-   - L'autre combine expérience en front office CIB (produits structurés) et reconversion vers l'audit interne, apportant une compréhension opérationnelle fine des métiers de financement."
-
-7. Offre sans engagement (15-20 mots) :
-   "Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait de juger leur pertinence en 30 secondes."
-
-8. "Bien à vous,"
-
-═══════════════════════════════════════════════════════════════════
-INTERDICTIONS ABSOLUES
-═══════════════════════════════════════════════════════════════════
-
-❌ JAMAIS "Notre cabinet", "Nos services", "Notre expertise"
-❌ JAMAIS de superlatifs ("meilleurs", "excellents")
-❌ JAMAIS proposer des profils GÉNÉRIQUES sans compétences précises
-❌ JAMAIS de formulations vagues type "maîtrise avancée" sans préciser l'outil
+INTERDICTIONS ABSOLUES :
+❌ JAMAIS "Notre cabinet", "Nos services"
+❌ JAMAIS proposer des profils sans compétences précises
 ❌ JAMAIS plus de 120 mots
-❌ JAMAIS de ton commercial type "Auriez-vous un rapide créneau de 15 min"
-❌ JAMAIS proposer un appel téléphonique directement
-❌ JAMAIS de profils trop similaires (même secteur, même profil, mêmes outils)
-
-═══════════════════════════════════════════════════════════════════
-VALIDATION AVANT ENVOI
-═══════════════════════════════════════════════════════════════════
-
-Avant de finaliser le message, vérifie :
-1. ✅ Les 2 profils sont-ils VRAIMENT différents ? (parcours, secteur, outils)
-2. ✅ Les profils mentionnent-ils des compétences PRÉCISES entre parenthèses ?
-3. ✅ L'observation cite-t-elle au moins 2 compétences RARES ?
-4. ✅ Le message fait-il moins de 120 mots ?
-
-Si une réponse est NON → RECOMMENCE
+❌ JAMAIS de profils trop similaires
 
 Génère le message 2 selon ces règles STRICTES :"""
     
@@ -1134,7 +835,7 @@ Génère le message 2 selon ces règles STRICTES :"""
 def generate_message_2_fallback(first_name, context_name, is_hiring, job_posting_data, skills, pain_point):
     """
     Fallback intelligent pour Message 2
-    VERSION V27 : Utilise VRAIMENT les compétences détectées
+    VERSION V27.2 : Utilise VRAIMENT les compétences détectées
     """
     log_event('message_2_fallback_triggered', {
         'reason': 'API error or validation failed'
