@@ -80,7 +80,7 @@ def filter_recent_posts(posts, max_age_months=3, max_posts=5):
 def detect_company_sector(job_posting_data):
     """
     Détecte le secteur de l'entreprise avec taxonomie précise
-    VERSION V27.3 : Différencie logistique, industrie, banque, services
+    VERSION V27.3.1 : Ajout secteur insurance
     """
     if not job_posting_data:
         return 'general'
@@ -92,7 +92,8 @@ def detect_company_sector(job_posting_data):
         'banking': ['banque', 'bancaire', 'cib', 'corporate banking', 'investment banking', 
                     'retail banking', 'private banking', 'gestion privée'],
         
-        'insurance': ['assurance', 'assureur', 'solvabilité', 'actuariat', 'mutuelle'],
+        'insurance': ['assurance', 'assureur', 'solvabilité', 'actuariat', 'mutuelle', 
+                      'iard', 'vie', 'prévoyance', 'compagnie d\'assurance'],
         
         'logistics_transport': ['logistique', 'supply chain', 'transport', 'freight', 
                                  'forwarding', 'entreposage', 'distribution logistique',
@@ -129,6 +130,229 @@ def detect_company_sector(job_posting_data):
     })
     
     return detected_sector
+
+
+def filter_real_tools(extracted_keywords):
+    """
+    ÉTAPE 2 : Filtrage pour ne garder QUE les vrais outils
+    VERSION V27.3.1 : Ajout SAP BFC
+    """
+    
+    # LISTE BLANCHE : Outils connus avec certitude
+    KNOWN_TOOLS = {
+        # EPM / Planning
+        'Pigment', 'Jedox', 'Lucanet', 'Tagetik', 'Anaplan', 'Hyperion', 
+        'OneStream', 'Board', 'Prophix',
+        # ERP
+        'SAP', 'SAP BFC', 'Oracle', 'Sage', 'Dynamics', 'NetSuite', 'Infor',
+        # BI / Analytics
+        'Tableau', 'Qlik', 'Spotfire', 'Looker', 'Microstrategy',
+        'Power BI', 'PowerBI', 'Power', 'BI',
+        # Langages
+        'Python', 'SQL', 'VBA', 'R',
+        # Office / Productivité
+        'Excel', 'Power Query', 'Power Pivot', 'PowerQuery',
+        # Autres outils métier
+        'Coupa', 'Ariba', 'Concur', 'Workday', 'Salesforce', 'Kyriba',
+        'Blackline', 'Trintech'
+    }
+    
+    # LISTE NOIRE : Faux positifs à exclure systématiquement
+    EXCLUDE_LIST = {
+        # Géographie
+        'USA', 'UK', 'France', 'Paris', 'Europe', 'Germany', 'Spain',
+        # Rôles / Titres
+        'CEO', 'CFO', 'COO', 'CTO', 'DAF', 'RAF', 'DRH', 'CDO', 'CMO',
+        # Contrats
+        'CDI', 'CDD', 'VIE', 'Stage', 'Interim',
+        # Indicateurs / KPI
+        'KPI', 'ROI', 'EBITDA', 'CAPEX', 'OPEX', 'SLA',
+        # Organisations
+        'ETI', 'PME', 'TPE', 'SME', 'BU', 'CODIR',
+        # Départements
+        'IT', 'HR', 'RH', 'FTE', 'R&D', 'RD',
+        # Divers
+        'RTT', 'CV', 'PDF', 'EUR', 'USD', 'GBP',
+        # Mots génériques
+        'Groupe', 'Group', 'Company', 'International', 'Global',
+        # Certifications (pas des outils)
+        'PMP', 'SAFe', 'Scrum', 'Agile', 'PRINCE2'
+    }
+    
+    detected_tools = []
+    
+    # Collecter tous les mots-clés
+    all_keywords = (
+        extracted_keywords.get('acronyms', []) + 
+        extracted_keywords.get('capitalized', []) + 
+        extracted_keywords.get('technical', [])
+    )
+    
+    for keyword in all_keywords:
+        keyword_clean = keyword.strip()
+        
+        # Ignorer vide ou trop court
+        if not keyword_clean or len(keyword_clean) < 2:
+            continue
+        
+        # Si dans liste blanche → garder
+        if keyword_clean in KNOWN_TOOLS:
+            if keyword_clean not in detected_tools:
+                detected_tools.append(keyword_clean)
+        
+        # Si dans liste noire → ignorer
+        elif keyword_clean in EXCLUDE_LIST:
+            continue
+    
+    # Post-traitement : fusionner "Power" + "BI" en "Power BI"
+    if 'Power' in detected_tools and 'BI' in detected_tools:
+        detected_tools.remove('Power')
+        detected_tools.remove('BI')
+        if 'Power BI' not in detected_tools:
+            detected_tools.append('Power BI')
+    
+    # Dédupliquer
+    detected_tools = list(set(detected_tools))
+    
+    log_event('tools_filtered_v27_3_1', {
+        'raw_count': len(all_keywords),
+        'filtered_count': len(detected_tools),
+        'tools': detected_tools
+    })
+    
+    return detected_tools
+
+
+def get_relevant_pain_point(job_category, job_posting_data):
+    """
+    VERSION V27.3.1 : Pain points avec validation stricte secteur
+    """
+    if job_category not in PAIN_POINTS_DETAILED:
+        return {
+            'short': "recrutement complexe sur ce type de poste",
+            'context': "Difficulté à trouver des profils qui combinent expertise technique et vision business."
+        }
+    
+    pain_points = PAIN_POINTS_DETAILED[job_category]
+    
+    if not job_posting_data:
+        for key, pain_point in pain_points.items():
+            if 'data' not in key.lower() and 'tool' not in key.lower():
+                return pain_point
+        return list(pain_points.values())[0]
+    
+    job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+    sector_code = detect_company_sector(job_posting_data)
+    
+    # MAPPING PAIN POINTS → SECTEURS AUTORISÉS
+    PAIN_POINT_SECTORS = {
+        'industrial_processes': ['manufacturing', 'engineering'],  # SEULEMENT industrie
+        'multi_site_international': ['all'],  # Tous secteurs
+        'control_internal': ['all'],
+        'coverage': ['all'],
+        'senior_profiles': ['all'],
+        'logistics': ['logistics_transport'],  # SEULEMENT logistique
+        'structuration': ['all'],
+        'multi_site': ['all'],
+        'business_partnering': ['all'],
+        'data_quality': ['all'],
+        'hybrid_profiles': ['all'],
+        'ifrs_expertise': ['all'],
+        'multi_entity': ['all'],
+        'manual_processes': ['all'],
+        'deadline_pressure': ['all'],
+        'technical_business': ['all'],
+        'use_case_deployment': ['all'],
+        'tool_deployment': ['all'],
+        'functional_technical': ['all'],
+        'project_delays': ['all'],
+        'adoption': ['all'],
+        'visibility': ['all'],
+        'production_focus': ['all'],
+        'transformation': ['all'],
+        'excel_dependency': ['all'],
+        'modeling_communication': ['all'],
+        'technical_agility': ['all'],
+        'closing_pressure': ['all'],
+        'technical_functional': ['all'],
+        'data_access': ['all']
+    }
+    
+    # Validation pré-requis
+    pain_point_prerequisites = {
+        'data_driven': ['data', 'analytics', 'python', 'r', 'data science', 'machine learning'],
+        'tool_adoption': ['epm', 'tagetik', 'anaplan', 'jedox', 'hyperion', 'onestream'],
+        'excel_dependency': ['excel', 'tableur', 'spreadsheet'],
+        'transformation_project': ['transformation', 'migration', 'déploiement']
+    }
+    
+    # Exclusions par secteur (legacy)
+    sector_exclusions = {
+        'logistics_transport': ['industrial_processes'],
+        'insurance': ['industrial_processes'],
+        'services': ['industrial_processes'],
+        'fintech': ['industrial_processes'],
+        'banking': ['industrial_processes']
+    }
+    
+    valid_pain_points = {}
+    
+    for pain_key, pain_point in pain_points.items():
+        # VALIDATION SECTEUR VIA MAPPING
+        allowed_sectors = PAIN_POINT_SECTORS.get(pain_key, ['all'])
+        if allowed_sectors != ['all'] and sector_code not in allowed_sectors:
+            continue
+        
+        # Exclure par secteur (legacy - double sécurité)
+        if sector_code in sector_exclusions:
+            if any(excl in pain_key.lower() for excl in sector_exclusions[sector_code]):
+                continue
+        
+        # Vérifier pré-requis
+        requires_keywords = False
+        for prereq_key, keywords in pain_point_prerequisites.items():
+            if prereq_key in pain_key.lower():
+                requires_keywords = True
+                if not any(kw in job_text for kw in keywords):
+                    break
+                else:
+                    valid_pain_points[pain_key] = pain_point
+                    break
+        
+        if not requires_keywords:
+            valid_pain_points[pain_key] = pain_point
+    
+    if not valid_pain_points:
+        return {
+            'short': "recrutement complexe sur ce type de poste",
+            'context': "Difficulté à trouver des profils qui combinent expertise technique et compréhension métier."
+        }
+    
+    # Scoring
+    scoring_keywords = {
+        'logistics': ['logistique', 'supply chain', 'transport', 'freight'],
+        'multi_site': ['multi-sites', 'filiales', 'international', 'pays'],
+        'industrial': ['production', 'manufacturing', 'usine'],
+        'banking': ['bancaire', 'bank', 'cib'],
+        'insurance': ['assurance', 'solvabilité', 'actuariat'],
+        'certifications': ['cia', 'iia', 'coso', 'ifrs']
+    }
+    
+    pain_scores = {}
+    for pain_key, pain_point in valid_pain_points.items():
+        score = sum(1 for category_kws in scoring_keywords.values() 
+                   for kw in category_kws if kw in job_text)
+        pain_scores[pain_key] = score
+    
+    best_pain_key = max(pain_scores.items(), key=lambda x: x[1])[0]
+    
+    log_event('pain_point_selected_v27_3_1', {
+        'pain_key': best_pain_key,
+        'sector': sector_code,
+        'valid_count': len(valid_pain_points)
+    })
+    
+    return valid_pain_points[best_pain_key]
 
 
 def extract_certifications_and_norms(job_posting_data):
@@ -216,91 +440,6 @@ def detect_job_category(prospect_data, job_posting_data):
         return 'comptabilite'
     else:
         return 'general'
-
-
-def get_relevant_pain_point(job_category, job_posting_data):
-    """
-    VERSION V27.3 : Pain points adaptés par secteur + validation stricte
-    """
-    if job_category not in PAIN_POINTS_DETAILED:
-        return {
-            'short': "recrutement complexe sur ce type de poste",
-            'context': "Difficulté à trouver des profils qui combinent expertise technique et vision business."
-        }
-    
-    pain_points = PAIN_POINTS_DETAILED[job_category]
-    
-    if not job_posting_data:
-        # Retourner le premier pain point générique
-        for key, pain_point in pain_points.items():
-            if 'data' not in key.lower() and 'tool' not in key.lower():
-                return pain_point
-        return list(pain_points.values())[0]
-    
-    job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
-    sector_code = detect_company_sector(job_posting_data)
-    
-    # Validation pré-requis
-    pain_point_prerequisites = {
-        'data_driven': ['data', 'analytics', 'python', 'r', 'data science', 'machine learning'],
-        'tool_adoption': ['epm', 'tagetik', 'anaplan', 'jedox', 'hyperion', 'onestream'],
-        'excel_dependency': ['excel', 'tableur', 'spreadsheet'],
-        'transformation_project': ['transformation', 'migration', 'déploiement']
-    }
-    
-    # Exclusions par secteur
-    sector_exclusions = {
-        'logistics_transport': ['industrial_processes'],  # Logistique ≠ Industrie
-        'services': ['industrial_processes'],
-        'fintech': ['industrial_processes']
-    }
-    
-    valid_pain_points = {}
-    
-    for pain_key, pain_point in pain_points.items():
-        # Exclure par secteur
-        if sector_code in sector_exclusions:
-            if any(excl in pain_key.lower() for excl in sector_exclusions[sector_code]):
-                continue
-        
-        # Vérifier pré-requis
-        requires_keywords = False
-        for prereq_key, keywords in pain_point_prerequisites.items():
-            if prereq_key in pain_key.lower():
-                requires_keywords = True
-                if not any(kw in job_text for kw in keywords):
-                    break  # Exclure ce pain point
-                else:
-                    valid_pain_points[pain_key] = pain_point
-                    break
-        
-        if not requires_keywords:
-            valid_pain_points[pain_key] = pain_point
-    
-    if not valid_pain_points:
-        return {
-            'short': "recrutement complexe sur ce type de poste",
-            'context': "Difficulté à trouver des profils qui combinent expertise technique et compréhension métier."
-        }
-    
-    # Scoring
-    scoring_keywords = {
-        'logistics': ['logistique', 'supply chain', 'transport', 'freight'],
-        'multi_site': ['multi-sites', 'filiales', 'international', 'pays'],
-        'industrial': ['production', 'manufacturing', 'usine'],
-        'banking': ['bancaire', 'bank', 'cib'],
-        'certifications': ['cia', 'iia', 'coso', 'ifrs']
-    }
-    
-    pain_scores = {}
-    for pain_key, pain_point in valid_pain_points.items():
-        score = sum(1 for category_kws in scoring_keywords.values() 
-                   for kw in category_kws if kw in job_text)
-        pain_scores[pain_key] = score
-    
-    best_pain_key = max(pain_scores.items(), key=lambda x: x[1])[0]
-    return valid_pain_points[best_pain_key]
-
 
 def get_relevant_outcomes(job_category, max_outcomes=2):
     """Récupère les outcomes pertinents"""
