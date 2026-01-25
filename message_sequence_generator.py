@@ -1,18 +1,21 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V27.2.1 (CORRIGÉ ET NETTOYÉ)
-Modifications V27.2.1 :
+MESSAGE SEQUENCE GENERATOR - V27.3 (COMPLET)
+Modifications V27.3 :
+- Filtrage hooks LinkedIn <3 mois (filter_recent_posts)
+- Détection secteur précise (logistique vs industrie vs banque)
+- Extraction certifications/normes (CIA, IIA, IFRS, etc.)
+- Pain points adaptés par secteur
 - Extraction PURE des outils (zéro invention)
-- Pain points validés par la fiche (plus d'invention de data-driven)
 - Message 2 : TOUJOURS 2 profils ultra-différenciés avec compétences précises
 - Message 3 : TOUJOURS identique (template fixe avec prénom uniquement)
-- Code nettoyé (suppression duplications)
 ═══════════════════════════════════════════════════════════════════
 """
 
 import anthropic
 import os
 import re 
+from datetime import datetime, timedelta
 from config import COMPANY_INFO, PAIN_POINTS_DETAILED, OUTCOMES_DETAILED
 
 # Imports utilitaires
@@ -24,6 +27,157 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 if not ANTHROPIC_API_KEY:
     raise ValueError("❌ ANTHROPIC_API_KEY non trouvée")
+
+
+# ========================================
+# FILTRAGE HOOKS LINKEDIN (V27.3)
+# ========================================
+
+def filter_recent_posts(posts, max_age_months=3, max_posts=5):
+    """
+    Filtre les posts LinkedIn pour ne garder que ceux <3 mois
+    VERSION V27.3 : Filtrage strict par date
+    """
+    if not posts or posts == "NOT_FOUND":
+        return []
+    
+    cutoff_date = datetime.now() - timedelta(days=max_age_months * 30)
+    recent_posts = []
+    
+    for post in posts:
+        post_date_str = post.get('date') or post.get('postedDate') or post.get('timestamp')
+        if not post_date_str:
+            continue
+            
+        try:
+            # Essayer différents formats de date
+            for fmt in ['%Y-%m-%d', '%Y-%m-%dT%H:%M:%S', '%d/%m/%Y']:
+                try:
+                    post_date = datetime.strptime(str(post_date_str)[:10], fmt)
+                    break
+                except:
+                    continue
+            
+            if post_date >= cutoff_date:
+                recent_posts.append(post)
+                
+        except Exception as e:
+            log_event('post_date_parse_error', {'error': str(e), 'date': post_date_str})
+            continue
+    
+    # Limiter au nombre max de posts
+    recent_posts = sorted(recent_posts, key=lambda x: x.get('date', ''), reverse=True)[:max_posts]
+    
+    log_event('posts_filtered', {
+        'total': len(posts) if isinstance(posts, list) else 0,
+        'recent': len(recent_posts),
+        'cutoff_date': cutoff_date.strftime('%Y-%m-%d')
+    })
+    
+    return recent_posts
+
+
+def detect_company_sector(job_posting_data):
+    """
+    Détecte le secteur de l'entreprise avec taxonomie précise
+    VERSION V27.3 : Différencie logistique, industrie, banque, services
+    """
+    if not job_posting_data:
+        return 'general'
+    
+    text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+    
+    # Taxonomie secteur (ordre = priorité)
+    sectors = {
+        'banking': ['banque', 'bancaire', 'cib', 'corporate banking', 'investment banking', 
+                    'retail banking', 'private banking', 'gestion privée'],
+        
+        'insurance': ['assurance', 'assureur', 'solvabilité', 'actuariat', 'mutuelle'],
+        
+        'logistics_transport': ['logistique', 'supply chain', 'transport', 'freight', 
+                                 'forwarding', 'entreposage', 'distribution logistique',
+                                 'dhl', 'kuehne', 'geodis', 'bolloré logistics'],
+        
+        'manufacturing': ['production', 'usine', 'fabrication', 'manufacturing', 
+                          'sites de production', 'process industriel', 'ligne de production'],
+        
+        'engineering': ['ingénierie', 'engineering', 'construction', 'infrastructure', 
+                        'btp', 'travaux publics', 'génie civil'],
+        
+        'retail': ['retail', 'grande distribution', 'commerce', 'magasin', 
+                   'point de vente', 'réseau de magasins'],
+        
+        'fintech': ['fintech', 'néobanque', 'payment', 'crypto', 'blockchain'],
+        
+        'services': ['conseil', 'consulting', 'services', 'cabinet']
+    }
+    
+    sector_scores = {}
+    for sector, keywords in sectors.items():
+        score = sum(1 for kw in keywords if kw in text)
+        if score > 0:
+            sector_scores[sector] = score
+    
+    if not sector_scores:
+        return 'general'
+    
+    detected_sector = max(sector_scores.items(), key=lambda x: x[1])[0]
+    
+    log_event('sector_detected', {
+        'sector': detected_sector,
+        'scores': sector_scores
+    })
+    
+    return detected_sector
+
+
+def extract_certifications_and_norms(job_posting_data):
+    """
+    Détecte les certifications et normes métier mentionnées
+    VERSION V27.3 : Enrichit la détection des compétences
+    """
+    if not job_posting_data:
+        return []
+    
+    text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+    
+    certifications = {
+        # Audit
+        'cia': 'CIA',
+        'cpai': 'CPAI',
+        'cisa': 'CISA',
+        'cism': 'CISM',
+        'crma': 'CRMA',
+        'cfe': 'CFE',
+        
+        # Comptabilité
+        'dscg': 'DSCG',
+        'dec': 'DEC',
+        'cpa': 'CPA',
+        'acca': 'ACCA',
+        'cma': 'CMA',
+        
+        # Normes
+        'iia': 'normes IIA',
+        'ifrs': 'normes IFRS',
+        'gaap': 'normes GAAP',
+        'us gaap': 'normes US GAAP',
+        'sox': 'SOX',
+        'coso': 'COSO',
+        
+        # Project Management
+        'pmp': 'PMP',
+        'prince2': 'PRINCE2',
+        'safe': 'SAFe',
+        'scrum master': 'Scrum Master'
+    }
+    
+    detected = []
+    for cert_key, cert_name in certifications.items():
+        if cert_key.lower() in text:
+            detected.append(cert_name)
+    
+    return detected
 
 
 # ========================================
@@ -66,20 +220,9 @@ def detect_job_category(prospect_data, job_posting_data):
 
 def get_relevant_pain_point(job_category, job_posting_data):
     """
-    Sélectionne LE pain point le plus pertinent selon le métier et la fiche de poste
-    VERSION V27.2.2 : Avec logs de débogage complets
+    VERSION V27.3 : Pain points adaptés par secteur + validation stricte
     """
-    # ============================================
-    # DEBUG LOG 1 : Entrée de fonction
-    # ============================================
-    print("\n" + "="*80)
-    print(f"🔍 DEBUG get_relevant_pain_point()")
-    print(f"   Job category: {job_category}")
-    print(f"   Job posting provided: {bool(job_posting_data)}")
-    print("="*80)
-    
     if job_category not in PAIN_POINTS_DETAILED:
-        print(f"⚠️  Job category '{job_category}' not found in PAIN_POINTS_DETAILED")
         return {
             'short': "recrutement complexe sur ce type de poste",
             'context': "Difficulté à trouver des profils qui combinent expertise technique et vision business."
@@ -87,160 +230,77 @@ def get_relevant_pain_point(job_category, job_posting_data):
     
     pain_points = PAIN_POINTS_DETAILED[job_category]
     
-    # ============================================
-    # DEBUG LOG 2 : Pain points disponibles
-    # ============================================
-    print(f"\n📋 Pain points disponibles pour '{job_category}':")
-    for i, key in enumerate(pain_points.keys(), 1):
-        print(f"   {i}. {key}")
-    print()
-    
-    # Si pas de fiche de poste
     if not job_posting_data:
-        print("⚠️  Aucune fiche de poste fournie - sélection du premier pain point générique")
+        # Retourner le premier pain point générique
         for key, pain_point in pain_points.items():
             if 'data' not in key.lower() and 'tool' not in key.lower():
-                print(f"✅ Pain point sélectionné (générique): {key}")
                 return pain_point
-        first_key = list(pain_points.keys())[0]
-        print(f"✅ Pain point sélectionné (premier par défaut): {first_key}")
-        return pain_points[first_key]
+        return list(pain_points.values())[0]
     
-    # Analyser la fiche de poste
     job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+    sector_code = detect_company_sector(job_posting_data)
     
-    # ============================================
-    # DEBUG LOG 3 : Extrait de la fiche
-    # ============================================
-    print(f"📄 Fiche de poste analysée:")
-    print(f"   Titre: {job_posting_data.get('title', 'N/A')}")
-    print(f"   Longueur description: {len(job_posting_data.get('description', ''))} caractères")
-    print(f"   Extrait (200 premiers caractères): {job_text[:200]}...")
-    print()
-    
-    # ============================================
-    # RÈGLE 1 : VÉRIFICATION DES PRÉ-REQUIS
-    # ============================================
+    # Validation pré-requis
     pain_point_prerequisites = {
-        'data_driven': ['data', 'analytics', 'python', 'r', 'data science', 'machine learning', 'analytical tools'],
-        'tool_adoption': ['epm', 'tagetik', 'anaplan', 'jedox', 'hyperion', 'onestream', 'adoption', 'déploiement'],
-        'excel_dependency': ['excel', 'tableur', 'spreadsheet', 'manuel'],
-        'transformation_project': ['transformation', 'migration', 'déploiement', 'projet', 'implémentation']
+        'data_driven': ['data', 'analytics', 'python', 'r', 'data science', 'machine learning'],
+        'tool_adoption': ['epm', 'tagetik', 'anaplan', 'jedox', 'hyperion', 'onestream'],
+        'excel_dependency': ['excel', 'tableur', 'spreadsheet'],
+        'transformation_project': ['transformation', 'migration', 'déploiement']
     }
     
-    print("🔎 VÉRIFICATION DES PRÉ-REQUIS:")
-    print("-" * 80)
+    # Exclusions par secteur
+    sector_exclusions = {
+        'logistics_transport': ['industrial_processes'],  # Logistique ≠ Industrie
+        'services': ['industrial_processes'],
+        'fintech': ['industrial_processes']
+    }
     
     valid_pain_points = {}
     
     for pain_key, pain_point in pain_points.items():
-        requires_keywords = False
-        required_keywords = []
+        # Exclure par secteur
+        if sector_code in sector_exclusions:
+            if any(excl in pain_key.lower() for excl in sector_exclusions[sector_code]):
+                continue
         
-        # Vérifier si ce pain point a des pré-requis
+        # Vérifier pré-requis
+        requires_keywords = False
         for prereq_key, keywords in pain_point_prerequisites.items():
             if prereq_key in pain_key.lower():
                 requires_keywords = True
-                required_keywords = keywords
-                break
+                if not any(kw in job_text for kw in keywords):
+                    break  # Exclure ce pain point
+                else:
+                    valid_pain_points[pain_key] = pain_point
+                    break
         
-        # ============================================
-        # DEBUG LOG 4 : Vérification par pain point
-        # ============================================
-        print(f"\n   Pain point: '{pain_key}'")
-        
-        if requires_keywords:
-            print(f"      → Pré-requis détectés: {prereq_key}")
-            print(f"      → Mots-clés requis: {required_keywords}")
-            
-            # Vérifier si AU MOINS UN mot-clé est dans la fiche
-            found_keywords = [kw for kw in required_keywords if kw in job_text]
-            
-            if found_keywords:
-                print(f"      ✅ VALIDÉ - Mots-clés trouvés: {found_keywords}")
-                valid_pain_points[pain_key] = pain_point
-            else:
-                print(f"      ❌ EXCLU - Aucun mot-clé trouvé dans la fiche")
-        else:
-            print(f"      → Aucun pré-requis - VALIDÉ par défaut")
+        if not requires_keywords:
             valid_pain_points[pain_key] = pain_point
     
-    # ============================================
-    # DEBUG LOG 5 : Pain points validés
-    # ============================================
-    print("\n" + "="*80)
-    print(f"📊 RÉSULTAT VALIDATION:")
-    print(f"   Pain points validés: {len(valid_pain_points)}/{len(pain_points)}")
-    for key in valid_pain_points.keys():
-        print(f"      ✅ {key}")
-    print("="*80 + "\n")
-    
-    # Si aucun pain point valide
     if not valid_pain_points:
-        print("⚠️  Aucun pain point validé - utilisation d'un générique")
         return {
             'short': "recrutement complexe sur ce type de poste",
             'context': "Difficulté à trouver des profils qui combinent expertise technique et compréhension métier."
         }
     
-    # ============================================
-    # RÈGLE 2 : SCORING DES PAIN POINTS VALIDES
-    # ============================================
-    print("🎯 SCORING DES PAIN POINTS VALIDÉS:")
-    print("-" * 80)
-    
-    # Mots-clés de scoring par pain point
+    # Scoring
     scoring_keywords = {
-        'multi_site': ['multi-sites', 'sites de production', 'filiales', 'international', 'pays'],
-        'industrial': ['industrie', 'industriel', 'production', 'manufacturing', 'usine'],
-        'control': ['contrôle interne', 'internal control', 'sox', 'compliance'],
-        'financial_close': ['clôture', 'closing', 'consolidation'],
-        'group_audit': ['groupe', 'group', 'holding'],
-        'epm_tools': ['epm', 'tagetik', 'anaplan', 'jedox', 'hyperion', 'onestream'],
-        'excel': ['excel', 'tableur', 'spreadsheet'],
-        'data': ['data', 'analytics', 'python', 'r', 'tableau', 'power bi'],
-        'transformation': ['transformation', 'migration', 'déploiement', 'implémentation']
+        'logistics': ['logistique', 'supply chain', 'transport', 'freight'],
+        'multi_site': ['multi-sites', 'filiales', 'international', 'pays'],
+        'industrial': ['production', 'manufacturing', 'usine'],
+        'banking': ['bancaire', 'bank', 'cib'],
+        'certifications': ['cia', 'iia', 'coso', 'ifrs']
     }
     
     pain_scores = {}
-    
     for pain_key, pain_point in valid_pain_points.items():
-        score = 0
-        matched_keywords = []
-        
-        # Scorer selon les mots-clés présents dans la fiche
-        for category, keywords in scoring_keywords.items():
-            for kw in keywords:
-                if kw in job_text:
-                    score += 1
-                    matched_keywords.append(kw)
-        
-        pain_scores[pain_key] = {
-            'score': score,
-            'matched': matched_keywords,
-            'pain_point': pain_point
-        }
-        
-        print(f"\n   '{pain_key}':")
-        print(f"      Score: {score}")
-        print(f"      Mots-clés matchés: {matched_keywords[:5]}...")  # Afficher max 5
+        score = sum(1 for category_kws in scoring_keywords.values() 
+                   for kw in category_kws if kw in job_text)
+        pain_scores[pain_key] = score
     
-    # Sélectionner le pain point avec le meilleur score
-    best_pain_key = max(pain_scores.items(), key=lambda x: x[1]['score'])[0]
-    best_pain_point = pain_scores[best_pain_key]['pain_point']
-    
-    # ============================================
-    # DEBUG LOG 6 : Sélection finale
-    # ============================================
-    print("\n" + "="*80)
-    print(f"🏆 PAIN POINT SÉLECTIONNÉ:")
-    print(f"   Clé: {best_pain_key}")
-    print(f"   Score: {pain_scores[best_pain_key]['score']}")
-    print(f"   Short: {best_pain_point['short']}")
-    print(f"   Context (extrait): {best_pain_point['context'][:100]}...")
-    print("="*80 + "\n")
-    
-    return best_pain_point
+    best_pain_key = max(pain_scores.items(), key=lambda x: x[1])[0]
+    return valid_pain_points[best_pain_key]
+
 
 def get_relevant_outcomes(job_category, max_outcomes=2):
     """Récupère les outcomes pertinents"""
@@ -377,7 +437,7 @@ def filter_real_tools(extracted_keywords):
     # Dédupliquer
     detected_tools = list(set(detected_tools))
     
-    log_event('tools_filtered_v27_2', {
+    log_event('tools_filtered_v27_3', {
         'raw_count': len(all_keywords),
         'filtered_count': len(detected_tools),
         'tools': detected_tools
@@ -388,14 +448,15 @@ def filter_real_tools(extracted_keywords):
 
 def extract_key_skills_from_job(job_posting_data, job_category):
     """
-    Extrait les compétences clés de la fiche de poste
-    VERSION V27.2 : EXTRACTION PURE - Zéro invention d'outils
+    VERSION V27.3 : Extraction enrichie avec secteur + certifications
     """
     skills = {
         'tools': [],
         'technical': [],
         'soft': [],
+        'certifications': [],
         'sector': 'le secteur',
+        'sector_code': 'general',
         'context': []
     }
     
@@ -404,19 +465,19 @@ def extract_key_skills_from_job(job_posting_data, job_category):
     
     job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
     
-    # ========================================
-    # ÉTAPE 1 : EXTRACTION PURE DES OUTILS
-    # ========================================
+    # ÉTAPE 1 : Détection secteur
+    skills['sector_code'] = detect_company_sector(job_posting_data)
+    
+    # ÉTAPE 2 : Extraction outils
     extracted = extract_all_keywords_from_job(job_posting_data)
     detected_tools = filter_real_tools(extracted)
-    
     skills['tools'] = detected_tools
     
-    # ========================================
-    # ÉTAPE 2 : COMPÉTENCES TECHNIQUES
-    # ========================================
+    # ÉTAPE 3 : Certifications et normes
+    skills['certifications'] = extract_certifications_and_norms(job_posting_data)
+    
+    # ÉTAPE 4 : Compétences techniques
     technical_keywords = {
-        # Finance générale
         'consolidation': 'consolidation',
         'ifrs': 'normes IFRS',
         'gaap': 'normes GAAP',
@@ -427,30 +488,12 @@ def extract_key_skills_from_job(job_posting_data, job_category):
         'reporting': 'reporting',
         'fp&a': 'FP&A',
         'business partnering': 'business partnering',
-        'variance analysis': 'analyse des écarts',
-        # Comptabilité
-        'comptabilité générale': 'comptabilité générale',
-        'comptabilité analytique': 'comptabilité analytique',
-        'réconciliations': 'réconciliations',
-        'pcb': 'plan comptable bancaire',
-        # Audit
         'audit interne': 'audit interne',
         'audit financier': 'audit financier',
-        'audit opérationnel': 'audit opérationnel',
         'contrôle interne': 'contrôle interne',
-        'gestion des risques': 'gestion des risques',
-        # Bancaire
-        'alm': 'ALM (actif-passif)',
-        'liquidité': 'gestion de liquidité',
-        'refinancement': 'refinancement',
-        # Autres
         'trésorerie': 'trésorerie',
-        'fiscalité': 'fiscalité',
-        'valorisation stocks': 'valorisation des stocks',
-        'kpi': 'construction de KPI',
-        'tableaux de bord': 'tableaux de bord',
-        'process': 'process',
-        'référentiels': 'référentiels'
+        'supply chain': 'supply chain',
+        'processus opérationnels': 'processus opérationnels'
     }
     
     for keyword, tech_name in technical_keywords.items():
@@ -458,9 +501,7 @@ def extract_key_skills_from_job(job_posting_data, job_category):
             if tech_name not in skills['technical']:
                 skills['technical'].append(tech_name)
     
-    # ========================================
-    # ÉTAPE 3 : COMPÉTENCES SOFT
-    # ========================================
+    # ÉTAPE 5 : Soft skills
     soft_keywords = {
         'change management': 'change management',
         'conduite du changement': 'conduite du changement',
@@ -484,47 +525,28 @@ def extract_key_skills_from_job(job_posting_data, job_category):
             if soft_name not in skills['soft']:
                 skills['soft'].append(soft_name)
     
-    # ========================================
-    # ÉTAPE 4 : SECTEUR
-    # ========================================
-    if any(kw in job_text for kw in ['banque', 'bank', 'bancaire', 'cib', 'corporate banking']):
-        skills['sector'] = 'le secteur bancaire'
-        skills['context'] = ['environnement bancaire', 'réglementation', 'CIB']
+    # ÉTAPE 6 : Contexte secteur
+    sector_contexts = {
+        'banking': ('le secteur bancaire', ['environnement bancaire', 'réglementation bancaire', 'CIB']),
+        'insurance': ('l\'assurance', ['compagnie d\'assurance', 'Solvabilité II']),
+        'logistics_transport': ('la logistique et le transport', ['supply chain', 'opérations logistiques', 'réseau international']),
+        'manufacturing': ('l\'industrie', ['sites de production', 'manufacturing', 'environnement industriel']),
+        'engineering': ('l\'ingénierie', ['infrastructure', 'construction', 'projets d\'envergure']),
+        'retail': ('le retail', ['réseau multi-sites', 'distribution']),
+        'fintech': ('la fintech', ['startup fintech', 'scale-up', 'innovation financière']),
+        'services': ('les services', ['conseil', 'prestations'])
+    }
     
-    elif 'fintech' in job_text or 'neo-banque' in job_text:
-        skills['sector'] = 'la fintech'
-        skills['context'] = ['startup fintech', 'scale-up', 'agilité']
-    
-    elif 'assurance' in job_text:
-        skills['sector'] = 'l\'assurance'
-        skills['context'] = ['compagnie d\'assurance', 'Solvabilité II']
-    
-    elif any(kw in job_text for kw in ['industrie', 'industrial', 'manufacturing', 'production', 'usine']):
-        skills['sector'] = 'l\'industrie'
-        skills['context'] = ['groupe industriel', 'sites de production', 'manufacturing']
-    
-    elif any(kw in job_text for kw in ['retail', 'distribution', 'réseau', 'agences', 'magasins']):
-        skills['sector'] = 'le retail'
-        skills['context'] = ['réseau multi-sites', 'distribution']
-    
-    elif 'négoce' in job_text or 'negoce' in job_text:
-        skills['sector'] = 'le négoce'
-        skills['context'] = ['négoce international', 'trading']
-    
-    elif any(kw in job_text for kw in ['audiovisuel', 'cinéma', 'production', 'média']):
-        skills['sector'] = 'l\'audiovisuel'
-        skills['context'] = ['production', 'droits d\'auteurs']
-    
+    if skills['sector_code'] in sector_contexts:
+        skills['sector'], skills['context'] = sector_contexts[skills['sector_code']]
     else:
         skills['sector'] = 'le secteur'
         skills['context'] = ['grand groupe', 'international']
     
-    log_event('skills_extracted_v27_2', {
-        'tools_count': len(skills['tools']),
+    log_event('skills_extracted_v27_3', {
         'tools': skills['tools'],
-        'technical_count': len(skills['technical']),
-        'soft_count': len(skills['soft']),
-        'sector': skills['sector']
+        'certifications': skills['certifications'],
+        'sector': skills['sector_code']
     })
     
     return skills
@@ -552,7 +574,7 @@ def get_safe_firstname(prospect_data):
                 return str(value).strip().capitalize()
     
     # Dernier recours : essayer de splitter full_name
-    full_name = prospect_data.get('full_name') or prospect_data.get('user_full name')
+    full_name = prospect_data.get('full_name') or prospect_data.get('user_full_name')
     if full_name and ' ' in str(full_name):
         parts = str(full_name).split()
         if len(parts) >= 1:
@@ -708,13 +730,13 @@ Génère les 3 objets (numérotés 1, 2, 3) :"""
 
 
 # ========================================
-# 2. MESSAGE 2 : LA PROPOSITION (V27.2 OPTIMISÉ)
+# 2. MESSAGE 2 : LA PROPOSITION (V27.3 OPTIMISÉ)
 # ========================================
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
     """
     Génère le message 2 avec 2 profils TOUJOURS ultra-différenciés
-    VERSION V27.2 : Prompt massivement renforcé avec exemples concrets
+    VERSION V27.3 : Secteur + certifications + outils exacts
     """
     
     log_event('generate_message_2_start', {
@@ -734,9 +756,10 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
     
     log_event('message_2_skills_extracted', {
         'tools': skills['tools'],
+        'certifications': skills['certifications'],
         'technical': skills['technical'][:3],
         'soft': skills['soft'][:2],
-        'sector': skills['sector']
+        'sector': skills['sector_code']
     })
     
     if is_hiring:
@@ -755,108 +778,56 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
 Focus uniquement sur les compétences métier et le contexte."""
     
     technical_str = ', '.join(skills['technical'][:5]) if skills['technical'] else 'compétences métier générales'
-    soft_str = ', '.join(skills['soft'][:3]) if skills['soft'] else 'compétences transverses'
+    certs_str = ', '.join(skills['certifications']) if skills['certifications'] else 'Aucune'
     
     prompt = f"""Tu es chasseur de têtes spécialisé Finance.
 
-═══════════════════════════════════════════════════════════════
-⚠️  RÈGLE ABSOLUE - NON NÉGOCIABLE :
-═══════════════════════════════════════════════════════════════
+CONTEXTE :
+Prospect : {first_name}
+Poste : {context_name}
+Secteur détecté : {skills['sector_code']}
 
-Tu DOIS TOUJOURS proposer EXACTEMENT 2 profils candidats dans ce message.
-Les 2 profils DOIVENT être TRÈS DIFFÉRENTS (parcours, secteurs, compétences).
+OUTILS DÉTECTÉS : {tools_str}
+CERTIFICATIONS DÉTECTÉES : {certs_str}
+COMPÉTENCES TECHNIQUES : {technical_str}
+
+🚨 RÈGLES ABSOLUES :
+
+1. Utilise UNIQUEMENT les outils listés ci-dessus
+2. Utilise UNIQUEMENT les certifications listées ci-dessus
+3. Si outils = AUCUN → NE MENTIONNE AUCUN OUTIL
+4. Adapte le secteur des profils au secteur détecté
 
 FORMAT OBLIGATOIRE :
 "J'ai identifié 2 profils qui pourraient retenir votre attention :
-- L'un [profil 1 avec détails précis]
-- L'autre [profil 2 avec parcours différent]"
+- L'un [profil 1 avec outils/certifications exacts]
+- L'autre [profil 2 parcours différent]"
 
-═══════════════════════════════════════════════════════════════
+EXEMPLES PAR SECTEUR :
 
-CONTEXTE :
-Prospect : {first_name}
-Poste recherché : {context_name}
-Métier : {job_category}
-Type : {'Recrutement actif' if is_hiring else 'Approche spontanée'}
+🏦 Banking :
+"- L'un possède 8 ans d'audit interne bancaire (CIB, retail banking) avec certification CIA et expertise normes BPCE"
 
-ANALYSE DE LA FICHE DE POSTE :
-Titre exact : {job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'}
+🚚 Logistique :
+"- L'un dispose de 7 ans d'audit opérationnel supply chain chez un groupe de transport international (40+ pays)"
 
-═══════════════════════════════════════════════════════════════
-🚨 OUTILS DÉTECTÉS DANS LA FICHE (UTILISE UNIQUEMENT CEUX-CI)
-═══════════════════════════════════════════════════════════════
+🏭 Industrie :
+"- L'un possède 6 ans d'audit interne en groupe industriel (15 sites de production européens)"
 
-OUTILS DÉTECTÉS : {tools_str}
-COMPÉTENCES TECHNIQUES : {technical_str}
-COMPÉTENCES TRANSVERSES : {soft_str}
-SECTEUR : {skills['sector']}{no_tools_warning}
-
-🚨 RÈGLES ABSOLUES SUR LES OUTILS :
-
-1️⃣ SI des outils sont listés ci-dessus (ex: SAP, Jedox, Excel) :
-   ✅ Utilise UNIQUEMENT ces outils
-   ✅ Mentionne-les explicitement dans les profils
-   ❌ N'ajoute AUCUN autre outil
-
-2️⃣ SI AUCUN OUTIL détecté :
-   ✅ NE MENTIONNE AUCUN OUTIL
-   ✅ Focus sur : "expertise audit", "maîtrise consolidation"
-   ✅ Focus contexte : "environnement industriel", "multi-sites"
-   ❌ N'invente PAS d'outils
-
-3️⃣ INTERDICTIONS STRICTES :
-   ❌ JAMAIS ajouter Python si non listé
-   ❌ JAMAIS ajouter R si non listé
-   ❌ JAMAIS ajouter Tableau si non listé
-   ❌ JAMAIS ajouter Power BI si non listé
-   ❌ JAMAIS inventer un outil absent de la liste
-
-EXEMPLES CONCRETS :
-
-📌 Si outils = [SAP, Excel] :
-✅ BON : "maîtrise de SAP et Excel avancé"
-❌ MAUVAIS : "maîtrise de SAP, Excel et Python"
-
-📌 Si outils = [Jedox, Pigment] :
-✅ BON : "expertise Jedox ou Pigment"
-❌ MAUVAIS : "expertise Jedox, Pigment et Tableau"
-
-📌 Si outils = [] (AUCUN) :
-✅ BON : "expertise audit avec forte compréhension des enjeux industriels"
-❌ MAUVAIS : "expertise audit avec Python et R"
-
-═══════════════════════════════════════════════════════════════
-
-Description fiche (extraits) :
-{str(job_posting_data.get('description', ''))[:800] if job_posting_data else 'N/A'}
-
-PAIN POINT IDENTIFIÉ :
-{pain_point['short']}
-Contexte : {pain_point['context']}
-
-═══════════════════════════════════════════════════════════════
-STRUCTURE STRICTE DU MESSAGE (100-120 mots max)
-═══════════════════════════════════════════════════════════════
-
+STRUCTURE (100-120 mots max) :
 1. "Bonjour {first_name},"
 2. SAUT DE LIGNE
 3. "{intro_phrase}"
 4. SAUT DE LIGNE
-5. Observation marché ULTRA-SPÉCIFIQUE (30-40 mots basée UNIQUEMENT sur les compétences détectées ci-dessus)
+5. Observation marché ULTRA-SPÉCIFIQUE (30-40 mots)
 6. SAUT DE LIGNE
-7. Proposition de 2 PROFILS ULTRA-DIFFÉRENCIÉS utilisant UNIQUEMENT les outils détectés
+7. Proposition de 2 PROFILS avec outils/certifications exacts
 8. SAUT DE LIGNE
 9. "Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait de juger leur pertinence en 30 secondes."
 10. SAUT DE LIGNE
 11. "Bien à vous,"
 
-INTERDICTIONS ABSOLUES :
-❌ JAMAIS "Notre cabinet", "Nos services"
-❌ JAMAIS proposer des profils sans compétences précises
-❌ JAMAIS plus de 120 mots
-❌ JAMAIS de profils trop similaires
-
-Génère le message 2 selon ces règles STRICTES :"""
+Génère le message (100-120 mots max) :"""
     
     try:
         message = client.messages.create(
@@ -896,7 +867,7 @@ Génère le message 2 selon ces règles STRICTES :"""
 def generate_message_2_fallback(first_name, context_name, is_hiring, job_posting_data, skills, pain_point):
     """
     Fallback intelligent pour Message 2
-    VERSION V27.2 : Utilise VRAIMENT les compétences détectées
+    VERSION V27.3 : Utilise secteur + certifications + outils
     """
     log_event('message_2_fallback_triggered', {
         'reason': 'API error or validation failed'
@@ -921,8 +892,13 @@ def generate_message_2_fallback(first_name, context_name, is_hiring, job_posting
     soft_1 = skills['soft'][0] if skills['soft'] else 'conduite du changement'
     context_1 = skills['context'][0] if skills['context'] else 'grand groupe'
     context_2 = skills['context'][1] if len(skills['context']) > 1 else 'environnement international'
+    cert_1 = skills['certifications'][0] if skills['certifications'] else None
     
-    profile_1 = f"- L'un possède une expertise {tech_1} avec maîtrise de {tool_1}, ayant piloté des projets de transformation dans un {context_1} avec forte autonomie opérationnelle."
+    if cert_1:
+        profile_1 = f"- L'un possède une expertise {tech_1} avec maîtrise de {tool_1} et certification {cert_1}, ayant piloté des projets de transformation dans un {context_1} avec forte autonomie opérationnelle."
+    else:
+        profile_1 = f"- L'un possède une expertise {tech_1} avec maîtrise de {tool_1}, ayant piloté des projets de transformation dans un {context_1} avec forte autonomie opérationnelle."
+    
     profile_2 = f"- L'autre combine {tech_2} et {soft_1}, issu d'un {context_2} avec expérience significative en {tool_2} et accompagnement d'équipes."
     
     message = f"""Bonjour {first_name},
