@@ -609,7 +609,7 @@ def get_relevant_pain_point(job_category, job_posting_data):
 def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
     """
     Génère l'icebreaker (Message 1) en sélectionnant le meilleur hook
-    VERSION V4.0 : Question finale TOUJOURS identique
+    VERSION V4.1 : Filtrage hooks <3 mois AVANT sélection
     """
     log_event('generate_icebreaker_start', {
         'prospect': prospect_data.get('_id', 'unknown'),
@@ -617,7 +617,26 @@ def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
         'hooks_type': type(hooks_data).__name__
     })
     
+    # NOUVEAU V4.1 : Importer et appeler filter_recent_posts
+    from message_sequence_generator import filter_recent_posts
+    
+    # Filtrer hooks <3 mois
+    if hooks_data != "NOT_FOUND" and isinstance(hooks_data, list):
+        filtered_posts = filter_recent_posts(hooks_data, max_age_months=3, max_posts=5)
+        if filtered_posts:
+            hooks_data = filtered_posts
+        else:
+            hooks_data = "NOT_FOUND"  # Aucun post récent
+    
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    
+    first_name = get_safe_firstname(prospect_data)
+    context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
+    job_category = detect_job_category(prospect_data, job_posting_data)
+    pain_point = get_relevant_pain_point(job_category, job_posting_data)
+    
+    hooks_list = extract_hooks_from_linkedin(hooks_data)
+    best_hook, hook_score, hook_keywords = select_best_hook(hooks_list, job_posting_data)
     
     first_name = get_safe_firstname(prospect_data)
     context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
