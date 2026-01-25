@@ -147,10 +147,136 @@ def flexible_match(keyword, text):
 # EXTRACTION COMPÉTENCES (ENRICHI V27)
 # ========================================
 
+def extract_all_keywords_from_job(job_posting_data):
+    """
+    ÉTAPE 1 : Extraction brute de TOUS les mots-clés potentiels
+    VERSION V27.2 : Extraction pure sans interprétation
+    """
+    if not job_posting_data:
+        return {'acronyms': [], 'capitalized': [], 'technical': []}
+    
+    job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}"
+    
+    # 1. ACRONYMES (2-10 lettres majuscules)
+    acronyms = re.findall(r'\b[A-Z]{2,10}\b', job_text)
+    
+    # 2. MOTS CAPITALISÉS (noms propres, outils)
+    capitalized = re.findall(r'\b[A-Z][a-z]+\b', job_text)
+    
+    # 3. EXPRESSIONS ENTRE PARENTHÈSES (souvent des listes d'outils)
+    # Exemple : "EPM (Pigment, Jedox, Lucanet)"
+    in_parens = re.findall(r'\(([^)]+)\)', job_text)
+    technical_terms = []
+    for content in in_parens:
+        items = [item.strip() for item in content.split(',')]
+        technical_terms.extend(items)
+    
+    return {
+        'acronyms': list(set(acronyms)),
+        'capitalized': list(set(capitalized)),
+        'technical': technical_terms
+    }
+
+
+def filter_real_tools(extracted_keywords):
+    """
+    ÉTAPE 2 : Filtrage pour ne garder QUE les vrais outils
+    VERSION V27.2 : Liste blanche + détection intelligente
+    """
+    
+    # LISTE BLANCHE : Outils connus avec certitude
+    KNOWN_TOOLS = {
+        # EPM / Planning
+        'Pigment', 'Jedox', 'Lucanet', 'Tagetik', 'Anaplan', 'Hyperion', 
+        'OneStream', 'Board', 'Prophix',
+        # ERP
+        'SAP', 'Oracle', 'Sage', 'Dynamics', 'NetSuite', 'Infor',
+        # BI / Analytics
+        'Tableau', 'Qlik', 'Spotfire', 'Looker', 'Microstrategy',
+        'Power BI', 'PowerBI', 'Power', 'BI',
+        # Langages
+        'Python', 'SQL', 'VBA', 'R',
+        # Office / Productivité
+        'Excel', 'Power Query', 'Power Pivot', 'PowerQuery',
+        # Autres outils métier
+        'Coupa', 'Ariba', 'Concur', 'Workday', 'Salesforce', 'Kyriba',
+        'Blackline', 'Trintech'
+    }
+    
+    # LISTE NOIRE : Faux positifs à exclure systématiquement
+    EXCLUDE_LIST = {
+        # Géographie
+        'USA', 'UK', 'France', 'Paris', 'Europe', 'Germany', 'Spain',
+        # Rôles / Titres
+        'CEO', 'CFO', 'COO', 'CTO', 'DAF', 'RAF', 'DRH', 'CDO', 'CMO',
+        # Contrats
+        'CDI', 'CDD', 'VIE', 'Stage', 'Interim',
+        # Indicateurs / KPI
+        'KPI', 'ROI', 'EBITDA', 'CAPEX', 'OPEX', 'SLA',
+        # Organisations
+        'ETI', 'PME', 'TPE', 'SME', 'BU', 'CODIR',
+        # Départements
+        'IT', 'HR', 'RH', 'FTE', 'R&D', 'RD',
+        # Divers
+        'RTT', 'CV', 'PDF', 'EUR', 'USD', 'GBP',
+        # Mots génériques
+        'Groupe', 'Group', 'Company', 'International', 'Global',
+        # Certifications (pas des outils)
+        'PMP', 'SAFe', 'Scrum', 'Agile', 'PRINCE2'
+    }
+    
+    detected_tools = []
+    
+    # Collecter tous les mots-clés
+    all_keywords = (
+        extracted_keywords.get('acronyms', []) + 
+        extracted_keywords.get('capitalized', []) + 
+        extracted_keywords.get('technical', [])
+    )
+    
+    for keyword in all_keywords:
+        keyword_clean = keyword.strip()
+        
+        # Ignorer vide ou trop court
+        if not keyword_clean or len(keyword_clean) < 2:
+            continue
+        
+        # Si dans liste blanche → garder
+        if keyword_clean in KNOWN_TOOLS:
+            if keyword_clean not in detected_tools:
+                detected_tools.append(keyword_clean)
+        
+        # Si dans liste noire → ignorer
+        elif keyword_clean in EXCLUDE_LIST:
+            continue
+    
+    # Post-traitement : fusionner "Power" + "BI" en "Power BI"
+    if 'Power' in detected_tools and 'BI' in detected_tools:
+        detected_tools.remove('Power')
+        detected_tools.remove('BI')
+        if 'Power BI' not in detected_tools:
+            detected_tools.append('Power BI')
+    
+    # Dédupliquer
+    detected_tools = list(set(detected_tools))
+    
+    log_event('tools_filtered_v27_2', {
+        'raw_count': len(all_keywords),
+        'filtered_count': len(detected_tools),
+        'tools': detected_tools
+    })
+    
+    return detected_tools
+
+
+# ========================================
+# FONCTION PRINCIPALE (REMPLACE L'ANCIENNE)
+# ========================================
+
 def extract_key_skills_from_job(job_posting_data, job_category):
     """
     Extrait les compétences clés de la fiche de poste
-    VERSION V27.1 : Extraction précise - Ne jamais inventer d'outils absents
+    VERSION V27.2 : EXTRACTION PURE - Zéro invention d'outils
     """
     skills = {
         'tools': [],
@@ -164,6 +290,132 @@ def extract_key_skills_from_job(job_posting_data, job_category):
         return skills
     
     job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+    
+    # ========================================
+    # ÉTAPE 1 : EXTRACTION PURE DES OUTILS
+    # ========================================
+    extracted = extract_all_keywords_from_job(job_posting_data)
+    detected_tools = filter_real_tools(extracted)
+    
+    skills['tools'] = detected_tools
+    
+    # ========================================
+    # ÉTAPE 2 : COMPÉTENCES TECHNIQUES
+    # ========================================
+    technical_keywords = {
+        # Finance générale
+        'consolidation': 'consolidation',
+        'ifrs': 'normes IFRS',
+        'gaap': 'normes GAAP',
+        'sox': 'contrôles SOX',
+        'budget': 'budget',
+        'forecast': 'forecast',
+        'clôture': 'clôture',
+        'reporting': 'reporting',
+        'fp&a': 'FP&A',
+        'business partnering': 'business partnering',
+        'variance analysis': 'analyse des écarts',
+        # Comptabilité
+        'comptabilité générale': 'comptabilité générale',
+        'comptabilité analytique': 'comptabilité analytique',
+        'réconciliations': 'réconciliations',
+        'pcb': 'plan comptable bancaire',
+        # Audit
+        'audit interne': 'audit interne',
+        'audit financier': 'audit financier',
+        'audit opérationnel': 'audit opérationnel',
+        'contrôle interne': 'contrôle interne',
+        'gestion des risques': 'gestion des risques',
+        # Bancaire
+        'alm': 'ALM (actif-passif)',
+        'liquidité': 'gestion de liquidité',
+        'refinancement': 'refinancement',
+        # Autres
+        'trésorerie': 'trésorerie',
+        'fiscalité': 'fiscalité',
+        'valorisation stocks': 'valorisation des stocks',
+        'kpi': 'construction de KPI',
+        'tableaux de bord': 'tableaux de bord',
+        'process': 'process',
+        'référentiels': 'référentiels'
+    }
+    
+    for keyword, tech_name in technical_keywords.items():
+        if flexible_match(keyword, job_text):
+            if tech_name not in skills['technical']:
+                skills['technical'].append(tech_name)
+    
+    # ========================================
+    # ÉTAPE 3 : COMPÉTENCES SOFT
+    # ========================================
+    soft_keywords = {
+        'change management': 'change management',
+        'conduite du changement': 'conduite du changement',
+        'adoption': 'adoption utilisateurs',
+        'formation': 'formation',
+        'pédagogie': 'pédagogie',
+        'communication': 'communication',
+        'stakeholder': 'stakeholder management',
+        'accompagnement': 'accompagnement',
+        'acculturation': 'acculturation',
+        'agile': 'méthodologie Agile',
+        'scrum': 'Scrum',
+        'project management': 'project management',
+        'autonomie': 'autonomie',
+        'rigueur': 'rigueur',
+        'animation': 'animation'
+    }
+    
+    for keyword, soft_name in soft_keywords.items():
+        if flexible_match(keyword, job_text):
+            if soft_name not in skills['soft']:
+                skills['soft'].append(soft_name)
+    
+    # ========================================
+    # ÉTAPE 4 : SECTEUR
+    # ========================================
+    if any(kw in job_text for kw in ['banque', 'bank', 'bancaire', 'cib', 'corporate banking']):
+        skills['sector'] = 'le secteur bancaire'
+        skills['context'] = ['environnement bancaire', 'réglementation', 'CIB']
+    
+    elif 'fintech' in job_text or 'neo-banque' in job_text:
+        skills['sector'] = 'la fintech'
+        skills['context'] = ['startup fintech', 'scale-up', 'agilité']
+    
+    elif 'assurance' in job_text:
+        skills['sector'] = 'l\'assurance'
+        skills['context'] = ['compagnie d\'assurance', 'Solvabilité II']
+    
+    elif any(kw in job_text for kw in ['industrie', 'industrial', 'manufacturing', 'production', 'usine']):
+        skills['sector'] = 'l\'industrie'
+        skills['context'] = ['groupe industriel', 'sites de production', 'manufacturing']
+    
+    elif any(kw in job_text for kw in ['retail', 'distribution', 'réseau', 'agences', 'magasins']):
+        skills['sector'] = 'le retail'
+        skills['context'] = ['réseau multi-sites', 'distribution']
+    
+    elif 'négoce' in job_text or 'negoce' in job_text:
+        skills['sector'] = 'le négoce'
+        skills['context'] = ['négoce international', 'trading']
+    
+    elif any(kw in job_text for kw in ['audiovisuel', 'cinéma', 'production', 'média']):
+        skills['sector'] = 'l\'audiovisuel'
+        skills['context'] = ['production', 'droits d\'auteurs']
+    
+    else:
+        skills['sector'] = 'le secteur'
+        skills['context'] = ['grand groupe', 'international']
+    
+    log_event('skills_extracted_v27_2', {
+        'tools_count': len(skills['tools']),
+        'tools': skills['tools'],
+        'technical_count': len(skills['technical']),
+        'soft_count': len(skills['soft']),
+        'sector': skills['sector']
+    })
+    
+    return skills
+    
     
     # ========================================
     # OUTILS SPÉCIFIQUES (ORDRE DE PRIORITÉ)
@@ -598,13 +850,103 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
         intro_phrase = f"Je reviens vers vous concernant la structuration de {context_name}."
     
     # Préparer les compétences pour le prompt
-    tools_str = ', '.join(skills['tools'][:3]) if skills['tools'] else 'outils métier'
-    technical_str = ', '.join(skills['technical'][:3]) if skills['technical'] else 'expertise technique'
-    soft_str = ', '.join(skills['soft'][:2]) if skills['soft'] else 'compétences transverses'
+    if skills['tools']:
+        tools_str = ', '.join(skills['tools'][:5])
+        no_tools_warning = ""
+    else:
+        tools_str = 'AUCUN OUTIL SPÉCIFIQUE DÉTECTÉ'
+        no_tools_warning = """
+⚠️  AUCUN OUTIL DÉTECTÉ → NE MENTIONNE AUCUN OUTIL DANS LE MESSAGE
+Focus uniquement sur les compétences métier et le contexte."""
+    
+    technical_str = ', '.join(skills['technical'][:5]) if skills['technical'] else 'compétences métier générales'
+    soft_str = ', '.join(skills['soft'][:3]) if skills['soft'] else 'compétences transverses'
     
     prompt = f"""Tu es chasseur de têtes spécialisé Finance.
 
-═══════════════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════
+⚠️  RÈGLE ABSOLUE - NON NÉGOCIABLE :
+═══════════════════════════════════════════════════════════════
+
+Tu DOIS TOUJOURS proposer EXACTEMENT 2 profils candidats dans ce message.
+Les 2 profils DOIVENT être TRÈS DIFFÉRENTS (parcours, secteurs, compétences).
+
+FORMAT OBLIGATOIRE :
+"J'ai identifié 2 profils qui pourraient retenir votre attention :
+- L'un [profil 1 avec détails précis]
+- L'autre [profil 2 avec parcours différent]"
+
+═══════════════════════════════════════════════════════════════
+
+CONTEXTE :
+Prospect : {first_name}
+Poste recherché : {context_name}
+Métier : {job_category}
+Type : {'Recrutement actif' if is_hiring else 'Approche spontanée'}
+
+ANALYSE DE LA FICHE DE POSTE :
+Titre exact : {job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'}
+
+═══════════════════════════════════════════════════════════════
+🚨 OUTILS DÉTECTÉS DANS LA FICHE (UTILISE UNIQUEMENT CEUX-CI)
+═══════════════════════════════════════════════════════════════
+
+OUTILS DÉTECTÉS : {tools_str}
+COMPÉTENCES TECHNIQUES : {technical_str}
+COMPÉTENCES TRANSVERSES : {soft_str}
+SECTEUR : {skills['sector']}{no_tools_warning}
+
+🚨 RÈGLES ABSOLUES SUR LES OUTILS :
+
+1️⃣ SI des outils sont listés ci-dessus (ex: SAP, Jedox, Excel) :
+   ✅ Utilise UNIQUEMENT ces outils
+   ✅ Mentionne-les explicitement dans les profils
+   ❌ N'ajoute AUCUN autre outil
+
+2️⃣ SI AUCUN OUTIL détecté :
+   ✅ NE MENTIONNE AUCUN OUTIL
+   ✅ Focus sur : "expertise audit", "maîtrise consolidation"
+   ✅ Focus contexte : "environnement industriel", "multi-sites"
+   ❌ N'invente PAS d'outils
+
+3️⃣ INTERDICTIONS STRICTES :
+   ❌ JAMAIS ajouter Python si non listé
+   ❌ JAMAIS ajouter R si non listé
+   ❌ JAMAIS ajouter Tableau si non listé
+   ❌ JAMAIS ajouter Power BI si non listé
+   ❌ JAMAIS inventer un outil absent de la liste
+
+EXEMPLES CONCRETS :
+
+📌 Si outils = [SAP, Excel] :
+✅ BON : "maîtrise de SAP et Excel avancé"
+❌ MAUVAIS : "maîtrise de SAP, Excel et Python"
+
+📌 Si outils = [Jedox, Pigment] :
+✅ BON : "expertise Jedox ou Pigment"
+❌ MAUVAIS : "expertise Jedox, Pigment et Tableau"
+
+📌 Si outils = [] (AUCUN) :
+✅ BON : "expertise audit avec forte compréhension des enjeux industriels"
+❌ MAUVAIS : "expertise audit avec Python et R"
+
+═══════════════════════════════════════════════════════════════
+
+Description fiche (extraits) :
+{str(job_posting_data.get('description', ''))[:800] if job_posting_data else 'N/A'}
+
+PAIN POINT IDENTIFIÉ :
+{pain_point['short']}
+Contexte : {pain_point['context']}
+
+═══════════════════════════════════════════════════════════════
+STRUCTURE STRICTE DU MESSAGE (100-120 mots max)
+═══════════════════════════════════════════════════════════════
+"""
+    
+    prompt = f"""Tu es chasseur de têtes spécialisé Finance.
+
+═══════════════════════════════════════════════════════════════
 ⚠️  RÈGLE ABSOLUE - NON NÉGOCIABLE :
 ═══════════════════════════════════════════════════════════════════
 
