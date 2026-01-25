@@ -67,10 +67,19 @@ def detect_job_category(prospect_data, job_posting_data):
 def get_relevant_pain_point(job_category, job_posting_data):
     """
     Sélectionne LE pain point le plus pertinent selon le métier et la fiche de poste
-    VERSION V27.2.1 : N'utilise QUE les pain points validés par la fiche
-    Retourne un dict avec 'short' et 'context'
+    VERSION V27.2.2 : Avec logs de débogage complets
     """
+    # ============================================
+    # DEBUG LOG 1 : Entrée de fonction
+    # ============================================
+    print("\n" + "="*80)
+    print(f"🔍 DEBUG get_relevant_pain_point()")
+    print(f"   Job category: {job_category}")
+    print(f"   Job posting provided: {bool(job_posting_data)}")
+    print("="*80)
+    
     if job_category not in PAIN_POINTS_DETAILED:
+        print(f"⚠️  Job category '{job_category}' not found in PAIN_POINTS_DETAILED")
         return {
             'short': "recrutement complexe sur ce type de poste",
             'context': "Difficulté à trouver des profils qui combinent expertise technique et vision business."
@@ -78,22 +87,40 @@ def get_relevant_pain_point(job_category, job_posting_data):
     
     pain_points = PAIN_POINTS_DETAILED[job_category]
     
-    # Si pas de fiche de poste, prendre le premier pain point NON spécifique
+    # ============================================
+    # DEBUG LOG 2 : Pain points disponibles
+    # ============================================
+    print(f"\n📋 Pain points disponibles pour '{job_category}':")
+    for i, key in enumerate(pain_points.keys(), 1):
+        print(f"   {i}. {key}")
+    print()
+    
+    # Si pas de fiche de poste
     if not job_posting_data:
-        # Éviter les pain points trop spécifiques (data_driven, etc.)
+        print("⚠️  Aucune fiche de poste fournie - sélection du premier pain point générique")
         for key, pain_point in pain_points.items():
             if 'data' not in key.lower() and 'tool' not in key.lower():
+                print(f"✅ Pain point sélectionné (générique): {key}")
                 return pain_point
-        # Sinon premier de la liste
         first_key = list(pain_points.keys())[0]
+        print(f"✅ Pain point sélectionné (premier par défaut): {first_key}")
         return pain_points[first_key]
     
     # Analyser la fiche de poste
     job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
     
-    # ========================================
+    # ============================================
+    # DEBUG LOG 3 : Extrait de la fiche
+    # ============================================
+    print(f"📄 Fiche de poste analysée:")
+    print(f"   Titre: {job_posting_data.get('title', 'N/A')}")
+    print(f"   Longueur description: {len(job_posting_data.get('description', ''))} caractères")
+    print(f"   Extrait (200 premiers caractères): {job_text[:200]}...")
+    print()
+    
+    # ============================================
     # RÈGLE 1 : VÉRIFICATION DES PRÉ-REQUIS
-    # ========================================
+    # ============================================
     pain_point_prerequisites = {
         'data_driven': ['data', 'analytics', 'python', 'r', 'data science', 'machine learning', 'analytical tools'],
         'tool_adoption': ['epm', 'tagetik', 'anaplan', 'jedox', 'hyperion', 'onestream', 'adoption', 'déploiement'],
@@ -101,85 +128,119 @@ def get_relevant_pain_point(job_category, job_posting_data):
         'transformation_project': ['transformation', 'migration', 'déploiement', 'projet', 'implémentation']
     }
     
-    # Pour chaque pain point avec pré-requis, vérifier si la fiche les contient
+    print("🔎 VÉRIFICATION DES PRÉ-REQUIS:")
+    print("-" * 80)
+    
     valid_pain_points = {}
     
     for pain_key, pain_point in pain_points.items():
-        # Vérifier si ce pain point a des pré-requis
         requires_keywords = False
         required_keywords = []
         
+        # Vérifier si ce pain point a des pré-requis
         for prereq_key, keywords in pain_point_prerequisites.items():
             if prereq_key in pain_key.lower():
                 requires_keywords = True
                 required_keywords = keywords
                 break
         
-        # Si le pain point nécessite des mots-clés
+        # ============================================
+        # DEBUG LOG 4 : Vérification par pain point
+        # ============================================
+        print(f"\n   Pain point: '{pain_key}'")
+        
         if requires_keywords:
+            print(f"      → Pré-requis détectés: {prereq_key}")
+            print(f"      → Mots-clés requis: {required_keywords}")
+            
             # Vérifier si AU MOINS UN mot-clé est dans la fiche
-            if any(kw in job_text for kw in required_keywords):
+            found_keywords = [kw for kw in required_keywords if kw in job_text]
+            
+            if found_keywords:
+                print(f"      ✅ VALIDÉ - Mots-clés trouvés: {found_keywords}")
                 valid_pain_points[pain_key] = pain_point
+            else:
+                print(f"      ❌ EXCLU - Aucun mot-clé trouvé dans la fiche")
         else:
-            # Pain point générique, toujours valide
+            print(f"      → Aucun pré-requis - VALIDÉ par défaut")
             valid_pain_points[pain_key] = pain_point
     
-    # Si aucun pain point valide, utiliser un générique
+    # ============================================
+    # DEBUG LOG 5 : Pain points validés
+    # ============================================
+    print("\n" + "="*80)
+    print(f"📊 RÉSULTAT VALIDATION:")
+    print(f"   Pain points validés: {len(valid_pain_points)}/{len(pain_points)}")
+    for key in valid_pain_points.keys():
+        print(f"      ✅ {key}")
+    print("="*80 + "\n")
+    
+    # Si aucun pain point valide
     if not valid_pain_points:
+        print("⚠️  Aucun pain point validé - utilisation d'un générique")
         return {
             'short': "recrutement complexe sur ce type de poste",
             'context': "Difficulté à trouver des profils qui combinent expertise technique et compréhension métier."
         }
     
-    # ========================================
+    # ============================================
     # RÈGLE 2 : SCORING DES PAIN POINTS VALIDES
-    # ========================================
-    pain_point_keywords = {
-        'visibility': ['reporting', 'pilotage', 'indicateurs', 'kpi', 'tableau de bord'],
-        'production_focus': ['clôture', 'production', 'charge', 'opérationnel'],
-        'transformation': ['erp', 'epm', 'bi', 'transformation', 'projet', 'digitalisation'],
-        'key_man_risk': ['clé', 'senior', 'expertise', 'dépendance'],
-        'data_quality': ['données', 'data', 'qualité', 'fiabilité'],
-        'hybrid_profiles': ['hybride', 'technique', 'business', 'polyvalence'],
-        'excel_dependency': ['excel', 'tableur', 'manuel', 'automatisation'],
-        'adoption': ['adoption', 'change', 'utilisateurs', 'formation'],
-        'manual_processes': ['manuel', 'automatisation', 'process'],
-        'acculturation': ['acculturation', 'formation', 'accompagnement', 'pédagogie'],
-        'multi_site': ['sites', 'agences', 'filiales', 'multi-sites', 'réseau', 'international'],
-        'industrial': ['industrie', 'production', 'manufacturing', 'usine', 'supply chain']
+    # ============================================
+    print("🎯 SCORING DES PAIN POINTS VALIDÉS:")
+    print("-" * 80)
+    
+    # Mots-clés de scoring par pain point
+    scoring_keywords = {
+        'multi_site': ['multi-sites', 'sites de production', 'filiales', 'international', 'pays'],
+        'industrial': ['industrie', 'industriel', 'production', 'manufacturing', 'usine'],
+        'control': ['contrôle interne', 'internal control', 'sox', 'compliance'],
+        'financial_close': ['clôture', 'closing', 'consolidation'],
+        'group_audit': ['groupe', 'group', 'holding'],
+        'epm_tools': ['epm', 'tagetik', 'anaplan', 'jedox', 'hyperion', 'onestream'],
+        'excel': ['excel', 'tableur', 'spreadsheet'],
+        'data': ['data', 'analytics', 'python', 'r', 'tableau', 'power bi'],
+        'transformation': ['transformation', 'migration', 'déploiement', 'implémentation']
     }
     
-    # Scorer chaque pain point valide
-    best_score = 0
-    best_pain_point = None
+    pain_scores = {}
     
-    for key, pain_point in valid_pain_points.items():
+    for pain_key, pain_point in valid_pain_points.items():
         score = 0
-        # Chercher les mots-clés dans la fiche
-        for keyword_type, keywords in pain_point_keywords.items():
-            if keyword_type in key.lower() or any(kw in key for kw in keywords):
-                for kw in keywords:
-                    if kw in job_text:
-                        score += 1
+        matched_keywords = []
         
-        if score > best_score:
-            best_score = score
-            best_pain_point = pain_point
+        # Scorer selon les mots-clés présents dans la fiche
+        for category, keywords in scoring_keywords.items():
+            for kw in keywords:
+                if kw in job_text:
+                    score += 1
+                    matched_keywords.append(kw)
+        
+        pain_scores[pain_key] = {
+            'score': score,
+            'matched': matched_keywords,
+            'pain_point': pain_point
+        }
+        
+        print(f"\n   '{pain_key}':")
+        print(f"      Score: {score}")
+        print(f"      Mots-clés matchés: {matched_keywords[:5]}...")  # Afficher max 5
     
-    # Si aucun match par score, prendre le premier pain point valide
-    if not best_pain_point:
-        first_key = list(valid_pain_points.keys())[0]
-        best_pain_point = valid_pain_points[first_key]
+    # Sélectionner le pain point avec le meilleur score
+    best_pain_key = max(pain_scores.items(), key=lambda x: x[1]['score'])[0]
+    best_pain_point = pain_scores[best_pain_key]['pain_point']
     
-    log_event('pain_point_selected_v27_2_1', {
-        'job_category': job_category,
-        'pain_point_short': best_pain_point['short'],
-        'score': best_score,
-        'valid_pain_points_count': len(valid_pain_points)
-    })
+    # ============================================
+    # DEBUG LOG 6 : Sélection finale
+    # ============================================
+    print("\n" + "="*80)
+    print(f"🏆 PAIN POINT SÉLECTIONNÉ:")
+    print(f"   Clé: {best_pain_key}")
+    print(f"   Score: {pain_scores[best_pain_key]['score']}")
+    print(f"   Short: {best_pain_point['short']}")
+    print(f"   Context (extrait): {best_pain_point['context'][:100]}...")
+    print("="*80 + "\n")
     
     return best_pain_point
-
 
 def get_relevant_outcomes(job_category, max_outcomes=2):
     """Récupère les outcomes pertinents"""
