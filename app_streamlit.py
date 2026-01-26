@@ -189,7 +189,8 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
 
 def filter_recent_posts(posts, max_age_months=6):
     """
-    Filtre les posts < 6 mois - STRICT
+    Filtre les posts < 6 mois
+    Si date non parsable → on INCLUT le post (moins strict)
     """
     if not posts:
         return []
@@ -201,23 +202,35 @@ def filter_recent_posts(posts, max_age_months=6):
         if not isinstance(post, dict):
             continue
         
-        # Récupérer la date
+        # Récupérer la date - chercher TOUS les champs possibles
         date_str = (
             post.get('date') or 
             post.get('postedDate') or 
+            post.get('postedAt') or
             post.get('timestamp') or
             post.get('publishedAt') or
+            post.get('time') or
+            post.get('posted') or
+            post.get('datePosted') or
             ''
         )
         
+        # Si pas de date trouvée, on INCLUT quand même le post
+        # (approche permissive - mieux vaut un post potentiellement vieux qu'aucun post)
         if not date_str:
-            # Pas de date = on ignore (strict)
+            recent.append(post)
             continue
         
         # Parser la date
         post_date = parse_date(date_str)
         
-        if post_date and post_date >= cutoff:
+        # Si parsing échoue, on inclut quand même
+        if post_date is None:
+            recent.append(post)
+            continue
+        
+        # Si date récente, on inclut
+        if post_date >= cutoff:
             recent.append(post)
     
     return recent[:5]
@@ -254,24 +267,46 @@ def parse_date(date_str):
 
 
 def parse_relative_date(date_str):
-    """Parse les dates relatives"""
+    """Parse les dates relatives - formats LinkedIn et autres"""
     if not date_str:
         return None
     
     date_str = date_str.lower().strip()
     now = datetime.now()
     
+    # Patterns anglais et français
     patterns = [
+        # Anglais complet
         (r'(\d+)\s*d(?:ay)?s?\s*ago', 'days'),
         (r'(\d+)\s*w(?:eek)?s?\s*ago', 'weeks'),
         (r'(\d+)\s*mo(?:nth)?s?\s*ago', 'months'),
         (r'(\d+)\s*h(?:our)?s?\s*ago', 'hours'),
-        (r'(\d+)d\b', 'days'),
-        (r'(\d+)w\b', 'weeks'),
-        (r'(\d+)mo\b', 'months'),
+        (r'(\d+)\s*yr?s?\s*ago', 'years'),
+        # Anglais court (LinkedIn style: "1d", "2w", "3mo")
+        (r'^(\d+)d$', 'days'),
+        (r'^(\d+)w$', 'weeks'),
+        (r'^(\d+)mo$', 'months'),
+        (r'^(\d+)h$', 'hours'),
+        (r'^(\d+)yr?$', 'years'),
+        # Avec espace
+        (r'(\d+)\s*d\b', 'days'),
+        (r'(\d+)\s*w\b', 'weeks'),
+        (r'(\d+)\s*mo\b', 'months'),
+        (r'(\d+)\s*h\b', 'hours'),
+        # Français
         (r'il y a (\d+)\s*jour', 'days'),
         (r'il y a (\d+)\s*semaine', 'weeks'),
         (r'il y a (\d+)\s*mois', 'months'),
+        (r'il y a (\d+)\s*heure', 'hours'),
+        (r'il y a (\d+)\s*an', 'years'),
+        # "posted X days ago"
+        (r'posted\s*(\d+)\s*d', 'days'),
+        (r'posted\s*(\d+)\s*w', 'weeks'),
+        (r'posted\s*(\d+)\s*mo', 'months'),
+        # "X days" sans "ago"
+        (r'^(\d+)\s*days?$', 'days'),
+        (r'^(\d+)\s*weeks?$', 'weeks'),
+        (r'^(\d+)\s*months?$', 'months'),
     ]
     
     for pattern, unit in patterns:
@@ -286,6 +321,8 @@ def parse_relative_date(date_str):
                 return now - timedelta(weeks=value)
             elif unit == 'months':
                 return now - timedelta(days=value * 30)
+            elif unit == 'years':
+                return now - timedelta(days=value * 365)
     
     return None
 
@@ -814,13 +851,45 @@ def get_job_title(job_posting_data):
 def format_posts(posts):
     """Formate les posts LinkedIn pour le prompt"""
     if not posts:
-        return "Aucun post LinkedIn récent (<6 mois)."
+        return "Aucun post LinkedIn récent trouvé."
     
     formatted = []
     for i, post in enumerate(posts[:5], 1):
-        text = post.get('text', '')[:400]
-        date = post.get('date', post.get('postedDate', ''))
-        formatted.append(f"POST {i} ({date}):\n{text}")
+        # Chercher le texte dans plusieurs champs possibles
+        text = (
+            post.get('text') or 
+            post.get('postText') or 
+            post.get('content') or 
+            post.get('commentary') or
+            post.get('description') or
+            post.get('body') or
+            ''
+        )[:500]
+        
+        # Chercher la date
+        date = (
+            post.get('date') or 
+            post.get('postedDate') or 
+            post.get('postedAt') or
+            post.get('time') or
+            post.get('timestamp') or
+            'Date inconnue'
+        )
+        
+        # Récupérer les interactions si disponibles
+        reactions = post.get('numLikes') or post.get('reactions') or post.get('likes') or ''
+        comments = post.get('numComments') or post.get('comments') or ''
+        
+        stats = ""
+        if reactions or comments:
+            stats = f" | 👍{reactions} 💬{comments}"
+        
+        if text:
+            formatted.append(f"POST {i} ({date}{stats}):\n{text}")
+    
+    if not formatted:
+        return "Aucun post LinkedIn avec contenu trouvé."
+    
     return "\n\n".join(formatted)
 
 
@@ -939,9 +1008,25 @@ with tab1:
     
     # Parser les URLs
     job_urls_list = []
+    has_apec_urls = False
     if job_urls_input:
         job_urls_list = [u.strip() for u in job_urls_input.strip().split('\n') if u.strip()]
         st.info(f"✅ {len(job_urls_list)} URL(s) détectée(s)")
+        
+        # Détecter URLs Apec
+        apec_urls = [u for u in job_urls_list if 'apec.fr' in u.lower()]
+        if apec_urls:
+            has_apec_urls = True
+            st.warning(f"⚠️ {len(apec_urls)} URL(s) Apec détectée(s). Le scraping Apec ne fonctionne pas (JavaScript). Collez le texte ci-dessous.")
+    
+    # Champ fallback pour Apec
+    apec_manual_description = ""
+    if has_apec_urls:
+        apec_manual_description = st.text_area(
+            "📋 Description Apec (coller le texte de la fiche)",
+            height=300,
+            placeholder="Copiez-collez ici le contenu de la fiche de poste Apec...\n\nAstuce : Sur la page Apec, sélectionnez tout le texte de la description et collez-le ici."
+        )
     
     # Rafraîchir prospects
     col1, col2 = st.columns([1, 3])
@@ -999,12 +1084,26 @@ with tab1:
                     # URL fiche de poste pour ce prospect
                     job_url = job_urls_list[i] if i < len(job_urls_list) else job_urls_list[0]
                     
-                    # 1. Scraper la fiche de poste
+                    # 1. Scraper la fiche de poste (ou utiliser description manuelle pour Apec)
                     job_data = None
-                    with st.spinner(f"📄 Scraping fiche de poste..."):
-                        job_data = scrape_job_posting(job_url)
-                        if job_data:
-                            st.caption(f"   ✅ Fiche: {job_data.get('title', 'N/A')[:40]}...")
+                    is_apec_url = 'apec.fr' in job_url.lower()
+                    
+                    if is_apec_url and apec_manual_description:
+                        # Utiliser la description manuelle pour Apec
+                        job_data = {
+                            'title': 'Poste Apec',
+                            'description': apec_manual_description,
+                            'source': 'Apec (manuel)',
+                            'url': job_url
+                        }
+                        st.caption(f"   ✅ Description Apec (manuelle)")
+                    elif is_apec_url and not apec_manual_description:
+                        st.warning(f"   ⚠️ URL Apec détectée mais pas de description manuelle")
+                    else:
+                        with st.spinner(f"📄 Scraping fiche de poste..."):
+                            job_data = scrape_job_posting(job_url)
+                            if job_data:
+                                st.caption(f"   ✅ Fiche: {job_data.get('title', 'N/A')[:40]}...")
                     
                     # 2. Scraper LinkedIn posts
                     posts = []
