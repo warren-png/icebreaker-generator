@@ -80,46 +80,72 @@ def filter_recent_posts(posts, max_age_months=3, max_posts=5):
 def detect_company_sector(job_posting_data):
     """
     Détecte le secteur de l'entreprise avec taxonomie précise
-    VERSION V27.3.1 : Ajout secteur insurance
+    VERSION V27.4 : Détection dynamique via Claude API
     """
     if not job_posting_data:
         return 'general'
     
-    text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    # Taxonomie secteur (ordre = priorité)
-    sectors = {
-        'banking': ['banque', 'bancaire', 'cib', 'corporate banking', 'investment banking', 
-                    'retail banking', 'private banking', 'gestion privée'],
-        
-        'insurance': ['assurance', 'assureur', 'solvabilité', 'actuariat', 'mutuelle', 
-                      'iard', 'vie', 'prévoyance', 'compagnie d\'assurance'],
-        
-        'logistics_transport': ['logistique', 'supply chain', 'transport', 'freight', 
-                                 'forwarding', 'entreposage', 'distribution logistique',
-                                 'dhl', 'kuehne', 'geodis', 'bolloré logistics'],
-        
-        'manufacturing': ['production', 'usine', 'fabrication', 'manufacturing', 
-                          'sites de production', 'process industriel', 'ligne de production'],
-        
-        'engineering': ['ingénierie', 'engineering', 'construction', 'infrastructure', 
-                        'btp', 'travaux publics', 'génie civil'],
-        
-        'retail': ['retail', 'grande distribution', 'commerce', 'magasin', 
-                   'point de vente', 'réseau de magasins'],
-        
-        'fintech': ['fintech', 'néobanque', 'payment', 'crypto', 'blockchain'],
-        
-        'services': ['conseil', 'consulting', 'services', 'cabinet']
-    }
+    text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}"
     
-    sector_scores = {}
-    for sector, keywords in sectors.items():
-        score = sum(1 for kw in keywords if kw in text)
-        if score > 0:
-            sector_scores[sector] = score
+    prompt = f"""Analyse cette fiche de poste et retourne UNIQUEMENT le secteur parmi cette liste :
+
+banking, insurance, logistics_transport, manufacturing, engineering, retail, fintech, services, gaming, general
+
+Critères de détection :
+- banking : banque, CIB, retail banking, private banking
+- insurance : assurance, mutuelle, IARD, vie, prévoyance, Solvabilité II
+- logistics_transport : logistique, supply chain, transport, freight
+- manufacturing : production, usine, fabrication, sites de production
+- engineering : ingénierie, BTP, construction, infrastructure, travaux publics
+- retail : distribution, commerce, grande distribution, magasins
+- fintech : fintech, néobanque, payment, crypto
+- services : conseil, consulting, services professionnels
+- gaming : jeu vidéo, gaming, Ubisoft, Activision, game development
+- general : si aucun secteur spécifique détecté
+
+Fiche de poste :
+{text[:1500]}
+
+Réponds avec UN SEUL MOT (le secteur). 
+
+Exemples :
+- "Banque Palatine, CIB" → banking
+- "CNP Assurances, Solvabilité II" → insurance
+- "GEODIS, supply chain, 166 pays" → logistics_transport
+- "Tarkett, 35 sites de production" → manufacturing
+- "VINCI Construction, BTP" → engineering
+- "Auchan Retail, distribution" → retail
+- "Memo Bank, fintech" → fintech
+- "Ubisoft, jeu vidéo" → gaming
+
+Secteur détecté :"""
     
-    if not sector_scores:
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=50,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        tracker.track(message.usage, 'detect_company_sector_dynamic')
+        
+        sector = message.content[0].text.strip().lower()
+        
+        # Validation liste autorisée
+        valid_sectors = ['banking', 'insurance', 'logistics_transport', 'manufacturing', 
+                        'engineering', 'retail', 'fintech', 'services', 'gaming', 'general']
+        
+        if sector in valid_sectors:
+            log_event('sector_detected_dynamic', {'sector': sector})
+            return sector
+        else:
+            log_event('sector_fallback_general', {'invalid_sector': sector})
+            return 'general'
+            
+    except Exception as e:
+        log_error('sector_detection_error', str(e), {})
         return 'general'
     
     detected_sector = max(sector_scores.items(), key=lambda x: x[1])[0]
