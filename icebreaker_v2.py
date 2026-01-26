@@ -1,12 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════════
-ICEBREAKER GENERATOR V27.4 - CORRECTIONS QUALITÉ
-Modifications V27.4 :
-- Détection métier : priorité TITRE du poste sur description
-- Filtrage hooks <3 mois robuste (multi-format dates)
-- Exclusion mots contextuels ("ou audit", "contrôles niveau 2")
-- Question finale TOUJOURS identique
-- Suppression totale des signatures parasites
+ICEBREAKER GENERATOR V27.5 - PAIN POINTS 100% DYNAMIQUES
+Modifications V27.5 :
+- Pain points extraits dynamiquement de la fiche (plus de config.py)
+- Prompts renforcés : interdiction "Je travaille", termes génériques
+- Compétences rares injectées dans les prompts
+- Formulations d'intro imposées
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -14,7 +13,7 @@ import anthropic
 import os
 import re
 from datetime import datetime, timedelta
-from config import COMPANY_INFO, PAIN_POINTS_DETAILED
+from config import COMPANY_INFO
 
 # Imports utilitaires
 from prospection_utils.logger import log_event, log_error
@@ -603,7 +602,7 @@ def detect_job_category(prospect_data, job_posting_data):
 def get_relevant_pain_point(job_category, job_posting_data):
     """
     Sélectionne LE pain point le plus pertinent selon le métier et la fiche de poste
-    VERSION V27.4 : Utilise message_sequence_generator.get_relevant_pain_point
+    VERSION V27.5 : 100% dynamique via Claude, plus de fallback config.py
     """
     # Importer depuis message_sequence_generator pour cohérence
     from message_sequence_generator import get_relevant_pain_point as get_pain_point_v2
@@ -727,7 +726,7 @@ HOOK LINKEDIN SÉLECTIONNÉ (Score élevé - Très pertinent) :
 Titre : {hook_title if hook_title else 'N/A'}
 Contenu : {hook_text[:500]}
 
-FICHE DE POSTE (pour identifier le pain point précis) :
+FICHE DE POSTE (pour identifier les compétences RARES) :
 Titre : {job_title}
 Description (extraits clés) : {str(job_desc)[:600]}
 
@@ -751,10 +750,10 @@ STRUCTURE OBLIGATOIRE :
    → INTERDICTION de citer des phrases complètes du hook
    → Paraphrase intelligemment en conservant les détails clés
 
-4. Transition naturelle vers le pain point (25-35 mots)
+4. Transition vers le pain point SPÉCIFIQUE (25-35 mots)
    → "Cela résonne avec votre recherche de {context_name}."
-   → Formule le pain point de manière spécifique au contexte
-   → Utilise les compétences RARES de la fiche de poste
+   → Mentionne des compétences EXACTES de la fiche (ex: réassurance, consolidation IFRS, etc.)
+   → JAMAIS de généralités ("rigueur", "agilité", "dynamisme")
 
 5. Question finale OBLIGATOIRE (TOUJOURS LA MÊME) :
    "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
@@ -765,8 +764,10 @@ STRUCTURE OBLIGATOIRE :
 INTERDICTIONS ABSOLUES
 ═══════════════════════════════════════════════════════════════════
 
+❌ JAMAIS écrire "Je travaille sur..." ou "Je travaille actuellement..."
+❌ JAMAIS inventer des compétences/outils non mentionnés dans la fiche
+❌ JAMAIS utiliser de termes génériques ("rigueur", "agilité", "dynamique", "croissance")
 ❌ Jamais citer verbatim plus de 5 mots du hook
-❌ Jamais inventer des informations non présentes dans le hook
 ❌ Jamais mentionner le cabinet ou "nos services"
 ❌ Jamais de superlatifs ou ton commercial
 ❌ Jamais modifier la question finale (elle est TOUJOURS identique)
@@ -780,6 +781,11 @@ def build_prompt_case_b(first_name, context_name, hook_text, job_posting_data, p
     
     job_title = job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'
     job_desc = job_posting_data.get('description', 'N/A') if job_posting_data else 'N/A'
+    
+    # Extraire les compétences rares si disponibles
+    competences_str = ""
+    if pain_point.get('competences_rares'):
+        competences_str = f"\nCOMPÉTENCES RARES EXTRAITES : {', '.join(pain_point['competences_rares'])}"
     
     return f"""Tu es expert en prospection B2B pour cabinet de recrutement Finance.
 
@@ -796,7 +802,7 @@ Description : {str(job_desc)[:600]}
 
 PAIN POINT IDENTIFIÉ :
 Court : {pain_point['short']}
-Contexte : {pain_point['context']}
+Contexte : {pain_point['context']}{competences_str}
 
 ═══════════════════════════════════════════════════════════════════
 STRATÉGIE : Le hook est peu pertinent, donc structure ainsi
@@ -804,14 +810,22 @@ STRATÉGIE : Le hook est peu pertinent, donc structure ainsi
 
 1. "Bonjour {first_name},"
 2. SAUT DE LIGNE
-3. Référence BRÈVE au hook (10-15 mots max)
-4. Pivot RAPIDE vers le poste et pain point (35-40 mots)
-5. Question finale OBLIGATOIRE : "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
-6. "Bien à vous,"
+3. Phrase d'introduction (UTILISE UNE DE CES FORMULATIONS EXACTES) :
+   - "Je vous contacte concernant votre recherche de {context_name}."
+   - "J'ai consulté votre annonce pour le poste de {context_name}."
+4. Référence BRÈVE au hook (10-15 mots max)
+5. Pain point SPÉCIFIQUE avec vocabulaire EXACT de la fiche (25-30 mots)
+6. Question finale OBLIGATOIRE : "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
+7. "Bien à vous,"
 
 Total : 70-90 mots
 
-INTERDICTIONS :
+═══════════════════════════════════════════════════════════════════
+INTERDICTIONS ABSOLUES
+═══════════════════════════════════════════════════════════════════
+❌ JAMAIS écrire "Je travaille sur..." ou "Je travaille actuellement..."
+❌ JAMAIS utiliser de termes génériques ("rigueur", "agilité", "dynamique", "croissance")
+❌ JAMAIS inventer des compétences non mentionnées dans la fiche
 ❌ Jamais modifier la question finale
 ❌ Jamais ajouter de signature au-delà de "Bien à vous,"
 
@@ -823,6 +837,11 @@ def build_prompt_case_c(first_name, context_name, job_posting_data, pain_point):
     
     job_title = job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'
     job_desc = job_posting_data.get('description', 'N/A') if job_posting_data else 'N/A'
+    
+    # Extraire les compétences rares si disponibles
+    competences_str = ""
+    if pain_point.get('competences_rares'):
+        competences_str = f"\n\nCOMPÉTENCES RARES À MENTIONNER : {', '.join(pain_point['competences_rares'])}"
     
     return f"""Tu es expert en prospection B2B pour cabinet de recrutement Finance.
 
@@ -836,7 +855,7 @@ Description : {str(job_desc)[:600]}
 
 PAIN POINT IDENTIFIÉ :
 Court : {pain_point['short']}
-Contexte : {pain_point['context']}
+Contexte : {pain_point['context']}{competences_str}
 
 ═══════════════════════════════════════════════════════════════════
 STRATÉGIE : Pas de hook LinkedIn disponible
@@ -844,14 +863,25 @@ STRATÉGIE : Pas de hook LinkedIn disponible
 
 1. "Bonjour {first_name},"
 2. SAUT DE LIGNE
-3. Introduction directe sur l'annonce (15-20 mots)
-4. Pain point précis du poste (35-40 mots)
+3. Phrase d'introduction (UTILISE UNE DE CES FORMULATIONS EXACTES) :
+   - "Je vous contacte concernant votre recherche de {context_name}."
+   - "Je me permets de vous écrire au sujet de votre poste de {context_name}."
+   - "J'ai consulté votre annonce pour le poste de {context_name}."
+4. Pain point SPÉCIFIQUE extrait de la fiche (35-40 mots)
+   → Mentionne les COMPÉTENCES RARES demandées dans la fiche
+   → Utilise le VOCABULAIRE EXACT de la fiche (ex: réassurance, coassurance, provisions)
 5. Question finale OBLIGATOIRE : "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
 6. "Bien à vous,"
 
 Total : 70-90 mots
 
-INTERDICTIONS :
+═══════════════════════════════════════════════════════════════════
+INTERDICTIONS ABSOLUES
+═══════════════════════════════════════════════════════════════════
+❌ JAMAIS écrire "Je travaille sur..." ou "Je travaille actuellement..."
+❌ JAMAIS écrire "Je gère un poste de..."
+❌ JAMAIS inventer des compétences non mentionnées dans la fiche
+❌ JAMAIS utiliser des pain points génériques ("rigueur", "agilité", "dynamique")
 ❌ Jamais modifier la question finale
 ❌ Jamais ajouter de signature au-delà de "Bien à vous,"
 

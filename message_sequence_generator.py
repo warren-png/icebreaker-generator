@@ -1,13 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V27.4 (CORRECTIONS QUALITÉ)
-Modifications V27.4 :
-- filter_recent_posts() : parsing dates multi-format + fallback
-- detect_company_sector() : keywords enrichis (GEODIS→logistics)
-- detect_job_category() : priorité TITRE > description
-- filter_real_tools() : SAP BFC, Power Query, TCD ajoutés
-- extract_certifications_and_norms() : CIA, IIA, COSO enrichis
-- Pain points validés par secteur (pas industrie pour logistique)
+MESSAGE SEQUENCE GENERATOR - V27.5 (PAIN POINTS 100% DYNAMIQUES)
+Modifications V27.5 :
+- generate_dynamic_pain_point() : extraction compétences rares via Claude
+- get_relevant_pain_point() : 100% dynamique, plus de fallback config.py
+- generate_message_2() : utilise compétences rares + reformulation obligatoire
+- Prompts renforcés : interdiction termes génériques, respect expérience
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -15,7 +13,7 @@ import anthropic
 import os
 import re 
 from datetime import datetime, timedelta
-from config import COMPANY_INFO, PAIN_POINTS_DETAILED, OUTCOMES_DETAILED
+from config import COMPANY_INFO, OUTCOMES_DETAILED
 
 # Imports utilitaires
 from prospection_utils.logger import log_event, log_error
@@ -664,130 +662,121 @@ def detect_job_category(prospect_data, job_posting_data):
 
 
 # ========================================
-# PAIN POINTS - V27.4 VALIDATION SECTEUR
+# PAIN POINTS - V27.5 EXTRACTION DYNAMIQUE
 # ========================================
+
+def generate_dynamic_pain_point(job_posting_data, job_category):
+    """
+    VERSION V27.5 : Génère un pain point PERSONNALISÉ basé sur la fiche de poste
+    Extrait les compétences RARES via Claude et construit un pain point spécifique
+    """
+    if not job_posting_data:
+        return None
+    
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    
+    job_title = job_posting_data.get('title', 'N/A')
+    job_desc = job_posting_data.get('description', '')[:1500]
+    
+    prompt = f"""Analyse cette fiche de poste et extrais les compétences RARES qui rendent ce recrutement difficile.
+
+TITRE : {job_title}
+DESCRIPTION : {job_desc}
+
+MISSION : Identifier les 2-3 compétences TECHNIQUES SPÉCIFIQUES qui sont :
+1. Explicitement mentionnées dans la fiche
+2. Rares sur le marché (combinaison inhabituelle)
+3. Pas des soft skills génériques (pas "rigueur", "autonomie", "communication")
+
+EXEMPLES DE COMPÉTENCES RARES :
+- "réassurance acceptée et cédée" (comptabilité assurance)
+- "consolidation IFRS multi-entités" (consolidation)
+- "provisions techniques et arrêtés trimestriels" (comptabilité technique)
+- "audit supply chain multi-sites" (audit logistique)
+- "EPM Anaplan et conduite du changement" (EPM)
+
+FORMAT DE RÉPONSE (JSON uniquement, sans texte avant/après) :
+{{
+  "competences_rares": ["compétence 1", "compétence 2", "compétence 3"],
+  "pain_point_short": "phrase courte décrivant le défi de recrutement (15-20 mots max)",
+  "pain_point_context": "phrase plus longue expliquant pourquoi c'est difficile à trouver (25-35 mots)"
+}}
+
+RÈGLES :
+- Utilise UNIQUEMENT les termes EXACTS de la fiche
+- JAMAIS inventer de compétences non mentionnées
+- JAMAIS utiliser "rigueur", "agilité", "dynamisme", "croissance"
+- Le pain point doit mentionner au moins 2 compétences rares extraites"""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        tracker.track(message.usage, 'generate_dynamic_pain_point')
+        result = message.content[0].text.strip()
+        
+        # Parser le JSON
+        import json
+        
+        # Nettoyer les backticks markdown si présents
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', result, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            json_obj_match = re.search(r'(\{.*?\})', result, re.DOTALL)
+            if json_obj_match:
+                json_str = json_obj_match.group(1)
+            else:
+                json_str = result
+        
+        parsed = json.loads(json_str)
+        
+        pain_point = {
+            'short': parsed.get('pain_point_short', ''),
+            'context': parsed.get('pain_point_context', ''),
+            'competences_rares': parsed.get('competences_rares', [])
+        }
+        
+        log_event('dynamic_pain_point_generated', {
+            'job_title': job_title,
+            'competences_rares': pain_point['competences_rares'],
+            'pain_point_short': pain_point['short']
+        })
+        
+        return pain_point
+        
+    except Exception as e:
+        log_error('dynamic_pain_point_error', str(e), {'job_title': job_title})
+        return None
+
 
 def get_relevant_pain_point(job_category, job_posting_data):
     """
-    VERSION V27.4 : Pain points avec validation stricte secteur
+    VERSION V27.5 : Pain point 100% DYNAMIQUE extrait de la fiche
+    Plus de fallback sur config.py
     """
-    if job_category not in PAIN_POINTS_DETAILED:
-        return {
-            'short': "recrutement complexe sur ce type de poste",
-            'context': "Difficulté à trouver des profils qui combinent expertise technique et vision business."
-        }
     
-    pain_points = PAIN_POINTS_DETAILED[job_category]
+    # ÉTAPE 1 : Extraction dynamique OBLIGATOIRE
+    if job_posting_data:
+        dynamic_pain_point = generate_dynamic_pain_point(job_posting_data, job_category)
+        if dynamic_pain_point and dynamic_pain_point.get('short'):
+            return dynamic_pain_point
     
-    if not job_posting_data:
-        for key, pain_point in pain_points.items():
-            if 'data' not in key.lower() and 'tool' not in key.lower():
-                return pain_point
-        return list(pain_points.values())[0]
-    
-    job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
-    sector_code = detect_company_sector(job_posting_data)
-    
-    # MAPPING PAIN POINTS → SECTEURS AUTORISÉS
-    PAIN_POINT_SECTORS = {
-        'industrial_processes': ['manufacturing', 'engineering'],  # SEULEMENT industrie
-        'multi_site_international': ['all'],
-        'control_internal': ['all'],
-        'coverage': ['all'],
-        'senior_profiles': ['all'],
-        'logistics': ['logistics_transport'],  # SEULEMENT logistique
-        'structuration': ['all'],
-        'multi_site': ['all'],
-        'business_partnering': ['all'],
-        'data_quality': ['all'],
-        'hybrid_profiles': ['all'],
-        'ifrs_expertise': ['all'],
-        'multi_entity': ['all'],
-        'manual_processes': ['all'],
-        'deadline_pressure': ['all'],
-        'technical_business': ['all'],
-        'use_case_deployment': ['all'],
-        'tool_deployment': ['all'],
-        'functional_technical': ['all'],
-        'project_delays': ['all'],
-        'adoption': ['all'],
-        'visibility': ['all'],
-        'production_focus': ['all'],
-        'transformation': ['all'],
-        'excel_dependency': ['all'],
-        'modeling_communication': ['all'],
-        'technical_agility': ['all'],
-        'closing_pressure': ['all'],
-        'technical_functional': ['all'],
-        'data_access': ['all'],
-        'regulatory_operational': ['banking', 'insurance', 'all']
-    }
-    
-    # Exclusions par secteur
-    sector_exclusions = {
-        'logistics_transport': ['industrial_processes', 'manufacturing'],
-        'insurance': ['industrial_processes', 'manufacturing'],
-        'services': ['industrial_processes', 'manufacturing'],
-        'fintech': ['industrial_processes', 'manufacturing'],
-        'banking': ['industrial_processes', 'manufacturing'],
-        'gaming': ['industrial_processes']
-    }
-    
-    valid_pain_points = {}
-    
-    for pain_key, pain_point in pain_points.items():
-        # VALIDATION SECTEUR VIA MAPPING
-        allowed_sectors = PAIN_POINT_SECTORS.get(pain_key, ['all'])
-        if allowed_sectors != ['all'] and sector_code not in allowed_sectors:
-            log_event('pain_point_excluded_sector', {
-                'pain_key': pain_key,
-                'sector': sector_code,
-                'allowed': allowed_sectors
-            })
-            continue
-        
-        # Exclure par secteur (legacy - double sécurité)
-        if sector_code in sector_exclusions:
-            if any(excl in pain_key.lower() for excl in sector_exclusions[sector_code]):
-                continue
-        
-        valid_pain_points[pain_key] = pain_point
-    
-    if not valid_pain_points:
-        return {
-            'short': "recrutement complexe sur ce type de poste",
-            'context': "Difficulté à trouver des profils qui combinent expertise technique et compréhension métier."
-        }
-    
-    # Scoring par mots-clés
-    scoring_keywords = {
-        'logistics': ['logistique', 'supply chain', 'transport', 'freight', 'entrepôt'],
-        'multi_site': ['multi-sites', 'filiales', 'international', 'pays', 'réseau'],
-        'industrial': ['production', 'manufacturing', 'usine', 'industriel'],
-        'banking': ['bancaire', 'bank', 'cib', 'agence'],
-        'insurance': ['assurance', 'solvabilité', 'actuariat', 'sinistre'],
-        'certifications': ['cia', 'iia', 'coso', 'ifrs', 'certification']
-    }
-    
-    pain_scores = {}
-    for pain_key, pain_point in valid_pain_points.items():
-        score = 0
-        for category, kws in scoring_keywords.items():
-            for kw in kws:
-                if kw in job_text:
-                    score += 1
-        pain_scores[pain_key] = score
-    
-    best_pain_key = max(pain_scores.items(), key=lambda x: x[1])[0]
-    
-    log_event('pain_point_selected_v27_4', {
-        'pain_key': best_pain_key,
-        'sector': sector_code,
-        'valid_count': len(valid_pain_points),
-        'score': pain_scores[best_pain_key]
+    # ÉTAPE 2 : Fallback MINIMAL si pas de fiche ou extraction échouée
+    # Pain point neutre qui force l'analyse de la fiche dans le prompt
+    log_event('pain_point_fallback_minimal', {
+        'job_category': job_category,
+        'has_job_posting': bool(job_posting_data)
     })
     
-    return valid_pain_points[best_pain_key]
+    return {
+        'short': f"trouver le bon profil pour ce poste de {job_category}",
+        'context': "Difficulté à identifier des candidats qui correspondent précisément aux exigences spécifiques de ce poste.",
+        'competences_rares': []
+    }
 
 
 def get_relevant_outcomes(job_category, max_outcomes=2):
@@ -1041,7 +1030,10 @@ Génère les 3 objets (numérotés 1, 2, 3) :"""
 
 
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
-    """Génère le message 2 avec 2 profils ultra-différenciés"""
+    """
+    Génère le message 2 avec 2 profils ultra-différenciés
+    VERSION V27.5 : Utilise compétences rares + reformulation obligatoire
+    """
     
     log_event('generate_message_2_start', {
         'prospect': prospect_data.get('_id', 'unknown')
@@ -1053,7 +1045,6 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
     context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
     job_category = detect_job_category(prospect_data, job_posting_data)
     pain_point = get_relevant_pain_point(job_category, job_posting_data)
-    outcomes = get_relevant_outcomes(job_category, max_outcomes=2)
     
     skills = extract_key_skills_from_job(job_posting_data, job_category)
     
@@ -1065,10 +1056,22 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
     # Préparer outils/certifications
     tools_str = ', '.join(skills['tools'][:5]) if skills['tools'] else 'AUCUN'
     certs_str = ', '.join(skills['certifications']) if skills['certifications'] else 'AUCUNE'
-    technical_str = ', '.join(skills['technical'][:5]) if skills['technical'] else 'compétences métier générales'
+    technical_str = ', '.join(skills['technical'][:5]) if skills['technical'] else 'N/A'
     
-    tools_warning = "" if skills['tools'] else "\n⚠️ AUCUN OUTIL DÉTECTÉ → NE MENTIONNE AUCUN OUTIL"
+    tools_warning = "" if skills['tools'] else "\n⚠️ AUCUN OUTIL DÉTECTÉ → NE MENTIONNE AUCUN OUTIL SPÉCIFIQUE"
     cert_warning = "" if skills['certifications'] else "\n⚠️ AUCUNE CERTIFICATION → NE MENTIONNE AUCUNE CERTIFICATION"
+    
+    # Compétences rares si disponibles
+    competences_rares_str = ""
+    if pain_point.get('competences_rares'):
+        competences_rares_str = f"\nCOMPÉTENCES RARES (à utiliser pour les profils) : {', '.join(pain_point['competences_rares'])}"
+    
+    # Extraire le texte brut de la fiche
+    job_desc_raw = job_posting_data.get('description', '')[:1000] if job_posting_data else ''
+    
+    # Extraire l'expérience demandée si mentionnée
+    exp_match = re.search(r'(\d+)\s*(?:ans?|years?)\s*(?:d\'expérience|d\'experience|experience|minimum)', job_desc_raw.lower())
+    exp_required = f"{exp_match.group(1)} ans" if exp_match else "plusieurs années"
     
     prompt = f"""Tu es chasseur de têtes spécialisé Finance.
 
@@ -1081,29 +1084,60 @@ Secteur : {skills['sector_code']}
 EXTRACTION FICHE :
 Outils : {tools_str}
 Certifications : {certs_str}
-Compétences : {technical_str}
+Compétences techniques : {technical_str}
+Expérience demandée : {exp_required}
 {tools_warning}
 {cert_warning}
+{competences_rares_str}
 
-PAIN POINT :
-{pain_point['context']}
+═══════════════════════════════════════════════════════════════════
+TEXTE BRUT DE LA FICHE (RÉFÉRENCE OBLIGATOIRE) :
+═══════════════════════════════════════════════════════════════════
+{job_desc_raw}
+═══════════════════════════════════════════════════════════════════
 
-🚨 RÈGLES :
-1. Utilise UNIQUEMENT les outils/certifications listés
-2. Les 2 profils doivent être RADICALEMENT DIFFÉRENTS
-3. Profil 1 = spécialiste secteur, Profil 2 = Big 4/reconversion
+🚨 RÈGLES ABSOLUES :
+
+1. OBSERVATION MARCHÉ (phrase 3) :
+   - DOIT mentionner des termes EXACTS de la fiche ci-dessus
+   - NE PAS répéter "rigueur", "agilité", "dynamique"
+   - Exemples de bonnes observations : 
+     * "Le défi réside dans la maîtrise simultanée des flux de réassurance et de coassurance"
+     * "Trouver des profils maîtrisant à la fois les provisions techniques et les arrêtés trimestriels reste rare"
+
+2. PROFILS (phrases 5-6) :
+   - Utiliser les compétences EXACTES de la fiche
+   - Respecter l'expérience demandée ({exp_required})
+   - Profil 1 : Spécialiste du secteur avec les compétences rares
+   - Profil 2 : Parcours alternatif (Big 4, reconversion) mais avec compétences pertinentes
+   - JAMAIS inventer "Solvabilité II", "CIA", etc. si pas dans la fiche
+
+3. Les 2 profils doivent être RADICALEMENT DIFFÉRENTS
+
+═══════════════════════════════════════════════════════════════════
+INTERDICTIONS ABSOLUES
+═══════════════════════════════════════════════════════════════════
+❌ JAMAIS inventer des compétences/outils/certifications non dans la fiche
+❌ JAMAIS utiliser "rigueur", "agilité", "dynamisme", "croissance"
+❌ JAMAIS exagérer l'expérience (si fiche dit {exp_required}, respecter)
+❌ JAMAIS dire "cabinet d'audit" si la fiche ne demande pas d'expérience audit
 
 FORMAT (100-120 mots) :
 1. "Bonjour {first_name},"
 2. "{intro_phrase}"
-3. Observation marché (pain point)
+3. Observation marché avec VOCABULAIRE EXACT de la fiche (20-25 mots)
 4. "J'ai identifié 2 profils qui pourraient retenir votre attention :"
-5. "- L'un [profil 1]"
-6. "- L'autre [profil 2]"
+5. "- L'un [profil 1 spécialiste avec compétences EXACTES de la fiche]"
+6. "- L'autre [profil 2 parcours alternatif]"
 7. "Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ?"
 8. "Bien à vous,"
 
 Génère le message :"""
+    
+    log_event('message_2_prompt_built', {
+        'competences_rares': pain_point.get('competences_rares', []),
+        'exp_required': exp_required
+    })
     
     try:
         message = client.messages.create(
