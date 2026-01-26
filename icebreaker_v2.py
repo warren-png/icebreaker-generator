@@ -1,10 +1,10 @@
 """
 ═══════════════════════════════════════════════════════════════════
-ICEBREAKER GENERATOR V4.0 - OPTIMISÉ POUR QUALITÉ MAXIMALE
-Modifications V4.0 :
-- Prompts renforcés pour hooks ultra-précis
-- Meilleure extraction des citations exactes
-- Scoring amélioré avec bonus événements majeurs
+ICEBREAKER GENERATOR V27.4 - CORRECTIONS QUALITÉ
+Modifications V27.4 :
+- Détection métier : priorité TITRE du poste sur description
+- Filtrage hooks <3 mois robuste (multi-format dates)
+- Exclusion mots contextuels ("ou audit", "contrôles niveau 2")
 - Question finale TOUJOURS identique
 - Suppression totale des signatures parasites
 ═══════════════════════════════════════════════════════════════════
@@ -13,6 +13,7 @@ Modifications V4.0 :
 import anthropic
 import os
 import re
+from datetime import datetime, timedelta
 from config import COMPANY_INFO, PAIN_POINTS_DETAILED
 
 # Imports utilitaires
@@ -107,17 +108,28 @@ def extract_hooks_with_claude(profile_data, posts_data, web_results, company_dat
                                news_results, full_name, company_name):
     """
     Extrait les meilleurs hooks depuis les données scrapées via Claude
-    VERSION V4.0 : Citations exactes OBLIGATOIRES, pas de généralisation
+    VERSION V27.4 : Filtrage dates AVANT extraction
     """
     try:
         log_event('extract_hooks_start', {'full_name': full_name})
+        
+        # NOUVEAU V27.4 : Filtrer les posts <3 mois AVANT envoi à Claude
+        from message_sequence_generator import filter_recent_posts
+        
+        if posts_data and isinstance(posts_data, list):
+            filtered_posts = filter_recent_posts(posts_data, max_age_months=3, max_posts=5)
+            if filtered_posts:
+                posts_data = filtered_posts
+            else:
+                log_event('no_recent_posts', {'full_name': full_name})
+                return []
         
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         
         context = f"""
 PROFIL : {full_name} - {company_name}
 
-POSTS LINKEDIN :
+POSTS LINKEDIN (filtrés <3 mois) :
 {format_posts_for_extraction(posts_data)}
 
 PROFIL LINKEDIN :
@@ -155,36 +167,13 @@ Un bon hook est :
 
 ═══════════════════════════════════════════════════════════════════
 
-EXEMPLES DE BONS VS MAUVAIS HOOKS :
-
-❌ MAUVAIS (trop vague) :
-"Votre récente initiative autour du Centre d'Excellence Data & IA"
-
-✅ BON (spécifique) :
-"Votre organisation du premier Data & AI Day chez LCL avec plus de 130 collaborateurs au 19 LCL à Paris"
-
-❌ MAUVAIS (générique) :
-"Votre réflexion sur l'IA en banque"
-
-✅ BON (citation exacte) :
-"Votre participation au podcast Inside Banking avec Richard Michaud sur l'adoption de l'IA et le déploiement d'Aria"
-
-❌ MAUVAIS (invention) :
-"Votre intervention à la conférence sur la transformation digitale"
-
-✅ BON (si non mentionné) :
-Ne pas inclure ce hook
-
-═══════════════════════════════════════════════════════════════════
-
 Format de retour (JSON uniquement, sans texte avant/après) :
 [
-  {{"text": "Votre participation au podcast Inside Banking avec Richard Michaud sur l'adoption de l'IA et le déploiement d'Aria", "type": "post", "date": "2025-01"}},
-  {{"text": "Votre organisation du premier Data & AI Day chez LCL avec plus de 130 collaborateurs", "type": "post", "date": "2024-11"}},
-  {{"text": "Votre intervention lors de l'événement Memo Bank dédié aux femmes, aux côtés des dirigeantes de l'AMF et de la DFCG", "type": "post", "date": "2025-01"}}
+  {{"text": "Votre participation au podcast Inside Banking avec Richard Michaud sur l'adoption de l'IA", "type": "post", "date": "2025-01"}},
+  {{"text": "Votre organisation du premier Data & AI Day chez LCL avec plus de 130 collaborateurs", "type": "post", "date": "2024-11"}}
 ]
 
-Si aucun hook pertinent n'est trouvé, retourne : []
+Si aucun hook pertinent récent n'est trouvé, retourne : []
 """
         
         message = client.messages.create(
@@ -224,7 +213,6 @@ Si aucun hook pertinent n'est trouvé, retourne : []
         except json.JSONDecodeError as e:
             log_event('extract_hooks_json_error', {
                 'raw_result': result[:500],
-                'cleaned_json': json_str[:500] if 'json_str' in locals() else 'N/A',
                 'error': str(e)
             })
             return []
@@ -242,7 +230,7 @@ def format_posts_for_extraction(posts_data):
     formatted = []
     for i, post in enumerate(posts_data[:5]):
         text = post.get('text', '')
-        date = post.get('date', 'N/A')
+        date = post.get('date', post.get('postedDate', 'N/A'))
         title = post.get('title', '')
         
         post_content = f"Post {i+1} ({date})"
@@ -293,7 +281,7 @@ def extract_hooks_from_linkedin(hooks_data):
                     'type': post.get('type', 'post'),
                     'index': idx,
                     'title': post.get('title', ''),
-                    'date': post.get('date', '')
+                    'date': post.get('date', post.get('postedDate', ''))
                 })
     
     elif isinstance(hooks_data, dict):
@@ -306,7 +294,7 @@ def extract_hooks_from_linkedin(hooks_data):
                         'type': post.get('type', 'post'),
                         'index': idx,
                         'title': post.get('title', ''),
-                        'date': post.get('date', '')
+                        'date': post.get('date', post.get('postedDate', ''))
                     })
     
     elif isinstance(hooks_data, str) and len(hooks_data) > 50:
@@ -331,7 +319,7 @@ def extract_hooks_from_linkedin(hooks_data):
 def score_hook_relevance(hook, job_posting_data):
     """
     Score un hook de 1 à 10 selon sa pertinence
-    VERSION V4.0 : Bonus massifs pour événements majeurs
+    VERSION V27.4 : Bonus massifs pour événements majeurs
     """
     if not job_posting_data:
         return 2, []
@@ -351,7 +339,7 @@ def score_hook_relevance(hook, job_posting_data):
     # NIVEAU 1 : COMPÉTENCES TECHNIQUES (+3 points)
     # ========================================
     technical_keywords = [
-        'tagetik', 'epm', 'anaplan', 'hyperion', 'oracle planning', 'sap bpc', 'onestream',
+        'tagetik', 'epm', 'anaplan', 'hyperion', 'oracle planning', 'sap bpc', 'sap bfc', 'onestream',
         'sap', 's/4hana', 's4hana', 'oracle', 'sage', 'sage x3', 'dynamics',
         'ifrs', 'consolidation', 'statutory reporting', 'gaap', 'sox',
         'power bi', 'powerbi', 'tableau', 'qlik', 'data science', 'python', 'sql', 'r',
@@ -361,7 +349,8 @@ def score_hook_relevance(hook, job_posting_data):
         'data & ai day', 'ai day', 'centre d\'excellence', 'centre excellence',
         'trésorerie', 'cash management', 'fiscalité', 'tax', 'fp&a', 'fpa',
         'bancaire', 'bank', 'banque', 'fintech', 'audiovisuel', 'cinéma', 'production',
-        'alm', 'actif-passif', 'liquidité', 'refinancement'
+        'alm', 'actif-passif', 'liquidité', 'refinancement',
+        'solvabilité', 'solvency', 'iard', 'assurance', 'actuariat'
     ]
     
     for kw in technical_keywords:
@@ -400,7 +389,7 @@ def score_hook_relevance(hook, job_posting_data):
         matching_keywords.append("sector match")
     
     # ========================================
-    # BONUS ÉVÉNEMENTS MAJEURS (V4.0)
+    # BONUS ÉVÉNEMENTS MAJEURS
     # ========================================
     
     # 1. PODCAST/INTERVIEW (+3.0) - PRIORITÉ ABSOLUE
@@ -422,7 +411,7 @@ def score_hook_relevance(hook, job_posting_data):
         matching_keywords.append("award_bonus_+2.5")
     
     # 4. CERTIFICATION (+2.0)
-    cert_keywords = ['certifié', 'certification', 'safe', 'pmp', 'aws', 'diplôme', 'formation certifiante']
+    cert_keywords = ['certifié', 'certification', 'safe', 'pmp', 'aws', 'diplôme', 'formation certifiante', 'cia', 'cisa']
     if any(kw in combined_text for kw in cert_keywords):
         score += 2.0
         matching_keywords.append("certification_bonus_+2.0")
@@ -438,18 +427,6 @@ def score_hook_relevance(hook, job_posting_data):
     if any(kw in combined_text for kw in launch_keywords):
         score += 2.0
         matching_keywords.append("launch_bonus_+2.0")
-    
-    # 7. BONUS RÉCENCE (+0.5)
-    hook_date = hook.get('date', '')
-    if 'j' in hook_date or 'day' in hook_date.lower() or '1 semaine' in hook_date.lower():
-        score += 0.5
-        matching_keywords.append("recent_bonus_+0.5")
-    
-    # 8. BONUS VISION/RÉFLEXION (+0.3)
-    vision_keywords = ['vrai défi', 'défi', 'clé', 'essentiel', 'permet de', 'conviction']
-    if any(kw in combined_text for kw in vision_keywords):
-        score += 0.3
-        matching_keywords.append("vision_bonus_+0.3")
     
     # ========================================
     # PÉNALITÉS
@@ -505,101 +482,132 @@ def select_best_hook(hooks_list, job_posting_data):
 
 
 # ========================================
-# DÉTECTION DU MÉTIER
+# DÉTECTION DU MÉTIER - V27.4 AMÉLIORÉE
 # ========================================
 
 def detect_job_category(prospect_data, job_posting_data):
-    """Détecte automatiquement la catégorie métier du prospect"""
+    """
+    Détecte automatiquement la catégorie métier du prospect
+    VERSION V27.4 : PRIORITÉ TITRE > DESCRIPTION + exclusions contextuelles
+    """
     
-    text = f"{prospect_data.get('headline', '')} {prospect_data.get('title', '')} "
+    # ÉTAPE 1 : Extraire TITRE seul (prioritaire)
+    job_title = ""
     if job_posting_data:
-        text += f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}"
+        job_title = str(job_posting_data.get('title', '')).lower()
     
-    text = text.lower()
+    # ÉTAPE 2 : Extraire description (secondaire)
+    job_desc = ""
+    if job_posting_data:
+        job_desc = str(job_posting_data.get('description', '')).lower()
     
-    # Détection par mots-clés (ordre = priorité)
-    if any(word in text for word in ['data officer', 'ia officer', 'ai officer', 'data & ia', 'intelligence artificielle']):
-        return 'data_ia'
-    elif any(word in text for word in ['daf', 'directeur administratif', 'cfo', 'chief financial']):
-        return 'daf'
-    elif any(word in text for word in ['raf', 'responsable administratif']):
-        return 'raf'
-    elif any(word in text for word in ['fp&a', 'fp a', 'financial planning']):
-        return 'fpna'
-    elif any(word in text for word in ['contrôle de gestion', 'controle gestion', 'business controller']):
-        return 'controle_gestion'
-    elif any(word in text for word in ['consolidation', 'consolidateur']):
-        return 'consolidation'
-    elif any(word in text for word in ['audit', 'auditeur']):
-        return 'audit'
-    elif any(word in text for word in ['epm', 'anaplan', 'hyperion', 'planning']):
-        return 'epm'
-    elif any(word in text for word in ['bi', 'business intelligence', 'data', 'analytics']):
-        return 'bi_data'
-    elif any(word in text for word in ['comptable', 'comptabilité', 'accounting']):
+    # ÉTAPE 3 : Headline prospect (tertiaire)
+    headline = f"{prospect_data.get('headline', '')} {prospect_data.get('title', '')}".lower()
+    
+    # ════════════════════════════════════════════════════════════════
+    # DÉTECTION SUR TITRE UNIQUEMENT (PRIORITÉ ABSOLUE)
+    # ════════════════════════════════════════════════════════════════
+    
+    # Comptable / Comptabilité
+    if any(word in job_title for word in ['comptable', 'accountant', 'accounting']):
+        # EXCLUSION : "comptable" dans titre mais "consolidation" aussi → consolidation
+        if 'consolidation' in job_title or 'consolidateur' in job_title:
+            return 'consolidation'
         return 'comptabilite'
-    else:
-        return 'general'
+    
+    # Audit
+    if any(word in job_title for word in ['audit', 'auditeur', 'auditor']):
+        return 'audit'
+    
+    # Consolidation
+    if any(word in job_title for word in ['consolidation', 'consolidateur', 'consolidator']):
+        return 'consolidation'
+    
+    # Contrôle de gestion
+    if any(word in job_title for word in ['contrôle de gestion', 'controle de gestion', 'contrôleur de gestion', 'controller', 'business controller']):
+        return 'controle_gestion'
+    
+    # FP&A
+    if any(word in job_title for word in ['fp&a', 'fpa', 'financial planning', 'fpna']):
+        return 'fpna'
+    
+    # DAF / CFO
+    if any(word in job_title for word in ['daf', 'directeur administratif', 'cfo', 'chief financial', 'directeur financier']):
+        return 'daf'
+    
+    # RAF
+    if any(word in job_title for word in ['raf', 'responsable administratif']):
+        return 'raf'
+    
+    # Data / IA
+    if any(word in job_title for word in ['data officer', 'ia officer', 'ai officer', 'data & ia', 'chief data', 'cdo']):
+        return 'data_ia'
+    
+    # EPM
+    if any(word in job_title for word in ['epm', 'anaplan', 'hyperion', 'tagetik']):
+        return 'epm'
+    
+    # BI / Data
+    if any(word in job_title for word in ['bi ', 'business intelligence', ' data ', 'analytics']):
+        return 'bi_data'
+    
+    # ════════════════════════════════════════════════════════════════
+    # SI TITRE NON CONCLUANT → DESCRIPTION (avec exclusions)
+    # ════════════════════════════════════════════════════════════════
+    
+    # Nettoyer la description des mentions contextuelles
+    desc_cleaned = job_desc
+    
+    # Exclure "ou audit", "contrôles de niveau 2", etc.
+    contextual_exclusions = [
+        r'\bou audit\b',
+        r'\baudit externe\b',  # Souvent mentionné comme "en lien avec audit externe"
+        r'\bcontrôles? de niveau \d\b',
+        r'\brelation avec.*audit\b',
+        r'\ben collaboration avec.*audit\b',
+        r'\baudit interne et externe\b'  # Contexte, pas le poste
+    ]
+    
+    for pattern in contextual_exclusions:
+        desc_cleaned = re.sub(pattern, '', desc_cleaned, flags=re.IGNORECASE)
+    
+    # Maintenant chercher dans description nettoyée
+    if any(word in desc_cleaned for word in ['comptable', 'comptabilité', 'accounting']) and 'audit' not in job_title:
+        return 'comptabilite'
+    
+    if any(word in desc_cleaned for word in ['auditeur', 'audit interne', 'internal audit']):
+        return 'audit'
+    
+    if any(word in desc_cleaned for word in ['consolidation', 'ifrs 10', 'normes ifrs']):
+        return 'consolidation'
+    
+    if any(word in desc_cleaned for word in ['contrôle de gestion', 'business controller']):
+        return 'controle_gestion'
+    
+    # ════════════════════════════════════════════════════════════════
+    # FALLBACK : HEADLINE PROSPECT
+    # ════════════════════════════════════════════════════════════════
+    
+    if any(word in headline for word in ['daf', 'cfo', 'directeur financier']):
+        return 'daf'
+    elif any(word in headline for word in ['audit']):
+        return 'audit'
+    elif any(word in headline for word in ['comptab']):
+        return 'comptabilite'
+    elif any(word in headline for word in ['contrôl']):
+        return 'controle_gestion'
+    
+    return 'general'
 
 
 def get_relevant_pain_point(job_category, job_posting_data):
     """
     Sélectionne LE pain point le plus pertinent selon le métier et la fiche de poste
-    Retourne un dict avec 'short' et 'context'
+    VERSION V27.4 : Utilise message_sequence_generator.get_relevant_pain_point
     """
-    if job_category not in PAIN_POINTS_DETAILED:
-        return {
-            'short': "recrutement complexe sur ce type de poste",
-            'context': "Difficulté à trouver des profils qui combinent expertise technique et vision business."
-        }
-    
-    pain_points = PAIN_POINTS_DETAILED[job_category]
-    
-    # Si pas de fiche de poste, prendre le premier pain point
-    if not job_posting_data:
-        first_key = list(pain_points.keys())[0]
-        return pain_points[first_key]
-    
-    # Sinon, chercher le pain point le plus pertinent selon la fiche
-    job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
-    
-    # Mots-clés pour chaque type de pain point
-    pain_point_keywords = {
-        'visibility': ['reporting', 'pilotage', 'indicateurs', 'kpi', 'tableau de bord'],
-        'production_focus': ['clôture', 'production', 'charge', 'opérationnel'],
-        'transformation': ['erp', 'epm', 'bi', 'transformation', 'projet', 'digitalisation'],
-        'key_man_risk': ['clé', 'senior', 'expertise', 'dépendance'],
-        'data_quality': ['données', 'data', 'qualité', 'fiabilité'],
-        'hybrid_profiles': ['hybride', 'technique', 'business', 'polyvalence'],
-        'excel_dependency': ['excel', 'tableur', 'manuel', 'automatisation'],
-        'adoption': ['adoption', 'change', 'utilisateurs', 'formation'],
-        'manual_processes': ['manuel', 'automatisation', 'process'],
-        'acculturation': ['acculturation', 'formation', 'accompagnement', 'pédagogie']
-    }
-    
-    # Scorer chaque pain point
-    best_score = 0
-    best_pain_point = None
-    
-    for key, pain_point in pain_points.items():
-        score = 0
-        # Chercher les mots-clés dans la fiche
-        for keyword_type, keywords in pain_point_keywords.items():
-            if keyword_type in key or any(kw in key for kw in keywords):
-                for kw in keywords:
-                    if kw in job_text:
-                        score += 1
-        
-        if score > best_score:
-            best_score = score
-            best_pain_point = pain_point
-    
-    # Si aucun match, prendre le premier
-    if not best_pain_point:
-        first_key = list(pain_points.keys())[0]
-        best_pain_point = pain_points[first_key]
-    
-    return best_pain_point
+    # Importer depuis message_sequence_generator pour cohérence
+    from message_sequence_generator import get_relevant_pain_point as get_pain_point_v2
+    return get_pain_point_v2(job_category, job_posting_data)
 
 
 # ========================================
@@ -609,7 +617,7 @@ def get_relevant_pain_point(job_category, job_posting_data):
 def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
     """
     Génère l'icebreaker (Message 1) en sélectionnant le meilleur hook
-    VERSION V4.1 : Filtrage hooks <3 mois AVANT sélection
+    VERSION V27.4 : Filtrage hooks <3 mois AVANT sélection
     """
     log_event('generate_icebreaker_start', {
         'prospect': prospect_data.get('_id', 'unknown'),
@@ -617,7 +625,7 @@ def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
         'hooks_type': type(hooks_data).__name__
     })
     
-    # NOUVEAU V4.1 : Filtrer hooks <3 mois
+    # NOUVEAU V27.4 : Filtrer hooks <3 mois
     from message_sequence_generator import filter_recent_posts
     
     if hooks_data != "NOT_FOUND" and isinstance(hooks_data, list):
@@ -625,17 +633,10 @@ def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
         if filtered_posts:
             hooks_data = filtered_posts
         else:
+            log_event('hooks_filtered_out_all', {'reason': 'No posts within 3 months'})
             hooks_data = "NOT_FOUND"
     
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
-    first_name = get_safe_firstname(prospect_data)
-    context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
-    job_category = detect_job_category(prospect_data, job_posting_data)
-    pain_point = get_relevant_pain_point(job_category, job_posting_data)
-    
-    hooks_list = extract_hooks_from_linkedin(hooks_data)
-    best_hook, hook_score, hook_keywords = select_best_hook(hooks_list, job_posting_data)
     
     first_name = get_safe_firstname(prospect_data)
     context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
@@ -761,34 +762,6 @@ STRUCTURE OBLIGATOIRE :
 6. "Bien à vous,"
 
 ═══════════════════════════════════════════════════════════════════
-EXEMPLES DE BONS MESSAGES
-═══════════════════════════════════════════════════════════════════
-
-EXEMPLE 1 (Data & IA Officer) :
-
-Bonjour Guillaume,
-
-Votre intervention dans Inside Banking sur le déploiement d'Aria est particulièrement éclairante. Atteindre un taux d'adoption de près de 2/3 chez les conseillers LCL montre que l'IA est perçue comme un véritable outil d'expertise opérationnelle, et non comme une simple initiative technologique.
-
-Cela résonne directement avec votre recherche de Data & IA Officer. Au-delà des compétences techniques, l'enjeu me semble surtout d'identifier des profils capables de transformer une roadmap IA en impacts concrets pour les équipes terrain et les métiers.
-
-Sur ce type de poste très transverse, quels sont aujourd'hui les écarts les plus fréquents que vous constatez entre vos attentes et les profils rencontrés en entretien ?
-
-Bien à vous,
-
-EXEMPLE 2 (Comptable Fintech) :
-
-Bonjour Candice,
-
-J'ai vu votre intervention lors de la deuxième édition de l'événement Memo Bank dédié aux femmes, aux côtés des dirigeantes de l'AMF et de la DFCG.
-
-Cela résonne avec votre recherche de Comptable. En banque tech, le défi va au-delà de la comptabilité bancaire pure : il faut automatiser les process tout en participant aux projets transverses nouveaux produits.
-
-Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
-
-Bien à vous,
-
-═══════════════════════════════════════════════════════════════════
 INTERDICTIONS ABSOLUES
 ═══════════════════════════════════════════════════════════════════
 
@@ -892,13 +865,12 @@ Génère l'icebreaker maintenant :"""
 def get_safe_firstname(prospect_data):
     """
     Trouve le prénom (détective amélioré)
-    VERSION V4.0 : Gestion améliorée des champs Leonar
+    VERSION V27.4 : Gestion améliorée des champs Leonar
     """
-    # Essayer différents champs possibles
     target_keys = [
         'first_name', 'firstname', 'first name', 
         'prénom', 'prenom', 'name',
-        'user_first_name', 'user_firstname'  # Champs Leonar
+        'user_first_name', 'user_firstname'
     ]
     
     for key, value in prospect_data.items():
@@ -942,18 +914,18 @@ def get_smart_context(job_posting_data, prospect_data):
 def clean_signature(message):
     """
     Nettoie les signatures parasites du message
-    VERSION V4.0 : Nettoyage agressif
+    VERSION V27.4 : Nettoyage agressif
     """
     if not message:
         return ""
     
     # Supprimer tout ce qui suit "Bien à vous," (y compris les signatures parasites)
     patterns_to_remove = [
-        r'Bien à vous,\s*\n+.*',  # Tout après "Bien à vous,"
+        r'Bien à vous,\s*\n+.*',
         r'\[Votre signature\]',
         r'\[Prénom\]\s*$',
         r'Cordialement,\s*\[.*?\]',
-        r'\n{3,}'  # Trop de lignes vides
+        r'\n{3,}'
     ]
     
     for pattern in patterns_to_remove:
@@ -969,7 +941,7 @@ def clean_signature(message):
 def generate_fallback_icebreaker(first_name, context_name, is_hiring):
     """
     Génère un icebreaker de secours
-    VERSION V4.0 : Question finale correcte
+    VERSION V27.4 : Question finale correcte
     """
     if is_hiring:
         return f"""Bonjour {first_name},
