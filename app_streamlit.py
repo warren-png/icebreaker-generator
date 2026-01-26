@@ -1,420 +1,463 @@
 """
-═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28 - VERSION TEST
-═══════════════════════════════════════════════════════════════════
-Pour tester : streamlit run app_streamlit_v28.py
-═══════════════════════════════════════════════════════════════════
+Application Web Streamlit pour Icebreaker Generator
+VERSION V27 - Avec mapping prénom corrigé et statistiques de génération
 """
 
 import streamlit as st
-import os
+import pandas as pd
+from icebreaker_v2 import *
+from scraper_job_posting import scrape_job_posting
+from message_sequence_generator import generate_full_sequence
+from prospection_utils.cost_tracker import tracker
+import time
 import json
+import requests
+import os
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
 
-# Import V28
-from sequence_generator_v28 import (
-    generate_sequence_v28,
-    init_apify_client,
-    scrape_linkedin_profile,
-    scrape_linkedin_posts,
-    tracker
-)
+st.set_page_config(page_title="Icebreaker Generator + Leonar", page_icon="🎯", layout="wide")
+
+if 'results' not in st.session_state: 
+    st.session_state.results = []
+if 'processing' not in st.session_state: 
+    st.session_state.processing = False
+if 'leonar_prospects' not in st.session_state: 
+    st.session_state.leonar_prospects = []
+
+try:
+    LEONAR_EMAIL = st.secrets["LEONAR_EMAIL"]
+    LEONAR_PASSWORD = st.secrets["LEONAR_PASSWORD"]
+    LEONAR_CAMPAIGN_ID = st.secrets["LEONAR_CAMPAIGN_ID"]
+except:
+    LEONAR_EMAIL = os.getenv("LEONAR_EMAIL")
+    LEONAR_PASSWORD = os.getenv("LEONAR_PASSWORD")
+    LEONAR_CAMPAIGN_ID = os.getenv("LEONAR_CAMPAIGN_ID")
+
+PROCESSED_FILE = "processed_prospects.txt"
+
+def clean_message_format(message, first_name):
+    """
+    Nettoie le format du message
+    VERSION V27 : Nettoyage amélioré
+    """
+    if not message: 
+        return ""
+    
+    # S'assurer d'une ligne vide après "Bonjour {prénom},"
+    pattern = r'(Bonjour ' + re.escape(first_name) + r',)\s*'
+    message = re.sub(pattern, r'\1\n\n', message, count=1, flags=re.IGNORECASE)
+    
+    # Supprimer les lignes vides excessives
+    message = re.sub(r'\n{3,}', '\n\n', message)
+    
+    # Capitaliser la première lettre après le bonjour
+    pattern_lowercase = r'(Bonjour ' + re.escape(first_name) + r',\n\n)([a-zà-ÿ])'
+    message = re.sub(pattern_lowercase, lambda m: m.group(1) + m.group(2).upper(), message, count=1, flags=re.IGNORECASE)
+    
+    # Supprimer les signatures parasites
+    patterns_to_remove = [
+        r'\n\nBien cordialement,?\s*\n+\[Prénom\]', 
+        r'\nBien cordialement,\s*\[Prénom\]', 
+        r'\n\[Prénom\]\s*$', 
+        r'Cordialement,\s*\[Prénom\]',
+        r'\[Votre signature\]'
+    ]
+    for p in patterns_to_remove: 
+        message = re.sub(p, '', message)
+    
+    # S'assurer qu'on finit bien par "Bien à vous," ou "Bonne continuation,"
+    message = message.strip()
+    if not message.endswith('Bien à vous,') and not message.endswith('Bonne continuation,'):
+        if 'Bien à vous' in message:
+            message = message.rsplit('Bien à vous', 1)[0].strip() + '\n\nBien à vous,'
+        elif 'Bonne continuation' in message:
+            message = message.rsplit('Bonne continuation', 1)[0].strip() + '\n\nBonne continuation,'
+    
+    return message.strip()
+
+
+def update_prospect_leonar(token, prospect_id, sequence_data):
+    """
+    Met à jour le prospect dans Leonar avec la séquence générée
+    VERSION V27 : Format amélioré
+    """
+    try:
+        subject_lines = sequence_data.get('subject_lines', '').strip()
+        msg1 = sequence_data.get('message_1', '').strip()
+        msg2 = sequence_data.get('message_2', '').strip()
+        msg3 = sequence_data.get('message_3', '').strip()
+        
+        formatted_notes = f"""═══════════════════════════════════════════════════════════════
+OBJETS SUGGÉRÉS (Choisir 1)
+═══════════════════════════════════════════════════════════════
+
+{subject_lines}
+
+═══════════════════════════════════════════════════════════════
+MESSAGE 1 (ICEBREAKER - J+0)
+═══════════════════════════════════════════════════════════════
+
+{msg1}
+
+═══════════════════════════════════════════════════════════════
+MESSAGE 2 (LA PROPOSITION - J+5)
+═══════════════════════════════════════════════════════════════
+
+{msg2}
+
+═══════════════════════════════════════════════════════════════
+MESSAGE 3 (BREAK-UP - J+12)
+═══════════════════════════════════════════════════════════════
+
+{msg3}
+
+═══════════════════════════════════════════════════════════════
+FIN DE SÉQUENCE
+═══════════════════════════════════════════════════════════════"""
+        
+        requests.patch(
+            f'https://dashboard.leonar.app/api/1.1/obj/matching/{prospect_id}', 
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}, 
+            json={"notes": formatted_notes}, 
+            timeout=10
+        )
+        return True
+    except Exception as e:
+        print(f"❌ Erreur update Leonar: {e}")
+        return False
+
+
+def get_leonar_token():
+    """Obtient un token d'authentification Leonar"""
+    try:
+        r = requests.post(
+            'https://dashboard.leonar.app/api/1.1/wf/auth', 
+            json={"email": LEONAR_EMAIL, "password": LEONAR_PASSWORD}, 
+            timeout=10
+        )
+        return r.json()['response']['token'] if r.status_code == 200 else None
+    except: 
+        return None
+
+
+def load_processed():
+    """Charge la liste des prospects déjà traités"""
+    if os.path.exists(PROCESSED_FILE):
+        with open(PROCESSED_FILE, 'r') as f: 
+            return set(f.read().splitlines())
+    return set()
+
+
+def save_processed(pid):
+    """Sauvegarde un prospect comme traité"""
+    with open(PROCESSED_FILE, 'a') as f: 
+        f.write(f"{pid}\n")
+
+
+def get_new_prospects_leonar(token):
+    """
+    Récupère les nouveaux prospects depuis Leonar
+    VERSION V27 : Meilleure extraction des données
+    """
+    try:
+        r = requests.get(
+            f'https://dashboard.leonar.app/api/1.1/obj/matching?constraints=[{{"key":"campaign","constraint_type":"equals","value":"{LEONAR_CAMPAIGN_ID}"}}]&cursor=0', 
+            headers={'Authorization': f'Bearer {token}'}, 
+            timeout=10
+        )
+        if r.status_code != 200: 
+            return []
+        
+        processed = load_processed()
+        
+        # Filtrer les prospects non traités
+        return [
+            p for p in r.json()['response']['results'] 
+            if p['_id'] not in processed and (
+                not p.get('notes') or 
+                len(p.get('notes', '')) < 100 or 
+                'MESSAGE 1' not in p.get('notes', '')
+            )
+        ]
+    except Exception as e:
+        print(f"❌ Erreur get prospects: {e}")
+        return []
+
+
+def extract_prospect_data(leonar_prospect):
+    """
+    Extrait les données du prospect depuis Leonar
+    VERSION V27 : Mapping correct des champs
+    """
+    # Extraire le prénom et nom depuis user_full name
+    full_name = leonar_prospect.get('user_full name', '')
+    first_name = ''
+    last_name = ''
+    
+    if full_name and ' ' in str(full_name):
+        parts = str(full_name).split()
+        first_name = parts[0] if len(parts) > 0 else ''
+        last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
+    
+    # Construire le dictionnaire de données
+    prospect_data = {
+        '_id': leonar_prospect.get('_id', ''),
+        'full_name': full_name,
+        'user_full name': full_name,  # Conserver le champ original
+        'first_name': first_name,
+        'last_name': last_name,
+        'company': leonar_prospect.get('linkedin_company', ''),
+        'linkedin_company': leonar_prospect.get('linkedin_company', ''),
+        'linkedin_url': leonar_prospect.get('linkedin_url', ''),
+        'headline': leonar_prospect.get('linkedin_headline', ''),
+        'title': leonar_prospect.get('linkedin_headline', ''),
+        'job_posting_url': ''  # Sera rempli plus tard
+    }
+    
+    return prospect_data
+
 
 # ========================================
-# CONFIGURATION PAGE
+# INTERFACE PRINCIPALE
 # ========================================
 
-st.set_page_config(
-    page_title="Icebreaker Generator V28",
-    page_icon="🎯",
-    layout="wide"
-)
-
-st.title("🎯 Icebreaker Generator V28")
-st.caption("Architecture simplifiée - 1 appel Claude pour M1+M2")
-
-# ========================================
-# SIDEBAR - CONFIGURATION
-# ========================================
+st.title("🎯 Icebreaker Generator + Leonar")
+st.markdown("*Génération automatique Séquence 3 Messages optimisée V27*")
+st.divider()
 
 with st.sidebar:
     st.header("⚙️ Configuration")
-    
-    # Vérification API Keys
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    apify_key = os.getenv("APIFY_API_TOKEN")
-    
-    if api_key:
-        st.success("✅ Anthropic API Key configurée")
-    else:
-        st.error("❌ ANTHROPIC_API_KEY manquante")
-    
-    if apify_key:
-        st.success("✅ Apify API Key configurée")
-    else:
-        st.warning("⚠️ APIFY_API_TOKEN manquante (scraping désactivé)")
-    
+    enable_web_search = st.checkbox("Recherche Web (3 mois)", value=True)
+    enable_company_scraping = st.checkbox("Scraper l'entreprise", value=True)
+    enable_job_scraping = st.checkbox("Scraper l'annonce", value=True)
     st.divider()
-    
-    # Stats
-    st.header("📊 Stats Session")
-    if tracker.calls:
-        st.metric("Appels API", len(tracker.calls))
-        st.metric("Tokens totaux", f"{tracker.total_input_tokens + tracker.total_output_tokens:,}")
-        st.metric("Coût total", f"${tracker.total_cost:.4f}")
-    else:
-        st.info("Aucun appel API encore")
+    if all([LEONAR_EMAIL, LEONAR_PASSWORD, LEONAR_CAMPAIGN_ID]):
+        if get_leonar_token(): 
+            st.success("✅ Connecté à Leonar")
+        else: 
+            st.error("❌ Erreur connexion")
+
+tab1, tab2, tab3, tab4 = st.tabs(["📝 Test Manuel", "📊 Résultats Test", "📈 Historique", "📤 Export Leonar"])
 
 # ========================================
-# TABS
+# TAB 1 : TEST MANUEL
 # ========================================
-
-tab1, tab2, tab3 = st.tabs(["🎯 Génération", "📋 Tests Rapides", "📖 Documentation"])
-
-# ========================================
-# TAB 1 : GÉNÉRATION MANUELLE
-# ========================================
-
 with tab1:
-    st.header("Génération de séquence")
+    st.header("Test Manuel")
     
-    col1, col2 = st.columns(2)
+    c1, c2 = st.columns(2)
+    with c1: 
+        t_first = st.text_input("Prénom", "Guillaume")
+        t_comp = st.text_input("Entreprise", "LCL")
+    with c2: 
+        t_last = st.text_input("Nom", "Mullier")
+        t_lnk = st.text_input("URL LinkedIn")
     
-    with col1:
-        st.subheader("👤 Prospect")
-        
-        prenom = st.text_input("Prénom", value="Alexandre")
-        nom = st.text_input("Nom", value="Dupont")
-        headline = st.text_input("Titre LinkedIn", value="Responsable Comptabilité Technique")
-        company = st.text_input("Entreprise", value="CAMCA")
-        linkedin_url = st.text_input("URL LinkedIn (optionnel)", value="")
+    t_job = st.text_input("URL Annonce")
     
-    with col2:
-        st.subheader("📄 Fiche de poste")
-        
-        job_title = st.text_input("Titre du poste", value="Comptable Technique F/H")
-        job_description = st.text_area(
-            "Description du poste",
-            height=300,
-            value="""Rattaché(e) au Responsable Comptabilité Technique, le comptable technique aura pour missions principales :
-• Enregistrer la comptabilité des opérations techniques d'assurance, de réassurance et de coassurance
-• Participer à la mise en œuvre des outils, processus et méthodes liés aux opérations d'assurance
-• Contribuer au respect des obligations déclaratives aux niveaux comptable, fiscal, réglementaire
-
-Profil :
-• De formation supérieure Bac +3 (type DCG), 5 ans d'expérience minimum
-• Maîtrise des opérations comptables courantes et d'inventaire d'une société d'assurance non-vie"""
-        )
-    
-    st.subheader("💬 Posts LinkedIn (optionnel)")
-    posts_text = st.text_area(
-        "Collez ici les posts LinkedIn récents du prospect (un par ligne)",
-        height=100,
-        placeholder="Post 1: J'ai eu le plaisir de participer à...\nPost 2: Retour sur notre événement..."
-    )
-    
-    # Bouton génération
-    if st.button("🚀 Générer la séquence", type="primary", use_container_width=True):
-        
-        if not api_key:
-            st.error("❌ Configurez ANTHROPIC_API_KEY dans .env")
-        else:
-            # Préparer les données
-            prospect_data = {
-                'full_name': f"{prenom} {nom}",
-                'first_name': prenom,
-                'headline': headline,
-                'company': company,
-                'linkedin_url': linkedin_url
+    if st.button("🚀 Lancer le test"):
+        with st.spinner("Génération en cours..."):
+            # Préparation des données
+            prospect = {
+                'first_name': t_first, 
+                'last_name': t_last,
+                'full_name': f"{t_first} {t_last}",
+                'company': t_comp, 
+                'linkedin_url': t_lnk, 
+                'job_posting_url': t_job
             }
             
-            job_posting_data = {
-                'title': job_title,
-                'description': job_description
-            }
+            # Scraping annonce
+            job_data = scrape_job_posting(t_job) if t_job else None
             
-            # Parser les posts
-            posts_data = []
-            if posts_text.strip():
-                for line in posts_text.strip().split('\n'):
-                    if line.strip():
-                        posts_data.append({'text': line.strip(), 'date': 'récent'})
+            # Extraction hooks
+            hooks = "NOT_FOUND"
+            if t_lnk:
+                ac = init_apify_client()
+                prof = scrape_linkedin_profile(ac, t_lnk)
+                posts = scrape_linkedin_posts(ac, t_lnk)
+                hooks = extract_hooks_with_claude(
+                    prof, posts, [], None, [], 
+                    f"{t_first} {t_last}", t_comp
+                )
             
-            # Générer
-            with st.spinner("🔄 Génération en cours..."):
-                try:
-                    result = generate_sequence_v28(
-                        prospect_data=prospect_data,
-                        posts_data=posts_data,
-                        job_posting_data=job_posting_data,
-                        profile_data=prospect_data
-                    )
-                    
-                    st.success("✅ Séquence générée !")
-                    
-                    # Afficher les messages
-                    st.divider()
-                    
-                    col_m1, col_m2 = st.columns(2)
-                    
-                    with col_m1:
-                        st.subheader("📨 Message 1 (J+0)")
-                        st.text_area("M1", value=result['message_1'], height=300, key="m1")
-                        if st.button("📋 Copier M1"):
-                            st.write("Copiez depuis le champ ci-dessus")
-                    
-                    with col_m2:
-                        st.subheader("📨 Message 2 (J+5)")
-                        st.text_area("M2", value=result['message_2'], height=300, key="m2")
-                        if st.button("📋 Copier M2"):
-                            st.write("Copiez depuis le champ ci-dessus")
-                    
-                    with st.expander("📨 Message 3 (Break-up)", expanded=False):
-                        st.text_area("M3", value=result['message_3'], height=200, key="m3")
-                    
-                    # Stats
-                    with st.expander("📊 Détails API", expanded=False):
-                        st.json(tracker.get_summary())
-                    
-                except Exception as e:
-                    st.error(f"❌ Erreur : {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
+            # Génération message 1
+            m1 = generate_advanced_icebreaker(prospect, hooks, job_data)
+            
+            # Génération séquence complète
+            seq = generate_full_sequence(prospect, hooks, job_data, m1)
+            
+            # Affichage des résultats
+            st.subheader("📧 Objets d'email")
+            st.code(seq['subject_lines'])
+            
+            st.subheader("✉️ Message 1 (Icebreaker)")
+            st.info(clean_message_format(seq['message_1'], t_first))
+            
+            st.subheader("✉️ Message 2 (La Proposition)")
+            st.info(clean_message_format(seq['message_2'], t_first))
+            
+            st.subheader("✉️ Message 3 (Break-up)")
+            st.info(clean_message_format(seq['message_3'], t_first))
+            
+            # ========================================
+            # STATISTIQUES DE GÉNÉRATION
+            # ========================================
+            st.divider()
+            st.subheader("📊 Statistiques de génération")
+            
+            summary = tracker.get_summary()
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Appels API", summary['total_calls'])
+            
+            with col2:
+                st.metric("Tokens total", f"{summary['total_tokens']:,}")
+            
+            with col3:
+                st.metric("Coût total", f"${summary['total_cost_usd']}")
+            
+            with col4:
+                st.metric("Durée", f"{summary['session_duration_seconds']}s")
+            
+            # Détail des appels
+            with st.expander("📋 Détail des appels"):
+                for call in tracker.calls:
+                    st.write(f"**{call['function']}**")
+                    st.write(f"   - Tokens: {call['input_tokens']} → {call['output_tokens']}")
+                    st.write(f"   - Coût: ${call['cost_usd']}")
+                    st.write("---")
 
 # ========================================
-# TAB 2 : TESTS RAPIDES
+# TAB 2 : RÉSULTATS TEST
 # ========================================
-
 with tab2:
-    st.header("Tests rapides - Cas pré-configurés")
-    
-    # Cas de test
-    TEST_CASES = {
-        "CAMCA - Comptable Technique": {
-            "prospect": {
-                "full_name": "Alexandre Dupont",
-                "first_name": "Alexandre",
-                "headline": "Responsable Comptabilité Technique",
-                "company": "Groupe CAMCA"
-            },
-            "posts": [],
-            "job": {
-                "title": "Comptable Technique F/H",
-                "description": """La Caisse d'Assurances Mutuelles du Crédit Agricole (CAMCA) est la compagnie d'assurances du Groupe Crédit Agricole.
-
-Rattaché(e) au Responsable Comptabilité Technique, le comptable technique aura pour missions principales :
-• Enregistrer la comptabilité des opérations techniques d'assurance, de réassurance et de coassurance ainsi que de la gestion des flux financiers liés (encaissements/décaissements)
-• Participer à la mise en œuvre des outils, processus et méthodes liés aux opérations d'assurance, de réassurance et de coassurance
-• Contribuer au respect des obligations déclaratives aux niveaux comptable, fiscal, réglementaire et Groupe Crédit Agricole
-
-Missions courantes :
-• Enregistrer les activités de comptabilité technique d'assurance (cotisations, taxes, commissions, sinistres…), de coassurance et de réassurance (acceptée et cédée)
-• Réaliser des rapprochements bancaires des opérations techniques et suivi des suspens
-• Contribuer aux arrêtés trimestriels de CAMCA Mutuelle (calcul des estimations de primes à émettre, centralisation des provisions techniques, réconciliation des comptes intragroupe)
-
-Profil :
-• De formation supérieure Bac +3 (type DCG), 5 ans d'expérience minimum avec connaissance du domaine de l'assurance
-• Maîtrise des opérations comptables courantes et d'inventaire d'une société d'assurance non-vie"""
-            }
-        },
-        "CNP - Comptable Technique Assurances": {
-            "prospect": {
-                "full_name": "Honorine Amouzoun",
-                "first_name": "Honorine",
-                "headline": "RH - Talent Acquisition",
-                "company": "CNP Assurances"
-            },
-            "posts": [],
-            "job": {
-                "title": "Comptable Technique Assurances H/F",
-                "description": """Au sein de CNP Assurances IARD, filiale du Groupe CNP Assurances.
-
-Vos Missions :
-• Gérer les flux techniques : primes, sinistres en gestion propre/déléguée, opérations de réassurance (traitement des quote-parts, Excess loss, stop loss) / Co-assurance
-• Constituer en lien avec les directions Techniques des filiales les écritures d'inventaire
-• Produire les états règlementaires (QRT –S2- et ENS) en lien avec la Direction Risques et Actuariat
-• Produire les déclarations fiscales, les comptes sociaux et IFRS
-• Gérer les comptes de réassurance (analyse des traités, schéma comptable…)
-• Mettre en œuvre les contrôles de niveau 2 sur les comptes produits par les délégataires
-
-Profil :
-Fort(e) d'une expérience de 2 à 3 ans acquise en comptabilité ou en audit.
-Une bonne maîtrise des outils informatiques et une connaissance de SAP sont nécessaires."""
-            }
-        },
-        "Kereis - Gestionnaire Comptable": {
-            "prospect": {
-                "full_name": "Celine Martin",
-                "first_name": "Celine",
-                "headline": "Responsable Comptabilité",
-                "company": "Kereis France"
-            },
-            "posts": [],
-            "job": {
-                "title": "Comptable Technique Assurances H/F",
-                "description": """Chez Kereis, vous évoluez au sein de l'équipe comptable et consolidation et contribuez activement à la structuration de la comptabilité du pôle courtage direct, en pleine expansion.
-
-Vos Principales Activités :
-• Exploiter et vérifier l'adéquation des flux techniques et comptables des primes
-• Garantir la cohérence des informations de gestion et la traduction comptable (centralisation mensuelle)
-• Calculer les primes d'assurance et reversement aux compagnies
-• Calculer et suivre le règlement des commissions de gestion et de distribution
-• Préparer les états financiers des primes et commissions destinés aux partenaires
-• Règlement et suivi des prestations sinistres auprès des assurés
-• Suivi et contrôle des rejets et impayés
-
-Profil :
-De formation bac +3 en finance, vous bénéficiez d'au moins 5 ans d'expérience en comptabilité."""
-            }
-        }
-    }
-    
-    # Sélection du test
-    selected_test = st.selectbox("Choisir un cas de test", list(TEST_CASES.keys()))
-    
-    test_data = TEST_CASES[selected_test]
-    
-    # Afficher les données
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("👤 Prospect")
-        st.json(test_data["prospect"])
-    
-    with col2:
-        st.subheader("📄 Fiche de poste")
-        st.write(f"**{test_data['job']['title']}**")
-        st.text(test_data["job"]["description"][:500] + "...")
-    
-    # Lancer le test
-    if st.button(f"🧪 Lancer le test : {selected_test}", type="primary", use_container_width=True):
-        
-        if not api_key:
-            st.error("❌ Configurez ANTHROPIC_API_KEY")
-        else:
-            with st.spinner("🔄 Génération en cours..."):
-                try:
-                    result = generate_sequence_v28(
-                        prospect_data=test_data["prospect"],
-                        posts_data=test_data["posts"],
-                        job_posting_data=test_data["job"],
-                        profile_data=test_data["prospect"]
-                    )
-                    
-                    st.success("✅ Test réussi !")
-                    
-                    st.divider()
-                    
-                    st.subheader("📨 Message 1")
-                    st.info(result['message_1'])
-                    
-                    st.subheader("📨 Message 2")
-                    st.info(result['message_2'])
-                    
-                    # Analyse qualité
-                    st.divider()
-                    st.subheader("🔍 Analyse qualité")
-                    
-                    m1 = result['message_1'].lower()
-                    m2 = result['message_2'].lower()
-                    
-                    checks = [
-                        ("M1 ne dit pas 'Je travaille'", "je travaille" not in m1),
-                        ("M1 contient la question finale", "écarts que vous observez" in m1),
-                        ("M2 contient 'synthèses anonymisées'", "synthèses anonymisées" in m2),
-                        ("Pas de 'rigueur' générique", "rigueur" not in m1 and "rigueur" not in m2),
-                        ("Pas de 'agilité' générique", "agilité" not in m1 and "agilité" not in m2),
-                        ("Pas de 'dynamique' générique", "dynamique" not in m1 and "dynamique" not in m2),
-                    ]
-                    
-                    for label, passed in checks:
-                        if passed:
-                            st.write(f"✅ {label}")
-                        else:
-                            st.write(f"❌ {label}")
-                    
-                    # Coût
-                    st.metric("Coût de ce test", f"${tracker.calls[-1]['cost']:.4f}" if tracker.calls else "$0")
-                    
-                except Exception as e:
-                    st.error(f"❌ Erreur : {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
+    st.header("📊 Résultats des tests")
+    st.info("Fonctionnalité à venir")
 
 # ========================================
-# TAB 3 : DOCUMENTATION
+# TAB 3 : HISTORIQUE
 # ========================================
-
 with tab3:
-    st.header("Documentation V28")
+    st.header("📈 Historique")
+    st.info("Fonctionnalité à venir")
+
+# ========================================
+# TAB 4 : EXPORT LEONAR
+# ========================================
+with tab4:
+    st.header("📤 Export Leonar")
     
-    st.markdown("""
-    ## 🎯 Philosophie V28
+    if not all([LEONAR_EMAIL, LEONAR_PASSWORD, LEONAR_CAMPAIGN_ID]): 
+        st.error("Configuration Leonar manquante")
+        st.stop()
     
-    **Avant (V27.x)** : 15+ fonctions de détection (métier, secteur, pain points, scoring hooks...)
-    → Bugs fréquents, maintenance complexe
+    token = get_leonar_token()
+    if not token: 
+        st.error("Impossible de se connecter à Leonar")
+        st.stop()
     
-    **Maintenant (V28)** : 1 seul appel Claude qui analyse TOUT
-    → Simple, cohérent, moins de bugs
+    # Zone URL Jobs
+    job_urls_list = []
+    if enable_job_scraping:
+        st.subheader("📄 URLs des fiches de poste")
+        st.caption("⚠️ IMPORTANT : Les URLs doivent être dans le MÊME ORDRE que les prospects dans Leonar")
+        urls_input = st.text_area("URLs (une par ligne, ordre Leonar)", height=150)
+        if urls_input: 
+            job_urls_list = [u.strip() for u in urls_input.split('\n') if u.strip()]
+            st.success(f"✅ {len(job_urls_list)} URLs détectées")
+
+    if st.button("🔄 Rafraîchir Liste des Prospects"):
+        st.session_state.leonar_prospects = get_new_prospects_leonar(token)
     
-    ---
+    # Liste des prospects
+    if st.session_state.leonar_prospects:
+        st.success(f"📊 {len(st.session_state.leonar_prospects)} prospects détectés")
+        
+        with st.expander("👥 Voir la liste des prospects (Cliquer pour dérouler)", expanded=True):
+            for i, p in enumerate(st.session_state.leonar_prospects):
+                full_name = p.get('user_full name', 'Inconnu')
+                company = p.get('linkedin_company', 'N/A')
+                lnk = "✅ LinkedIn" if p.get('linkedin_url') else "⚠️ Pas de LinkedIn"
+                job_stat = f"📄 URL {i+1}" if (job_urls_list and i < len(job_urls_list)) else "❌ Pas d'URL annonce"
+                
+                st.write(f"**{i+1}. {full_name}** | {company} | {lnk} | {job_stat}")
+
+        if st.button("🚀 LANCER LA GÉNÉRATION COMPLÈTE", type="primary"):
+            bar = st.progress(0)
+            st_txt = st.empty()
+            ac = init_apify_client()
+            
+            for i, p in enumerate(st.session_state.leonar_prospects):
+                bar.progress(i / len(st.session_state.leonar_prospects))
+                
+                full_name = p.get('user_full name', 'Inconnu')
+                st_txt.write(f"⚙️ Traitement de **{full_name}**...")
+                
+                try:
+                    # Extraire les données du prospect
+                    p_data = extract_prospect_data(p)
+                    
+                    # Ajouter l'URL de l'annonce si disponible
+                    j_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
+                    p_data['job_posting_url'] = j_url
+                    
+                    # Scraping de l'annonce
+                    j_data = scrape_job_posting(j_url) if j_url else None
+                    
+                    # Extraction des hooks
+                    hooks = "NOT_FOUND"
+                    if p_data['linkedin_url']:
+                        prof = scrape_linkedin_profile(ac, p_data['linkedin_url'])
+                        posts = scrape_linkedin_posts(ac, p_data['linkedin_url'])
+                        hooks = extract_hooks_with_claude(
+                            prof, posts, [], None, [], 
+                            full_name, p_data['company']
+                        )
+                    
+                    # Génération du message 1
+                    m1 = generate_advanced_icebreaker(p_data, hooks, j_data)
+                    m1 = clean_message_format(m1, p_data['first_name'])
+                    
+                    # Génération de la séquence complète
+                    full = generate_full_sequence(p_data, hooks, j_data, m1)
+                    
+                    # Nettoyage des messages
+                    full['message_2'] = clean_message_format(full['message_2'], p_data['first_name'])
+                    full['message_3'] = clean_message_format(full['message_3'], p_data['first_name'])
+                    
+                    # Update dans Leonar
+                    if update_prospect_leonar(token, p['_id'], full):
+                        save_processed(p['_id'])
+                        st.toast(f"✅ {full_name} OK")
+                    else: 
+                        st.error(f"❌ Erreur API Leonar pour {full_name}")
+                        
+                except Exception as e: 
+                    st.error(f"❌ Erreur pour {full_name}: {e}")
+                    print(f"Détail erreur: {e}")
+            
+            bar.progress(1.0)
+            st.success("✅ Traitement terminé !")
+            st.balloons()
+            
+            # Afficher les statistiques finales
+            st.divider()
+            st.subheader("📊 Statistiques de la session")
+            summary = tracker.get_summary()
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Appels API totaux", summary['total_calls'])
+            with col2:
+                st.metric("Tokens totaux", f"{summary['total_tokens']:,}")
+            with col3:
+                st.metric("Coût total", f"${summary['total_cost_usd']}")
     
-    ## 📊 Comparaison
-    
-    | Métrique | V27.5 | V28 |
-    |----------|-------|-----|
-    | Appels Claude/prospect | 5-8 | **1** |
-    | Lignes de code | ~2200 | **~350** |
-    | Fonctions de détection | ~15 | **0** |
-    | Coût/prospect | ~$0.05 | **~$0.02** |
-    
-    ---
-    
-    ## 🔧 Structure des messages
-    
-    ### Message 1 (Icebreaker)
-    ```
-    Bonjour {Prénom},
-    
-    [Hook LinkedIn OU "Je vous contacte concernant..."]
-    
-    [Pain point #1 - vocabulaire EXACT de la fiche]
-    
-    Quels sont les principaux écarts que vous observez 
-    entre vos attentes et les profils rencontrés ?
-    
-    Bien à vous,
-    ```
-    
-    ### Message 2 (Relance)
-    ```
-    Bonjour {Prénom},
-    
-    Je me permets de vous relancer concernant votre recherche de {Poste}.
-    
-    [Pain point #2 - DIFFÉRENT de M1]
-    
-    J'ai identifié 2 profils qui pourraient retenir votre attention :
-    - L'un [profil 1 cohérent avec la fiche]
-    - L'autre [profil 2 parcours différent]
-    
-    Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ?
-    
-    Bien à vous,
-    ```
-    
-    ### Message 3 (Break-up)
-    Template fixe, pas d'appel Claude.
-    
-    ---
-    
-    ## 🚫 Interdictions
-    
-    - "Je travaille sur..."
-    - "rigueur", "agilité", "dynamisme"
-    - Inventer des compétences non mentionnées
-    - Répéter le même pain point M1/M2
-    - Profils incohérents avec la fiche
-    """)
+    else:
+        st.info("Aucun nouveau prospect à traiter. Cliquez sur 'Rafraîchir Liste' pour vérifier.")
