@@ -901,7 +901,7 @@ Génère les 3 objets (numérotés 1, 2, 3) :"""
 def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
     """
     Génère le message 2 avec 2 profils TOUJOURS ultra-différenciés
-    VERSION V27.3 : Secteur + certifications + outils exacts
+    VERSION V27.5 : Pain points + outcomes + validation stricte
     """
     
     log_event('generate_message_2_start', {
@@ -915,6 +915,7 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
     context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
     job_category = detect_job_category(prospect_data, job_posting_data)
     pain_point = get_relevant_pain_point(job_category, job_posting_data)
+    outcomes = get_relevant_outcomes(job_category, max_outcomes=2)
     
     # Extraction compétences enrichie
     skills = extract_key_skills_from_job(job_posting_data, job_category)
@@ -922,9 +923,8 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
     log_event('message_2_skills_extracted', {
         'tools': skills['tools'],
         'certifications': skills['certifications'],
-        'technical': skills['technical'][:3],
-        'soft': skills['soft'][:2],
-        'sector': skills['sector_code']
+        'sector': skills['sector_code'],
+        'pain_point': pain_point['short']
     })
     
     if is_hiring:
@@ -932,67 +932,111 @@ def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_co
     else:
         intro_phrase = f"Je reviens vers vous concernant la structuration de {context_name}."
     
-    # Préparer les compétences pour le prompt
+    # Préparer outils
     if skills['tools']:
         tools_str = ', '.join(skills['tools'][:5])
-        no_tools_warning = ""
+        tools_warning = ""
     else:
-        tools_str = 'AUCUN OUTIL SPÉCIFIQUE DÉTECTÉ'
-        no_tools_warning = """
-⚠️  AUCUN OUTIL DÉTECTÉ → NE MENTIONNE AUCUN OUTIL DANS LE MESSAGE
-Focus uniquement sur les compétences métier et le contexte."""
+        tools_str = 'AUCUN'
+        tools_warning = """
+⚠️ AUCUN OUTIL DÉTECTÉ
+→ NE MENTIONNE AUCUN OUTIL dans les profils
+→ Focus sur expérience, secteur, compétences métier"""
+    
+    # Préparer certifications
+    if skills['certifications']:
+        certs_str = ', '.join(skills['certifications'])
+        cert_warning = ""
+    else:
+        certs_str = 'AUCUNE'
+        cert_warning = """
+⚠️ AUCUNE CERTIFICATION DÉTECTÉE
+→ NE MENTIONNE AUCUNE CERTIFICATION (pas de CIA, DSCG, ACCA, etc.)
+→ Focus sur années d'expérience et parcours"""
     
     technical_str = ', '.join(skills['technical'][:5]) if skills['technical'] else 'compétences métier générales'
-    certs_str = ', '.join(skills['certifications']) if skills['certifications'] else 'Aucune'
+    outcomes_str = '\n'.join([f"- {out}" for out in outcomes]) if outcomes else "N/A"
     
     prompt = f"""Tu es chasseur de têtes spécialisé Finance.
 
 CONTEXTE :
 Prospect : {first_name}
 Poste : {context_name}
-Secteur détecté : {skills['sector_code']}
+Métier : {job_category}
+Secteur : {skills['sector_code']}
 
-OUTILS DÉTECTÉS : {tools_str}
-CERTIFICATIONS DÉTECTÉES : {certs_str}
-COMPÉTENCES TECHNIQUES : {technical_str}
+EXTRACTION FICHE DE POSTE :
+Outils : {tools_str}
+Certifications : {certs_str}
+Compétences techniques : {technical_str}
+
+PAIN POINT IDENTIFIÉ :
+{pain_point['context']}
+
+OUTCOMES RECHERCHÉS :
+{outcomes_str}
+
+{tools_warning}
+{cert_warning}
 
 🚨 RÈGLES ABSOLUES :
 
-1. Utilise UNIQUEMENT les outils listés ci-dessus
-2. Utilise UNIQUEMENT les certifications listées ci-dessus
-3. Si outils = AUCUN → NE MENTIONNE AUCUN OUTIL
-4. Adapte le secteur des profils au secteur détecté
+1. L'observation marché DOIT mentionner le pain point identifié
+2. Les profils DOIVENT répondre aux outcomes recherchés
+3. Utilise UNIQUEMENT les outils/certifications listés (si AUCUN → n'en mentionne pas)
+4. Les 2 profils doivent être RADICALEMENT DIFFÉRENTS
 
-FORMAT OBLIGATOIRE :
-"J'ai identifié 2 profils qui pourraient retenir votre attention :
-- L'un [profil 1 avec outils/certifications exacts]
-- L'autre [profil 2 parcours différent]"
+STRUCTURE OBSERVATION MARCHÉ (30-40 mots) :
+"Le défi principal réside dans [reformulation pain point] combiné avec [compétence rare de la fiche]"
 
-EXEMPLES PAR SECTEUR :
+Exemples :
+- Si pain point = "multi-sites" + outils = SAP → "Le défi réside dans la capacité à piloter la consolidation multi-sites avec maîtrise SAP pour accélérer les clôtures"
+- Si pain point = "IFRS expertise" + certifications = AUCUNE → "Le défi réside dans l'expertise IFRS combinée avec la capacité à accompagner les filiales internationales"
 
-🏦 Banking :
-"- L'un possède 8 ans d'audit interne bancaire (CIB, retail banking) avec certification CIA et expertise normes BPCE"
+EXEMPLES PROFILS ULTRA-CONTRASTÉS :
 
-🚚 Logistique :
-"- L'un dispose de 7 ans d'audit opérationnel supply chain chez un groupe de transport international (40+ pays)"
+🏦 Banking (avec CIA + Power BI) :
+"- L'un possède 7 ans d'audit interne bancaire (20+ agences) avec certification CIA et maîtrise Power BI pour automatiser les contrôles
+- L'autre vient du Big 4 audit financier secteur bancaire, en transition vers l'audit interne avec forte capacité relationnelle"
 
-🏭 Industrie :
-"- L'un possède 6 ans d'audit interne en groupe industriel (15 sites de production européens)"
+🚚 Logistique (SANS certification, avec VBA) :
+"- L'un dispose de 7 ans d'audit supply chain groupe transport (40+ pays) avec maîtrise VBA et expertise processus logistiques
+- L'autre combine expérience audit opérationnel industriel et reconversion logistique, expert communication transverse"
 
-STRUCTURE (100-120 mots max) :
+🏗️ Engineering (avec SAP, SANS certification) :
+"- L'un possède 6 ans de consolidation en groupe BTP (12 filiales) avec expertise SAP et reporting investissements
+- L'autre vient de la consolidation industrielle, spécialisé accompagnement filiales et budgets prévisionnels"
+
+🎮 Gaming (AUCUN outil/certification) :
+"- L'un dispose de 6 ans de consolidation en groupe entertainment avec expertise business models innovants (revenus récurrents, licences)
+- L'autre combine Big 4 et reconversion gaming, expert comptabilité des actifs immatériels"
+
+🛣️ Infrastructure (avec SAP + Excel) :
+"- L'un possède 8 ans de consolidation concessionnaire avec maîtrise SAP, Excel et reporting actionnaires
+- L'autre vient de la consolidation utilities, expert optimisation processus et automatisation"
+
+PRINCIPES DIFFÉRENCIATION :
+✅ Profil 1 : Parcours INTERNE secteur cible (spécialiste)
+✅ Profil 2 : Big 4 OU reconversion OU secteur adjacent (généraliste)
+✅ Profil 1 : Focus technique (outils/process)
+✅ Profil 2 : Focus soft skills (accompagnement/communication)
+
+FORMAT MESSAGE (100-120 mots) :
 1. "Bonjour {first_name},"
 2. SAUT DE LIGNE
 3. "{intro_phrase}"
 4. SAUT DE LIGNE
-5. Observation marché ULTRA-SPÉCIFIQUE (30-40 mots)
+5. Observation marché basée sur pain point + compétences rares
 6. SAUT DE LIGNE
-7. Proposition de 2 PROFILS avec outils/certifications exacts
-8. SAUT DE LIGNE
-9. "Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait de juger leur pertinence en 30 secondes."
+7. "J'ai identifié 2 profils qui pourraient retenir votre attention :"
+8. "- L'un [profil 1 spécialiste]"
+9. "- L'autre [profil 2 généraliste/reconversion]"
 10. SAUT DE LIGNE
-11. "Bien à vous,"
+11. "Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait de juger leur pertinence en 30 secondes."
+12. SAUT DE LIGNE
+13. "Bien à vous,"
 
-Génère le message (100-120 mots max) :"""
+Génère le message :"""
     
     try:
         message = client.messages.create(
@@ -1004,14 +1048,10 @@ Génère le message (100-120 mots max) :"""
         tracker.track(message.usage, 'generate_message_2')
         result = message.content[0].text.strip()
         
-        # Vérification post-génération
         if "2 profils" not in result.lower() and "deux profils" not in result.lower():
             log_event('message_2_missing_profiles', {
-                'prospect': prospect_data.get('_id', 'unknown'),
-                'message_preview': result[:200]
+                'prospect': prospect_data.get('_id', 'unknown')
             })
-            
-            print("⚠️  Message 2 sans profils détecté - Régénération avec fallback intelligent...")
             result = generate_message_2_fallback(first_name, context_name, is_hiring, 
                                                   job_posting_data, skills, pain_point)
         

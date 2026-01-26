@@ -617,16 +617,15 @@ def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
         'hooks_type': type(hooks_data).__name__
     })
     
-    # NOUVEAU V4.1 : Importer et appeler filter_recent_posts
+    # NOUVEAU V4.1 : Filtrer hooks <3 mois
     from message_sequence_generator import filter_recent_posts
     
-    # Filtrer hooks <3 mois
     if hooks_data != "NOT_FOUND" and isinstance(hooks_data, list):
         filtered_posts = filter_recent_posts(hooks_data, max_age_months=3, max_posts=5)
         if filtered_posts:
             hooks_data = filtered_posts
         else:
-            hooks_data = "NOT_FOUND"  # Aucun post récent
+            hooks_data = "NOT_FOUND"
     
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
