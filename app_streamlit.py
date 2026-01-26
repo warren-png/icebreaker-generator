@@ -1,12 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28 - INTÉGRATION LEONAR COMPLÈTE
+APP STREAMLIT V28.1 - CORRECTIONS SCRAPING
 ═══════════════════════════════════════════════════════════════════
-- Récupération prospects depuis Leonar
-- Scraping LinkedIn automatique (Apify)
-- Scraping fiche de poste
-- Génération V28 (1 appel Claude pour M1+M2)
-- Export automatique vers Leonar
+- Zone URLs agrandie (plusieurs URLs possibles)
+- Scraping LinkedIn + Web (Serper)
+- Filtre strict 6 mois
+- Scraper HelloWork/Apec/Indeed/LinkedIn réparé
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -30,6 +29,7 @@ st.set_page_config(page_title="Icebreaker Generator V28", page_icon="🎯", layo
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
 try:
     LEONAR_EMAIL = st.secrets["LEONAR_EMAIL"]
@@ -175,89 +175,438 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
         run = apify_client.actor("supreme_coder/linkedin-post").call(
             run_input={
                 "deepScrape": True,
-                "limitPerSource": 5,
+                "limitPerSource": 10,
                 "rawData": False,
                 "urls": [linkedin_url]
             }
         )
         items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
-        return filter_recent_posts(items)
+        # Filtre strict 6 mois
+        return filter_recent_posts(items, max_age_months=6)
     except:
         return []
 
 
-def filter_recent_posts(posts, max_age_months=3):
-    """Filtre les posts < 3 mois"""
+def filter_recent_posts(posts, max_age_months=6):
+    """
+    Filtre les posts < 6 mois - STRICT
+    """
     if not posts:
         return []
     
     cutoff = datetime.now() - timedelta(days=max_age_months * 30)
     recent = []
     
-    for post in posts[:10]:
+    for post in posts:
         if not isinstance(post, dict):
             continue
         
-        date_str = post.get('date') or post.get('postedDate') or ''
-        post_date = None
+        # Récupérer la date
+        date_str = (
+            post.get('date') or 
+            post.get('postedDate') or 
+            post.get('timestamp') or
+            post.get('publishedAt') or
+            ''
+        )
         
-        for fmt in ['%Y-%m-%d', '%Y-%m-%dT%H:%M:%S', '%d/%m/%Y']:
-            try:
-                post_date = datetime.strptime(str(date_str)[:10], fmt)
-                break
-            except:
-                continue
+        if not date_str:
+            # Pas de date = on ignore (strict)
+            continue
+        
+        # Parser la date
+        post_date = parse_date(date_str)
         
         if post_date and post_date >= cutoff:
-            recent.append(post)
-        elif not post_date and len(recent) < 3:
             recent.append(post)
     
     return recent[:5]
 
 
+def parse_date(date_str):
+    """Parse une date avec plusieurs formats"""
+    if not date_str:
+        return None
+    
+    date_str = str(date_str).strip()
+    
+    # Formats standards
+    formats = [
+        '%Y-%m-%d',
+        '%Y-%m-%dT%H:%M:%S',
+        '%Y-%m-%dT%H:%M:%S.%fZ',
+        '%Y-%m-%dT%H:%M:%SZ',
+        '%d/%m/%Y',
+        '%d-%m-%Y',
+        '%Y/%m/%d',
+        '%B %d, %Y',
+        '%b %d, %Y',
+    ]
+    
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str[:19], fmt)
+        except:
+            continue
+    
+    # Dates relatives ("2d ago", "3w ago", "il y a 2 jours")
+    return parse_relative_date(date_str)
+
+
+def parse_relative_date(date_str):
+    """Parse les dates relatives"""
+    if not date_str:
+        return None
+    
+    date_str = date_str.lower().strip()
+    now = datetime.now()
+    
+    patterns = [
+        (r'(\d+)\s*d(?:ay)?s?\s*ago', 'days'),
+        (r'(\d+)\s*w(?:eek)?s?\s*ago', 'weeks'),
+        (r'(\d+)\s*mo(?:nth)?s?\s*ago', 'months'),
+        (r'(\d+)\s*h(?:our)?s?\s*ago', 'hours'),
+        (r'(\d+)d\b', 'days'),
+        (r'(\d+)w\b', 'weeks'),
+        (r'(\d+)mo\b', 'months'),
+        (r'il y a (\d+)\s*jour', 'days'),
+        (r'il y a (\d+)\s*semaine', 'weeks'),
+        (r'il y a (\d+)\s*mois', 'months'),
+    ]
+    
+    for pattern, unit in patterns:
+        match = re.search(pattern, date_str)
+        if match:
+            value = int(match.group(1))
+            if unit == 'hours':
+                return now - timedelta(hours=value)
+            elif unit == 'days':
+                return now - timedelta(days=value)
+            elif unit == 'weeks':
+                return now - timedelta(weeks=value)
+            elif unit == 'months':
+                return now - timedelta(days=value * 30)
+    
+    return None
+
+
 # ========================================
-# SCRAPING FICHE DE POSTE
+# SCRAPING WEB (SERPER)
+# ========================================
+
+def search_web_prospect(full_name, company_name):
+    """
+    Recherche web sur le prospect via Serper
+    Retourne les résultats récents (<6 mois)
+    """
+    if not SERPER_API_KEY:
+        return []
+    
+    try:
+        # Recherche actualités récentes
+        query = f'"{full_name}" "{company_name}" OR "{full_name}" finance'
+        
+        response = requests.post(
+            'https://google.serper.dev/search',
+            headers={
+                'X-API-KEY': SERPER_API_KEY,
+                'Content-Type': 'application/json'
+            },
+            json={
+                'q': query,
+                'num': 10,
+                'tbs': 'qdr:m6'  # Derniers 6 mois
+            },
+            timeout=10
+        )
+        
+        if response.status_code != 200:
+            return []
+        
+        data = response.json()
+        results = []
+        
+        # Organic results
+        for item in data.get('organic', [])[:5]:
+            results.append({
+                'title': item.get('title', ''),
+                'snippet': item.get('snippet', ''),
+                'link': item.get('link', ''),
+                'type': 'web'
+            })
+        
+        # News results (souvent plus récents)
+        for item in data.get('news', [])[:3]:
+            results.append({
+                'title': item.get('title', ''),
+                'snippet': item.get('snippet', ''),
+                'link': item.get('link', ''),
+                'date': item.get('date', ''),
+                'type': 'news'
+            })
+        
+        return results
+        
+    except Exception as e:
+        print(f"Erreur Serper: {e}")
+        return []
+
+
+# ========================================
+# SCRAPING FICHE DE POSTE - MULTI-SITES
 # ========================================
 
 def scrape_job_posting(url):
-    """Scrape une fiche de poste"""
+    """
+    Scrape une fiche de poste depuis différents job boards
+    Supporte : HelloWork, LinkedIn, Apec, Indeed, générique
+    """
     if not url or not url.strip():
         return None
     
+    url = url.strip()
+    
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        response = requests.get(url.strip(), headers=headers, timeout=10)
+        if "hellowork.com" in url:
+            return scrape_hellowork(url)
+        elif "linkedin.com/jobs" in url:
+            return scrape_linkedin_job(url)
+        elif "apec.fr" in url:
+            return scrape_apec(url)
+        elif "indeed.com" in url or "indeed.fr" in url:
+            return scrape_indeed(url)
+        else:
+            return scrape_generic(url)
+    except Exception as e:
+        print(f"Erreur scraping: {e}")
+        return scrape_generic(url)
+
+
+def scrape_hellowork(url):
+    """Scrape HelloWork"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code != 200:
+            return scrape_generic(url)
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Titre - plusieurs sélecteurs possibles
+        title = ""
+        for selector in ['h1.tw-text-3xl', 'h1[data-cy="job-title"]', 'h1']:
+            elem = soup.select_one(selector)
+            if elem:
+                title = elem.get_text(strip=True)
+                break
+        
+        # Description - chercher dans plusieurs conteneurs
+        description = ""
+        for selector in ['div[data-cy="job-description"]', 'div.job-description', 'div.description', 'article', 'main']:
+            elem = soup.select_one(selector)
+            if elem:
+                description = elem.get_text(separator='\n', strip=True)
+                if len(description) > 200:
+                    break
+        
+        # Fallback : tous les paragraphes
+        if len(description) < 200:
+            paragraphs = soup.find_all(['p', 'li'])
+            description = '\n'.join([p.get_text(strip=True) for p in paragraphs])
+        
+        return {
+            'title': title[:200],
+            'description': description[:4000],
+            'source': 'HelloWork',
+            'url': url
+        }
+    except:
+        return scrape_generic(url)
+
+
+def scrape_linkedin_job(url):
+    """Scrape LinkedIn Jobs"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code != 200:
+            return scrape_generic(url)
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Titre
+        title = ""
+        for selector in ['h1.top-card-layout__title', 'h1.topcard__title', 'h1']:
+            elem = soup.select_one(selector)
+            if elem:
+                title = elem.get_text(strip=True)
+                break
+        
+        # Description
+        description = ""
+        for selector in ['div.show-more-less-html__markup', 'div.description__text', 'div.job-description']:
+            elem = soup.select_one(selector)
+            if elem:
+                description = elem.get_text(separator='\n', strip=True)
+                break
+        
+        return {
+            'title': title[:200],
+            'description': description[:4000],
+            'source': 'LinkedIn',
+            'url': url
+        }
+    except:
+        return scrape_generic(url)
+
+
+def scrape_apec(url):
+    """Scrape Apec"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'fr-FR,fr;q=0.9',
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code != 200:
+            return scrape_generic(url)
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Titre
+        title = ""
+        for selector in ['h1[data-cy="offerTitle"]', 'h1.offer-title', 'h1']:
+            elem = soup.select_one(selector)
+            if elem:
+                title = elem.get_text(strip=True)
+                break
+        
+        # Description - Apec structure spécifique
+        description = ""
+        
+        # Chercher les sections de contenu
+        content_sections = soup.select('div.offer-description, div.job-description, section.description, div[class*="description"]')
+        for section in content_sections:
+            text = section.get_text(separator='\n', strip=True)
+            if len(text) > len(description):
+                description = text
+        
+        # Fallback
+        if len(description) < 200:
+            main_content = soup.select_one('main') or soup.select_one('article')
+            if main_content:
+                description = main_content.get_text(separator='\n', strip=True)
+        
+        return {
+            'title': title[:200],
+            'description': description[:4000],
+            'source': 'Apec',
+            'url': url
+        }
+    except:
+        return scrape_generic(url)
+
+
+def scrape_indeed(url):
+    """Scrape Indeed"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code != 200:
+            return scrape_generic(url)
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Titre
+        title = ""
+        for selector in ['h1.jobsearch-JobInfoHeader-title', 'h1[data-testid="jobTitle"]', 'h1']:
+            elem = soup.select_one(selector)
+            if elem:
+                title = elem.get_text(strip=True)
+                break
+        
+        # Description
+        description = ""
+        for selector in ['div#jobDescriptionText', 'div.jobsearch-jobDescriptionText', 'div[data-testid="jobDescription"]']:
+            elem = soup.select_one(selector)
+            if elem:
+                description = elem.get_text(separator='\n', strip=True)
+                break
+        
+        return {
+            'title': title[:200],
+            'description': description[:4000],
+            'source': 'Indeed',
+            'url': url
+        }
+    except:
+        return scrape_generic(url)
+
+
+def scrape_generic(url):
+    """Scraping générique pour sites non supportés"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
         
         if response.status_code != 200:
             return None
         
         soup = BeautifulSoup(response.content, 'html.parser')
         
+        # Supprimer scripts et styles
+        for tag in soup(['script', 'style', 'nav', 'footer', 'header']):
+            tag.decompose()
+        
         # Titre
         title = ""
-        title_elem = soup.find('h1')
-        if title_elem:
-            title = title_elem.get_text(strip=True)
+        h1 = soup.find('h1')
+        if h1:
+            title = h1.get_text(strip=True)
         
-        # Description
+        # Description - prendre le contenu principal
         description = ""
-        for tag in ['div', 'section', 'article']:
-            desc_elem = soup.find(tag, class_=re.compile('description|content|job', re.I))
-            if desc_elem:
-                description = desc_elem.get_text(separator='\n', strip=True)[:3000]
-                break
         
-        if not description:
-            paragraphs = soup.find_all('p')
-            description = '\n'.join([p.get_text(strip=True) for p in paragraphs[:15]])[:3000]
+        # Chercher le contenu principal
+        main = soup.find('main') or soup.find('article') or soup.find('div', class_=re.compile('content|description|job', re.I))
+        if main:
+            description = main.get_text(separator='\n', strip=True)
+        else:
+            # Fallback : tous les paragraphes
+            paragraphs = soup.find_all(['p', 'li'])
+            description = '\n'.join([p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20])
         
         return {
-            'title': title,
-            'description': description,
+            'title': title[:200],
+            'description': description[:4000],
+            'source': 'Generic',
             'url': url
         }
-    except:
+    except Exception as e:
+        print(f"Erreur scraping générique: {e}")
         return None
 
 
@@ -265,10 +614,10 @@ def scrape_job_posting(url):
 # GÉNÉRATION V28 - UN SEUL APPEL CLAUDE
 # ========================================
 
-def generate_sequence_v28(prospect_data, posts_data, job_posting_data):
+def generate_sequence_v28(prospect_data, posts_data, web_data, job_posting_data):
     """
     Génère M1 + M2 en UN SEUL appel Claude
-    M3 = template fixe
+    Intègre posts LinkedIn + résultats web
     """
     
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -279,6 +628,7 @@ def generate_sequence_v28(prospect_data, posts_data, job_posting_data):
     
     # Formater pour le prompt
     posts_formatted = format_posts(posts_data)
+    web_formatted = format_web_results(web_data)
     profile_formatted = format_profile(prospect_data)
     fiche_formatted = job_posting_data.get('description', '') if job_posting_data else ''
     
@@ -291,9 +641,14 @@ DONNÉES PROSPECT
 {profile_formatted}
 
 ═══════════════════════════════════════════════════════════════════
-POSTS LINKEDIN RÉCENTS (<3 mois)
+POSTS LINKEDIN RÉCENTS (<6 mois uniquement)
 ═══════════════════════════════════════════════════════════════════
 {posts_formatted}
+
+═══════════════════════════════════════════════════════════════════
+ACTUALITÉS WEB RÉCENTES (<6 mois uniquement)
+═══════════════════════════════════════════════════════════════════
+{web_formatted}
 
 ═══════════════════════════════════════════════════════════════════
 FICHE DE POSTE : {titre_poste}
@@ -308,11 +663,11 @@ GÉNÈRE LES 2 MESSAGES
 
 Bonjour {prenom},
 
-[HOOK - CHOISIS UNE OPTION :]
-Option A (si un post LinkedIn est pertinent) : 
-  Référence personnalisée au post (sujet PRÉCIS, pas de généralités)
+[HOOK - CHOISIS UNE OPTION - PRIORITÉ AUX INFOS RÉCENTES :]
+Option A (si un post LinkedIn OU une actualité web est pertinente) : 
+  Référence personnalisée (sujet PRÉCIS, événement, publication, nomination...)
   Puis transition vers le poste.
-Option B (si pas de post pertinent) :
+Option B (si aucune info récente pertinente) :
   "Je vous contacte concernant votre recherche de {titre_poste}."
 
 [PAIN POINT #1]
@@ -352,6 +707,7 @@ INTERDICTIONS ABSOLUES
 ❌ "rigueur", "agilité", "dynamisme", "dynamique", "croissance"
 ❌ Inventer des compétences/certifications NON dans la fiche
 ❌ Répéter le MÊME pain point entre M1 et M2
+❌ Utiliser des informations datant de plus de 6 mois
 ❌ Profils incohérents avec la fiche
 
 ═══════════════════════════════════════════════════════════════════
@@ -456,15 +812,30 @@ def get_job_title(job_posting_data):
 
 
 def format_posts(posts):
-    """Formate les posts pour le prompt"""
+    """Formate les posts LinkedIn pour le prompt"""
     if not posts:
-        return "Aucun post LinkedIn récent."
+        return "Aucun post LinkedIn récent (<6 mois)."
     
     formatted = []
     for i, post in enumerate(posts[:5], 1):
         text = post.get('text', '')[:400]
         date = post.get('date', post.get('postedDate', ''))
         formatted.append(f"POST {i} ({date}):\n{text}")
+    return "\n\n".join(formatted)
+
+
+def format_web_results(web_data):
+    """Formate les résultats web pour le prompt"""
+    if not web_data:
+        return "Aucune actualité web récente trouvée."
+    
+    formatted = []
+    for i, item in enumerate(web_data[:5], 1):
+        title = item.get('title', '')
+        snippet = item.get('snippet', '')
+        date = item.get('date', '')
+        item_type = item.get('type', 'web')
+        formatted.append(f"[{item_type.upper()}] {title}\n{snippet}\n({date})")
     return "\n\n".join(formatted)
 
 
@@ -501,7 +872,7 @@ def extract_prospect_data(leonar_prospect):
 # ========================================
 
 st.title("🎯 Icebreaker Generator V28")
-st.caption("Leonar + Scraping LinkedIn + Génération IA simplifiée")
+st.caption("Leonar + Scraping LinkedIn/Web + Génération IA")
 
 # Sidebar
 with st.sidebar:
@@ -510,12 +881,17 @@ with st.sidebar:
     if ANTHROPIC_API_KEY:
         st.success("✅ Anthropic API")
     else:
-        st.error("❌ ANTHROPIC_API_KEY manquante")
+        st.error("❌ ANTHROPIC_API_KEY")
     
     if APIFY_API_TOKEN:
         st.success("✅ Apify API")
     else:
-        st.error("❌ APIFY_API_TOKEN manquante")
+        st.error("❌ APIFY_API_TOKEN")
+    
+    if SERPER_API_KEY:
+        st.success("✅ Serper API (web)")
+    else:
+        st.warning("⚠️ SERPER_API_KEY (optionnel)")
     
     if all([LEONAR_EMAIL, LEONAR_PASSWORD, LEONAR_CAMPAIGN_ID]):
         if get_leonar_token():
@@ -551,12 +927,21 @@ with tab1:
         st.error("Impossible de se connecter à Leonar")
         st.stop()
     
-    # Zone URL fiche de poste
-    st.subheader("📄 Fiche de poste")
-    job_url = st.text_input(
-        "URL de la fiche de poste (commune à tous les prospects)",
-        placeholder="https://www.hellowork.com/..."
+    # Zone URLs fiches de poste - AGRANDIE
+    st.subheader("📄 URLs des fiches de poste")
+    st.caption("⚠️ Une URL par ligne, dans le MÊME ORDRE que les prospects Leonar")
+    
+    job_urls_input = st.text_area(
+        "URLs (une par ligne)",
+        height=200,
+        placeholder="https://www.hellowork.com/...\nhttps://www.apec.fr/...\nhttps://www.linkedin.com/jobs/..."
     )
+    
+    # Parser les URLs
+    job_urls_list = []
+    if job_urls_input:
+        job_urls_list = [u.strip() for u in job_urls_input.strip().split('\n') if u.strip()]
+        st.info(f"✅ {len(job_urls_list)} URL(s) détectée(s)")
     
     # Rafraîchir prospects
     col1, col2 = st.columns([1, 3])
@@ -574,26 +959,19 @@ with tab1:
     # Liste des prospects
     if st.session_state.leonar_prospects:
         with st.expander(f"👥 Voir les {len(st.session_state.leonar_prospects)} prospects", expanded=True):
-            for i, p in enumerate(st.session_state.leonar_prospects, 1):
+            for i, p in enumerate(st.session_state.leonar_prospects):
                 name = p.get('user_full name', 'Inconnu')
                 company = p.get('linkedin_company', 'N/A')
                 has_linkedin = "✅" if p.get('linkedin_url') else "❌"
-                st.write(f"{i}. **{name}** | {company} | LinkedIn: {has_linkedin}")
+                has_url = f"📄 URL {i+1}" if (job_urls_list and i < len(job_urls_list)) else "⚠️ Pas d'URL"
+                st.write(f"{i+1}. **{name}** | {company} | LinkedIn: {has_linkedin} | {has_url}")
         
         # Bouton génération
         if st.button("🚀 LANCER LA GÉNÉRATION", type="primary", use_container_width=True):
             
-            if not job_url:
-                st.error("⚠️ Entrez l'URL de la fiche de poste")
+            if not job_urls_list:
+                st.error("⚠️ Entrez au moins une URL de fiche de poste")
                 st.stop()
-            
-            # Scraper la fiche de poste UNE FOIS
-            with st.spinner("📄 Scraping fiche de poste..."):
-                job_data = scrape_job_posting(job_url)
-                if job_data:
-                    st.success(f"✅ Fiche extraite : {job_data.get('title', 'N/A')[:50]}")
-                else:
-                    st.warning("⚠️ Impossible de scraper la fiche, continuer quand même")
             
             # Init Apify
             try:
@@ -611,21 +989,40 @@ with tab1:
                 progress.progress((i + 1) / len(st.session_state.leonar_prospects))
                 
                 name = prospect.get('user_full name', 'Inconnu')
+                company = prospect.get('linkedin_company', '')
                 status.write(f"⚙️ Traitement de **{name}**...")
                 
                 try:
                     # Extraire données prospect
                     p_data = extract_prospect_data(prospect)
                     
-                    # Scraper LinkedIn
+                    # URL fiche de poste pour ce prospect
+                    job_url = job_urls_list[i] if i < len(job_urls_list) else job_urls_list[0]
+                    
+                    # 1. Scraper la fiche de poste
+                    job_data = None
+                    with st.spinner(f"📄 Scraping fiche de poste..."):
+                        job_data = scrape_job_posting(job_url)
+                        if job_data:
+                            st.caption(f"   ✅ Fiche: {job_data.get('title', 'N/A')[:40]}...")
+                    
+                    # 2. Scraper LinkedIn posts
                     posts = []
                     if p_data.get('linkedin_url'):
-                        with st.spinner(f"🔍 Scraping LinkedIn {name}..."):
+                        with st.spinner(f"🔍 Scraping LinkedIn..."):
                             posts = scrape_linkedin_posts(apify_client, p_data['linkedin_url'])
+                            st.caption(f"   ✅ {len(posts)} posts LinkedIn (<6 mois)")
                     
-                    # Générer séquence
-                    with st.spinner(f"✨ Génération messages {name}..."):
-                        sequence = generate_sequence_v28(p_data, posts, job_data)
+                    # 3. Recherche web
+                    web_results = []
+                    if SERPER_API_KEY and name != 'Inconnu':
+                        with st.spinner(f"🌐 Recherche web..."):
+                            web_results = search_web_prospect(name, company)
+                            st.caption(f"   ✅ {len(web_results)} résultats web")
+                    
+                    # 4. Générer séquence
+                    with st.spinner(f"✨ Génération messages..."):
+                        sequence = generate_sequence_v28(p_data, posts, web_results, job_data)
                     
                     if sequence:
                         # Update Leonar
@@ -681,24 +1078,36 @@ with tab2:
         # Scraper fiche
         job_data = None
         if t_job_url:
-            with st.spinner("Scraping fiche..."):
+            with st.spinner("📄 Scraping fiche de poste..."):
                 job_data = scrape_job_posting(t_job_url)
+                if job_data:
+                    st.success(f"✅ Fiche: {job_data.get('title', '')[:50]}")
         
         # Scraper LinkedIn
         posts = []
         if t_linkedin:
             try:
                 apify_client = init_apify_client()
-                with st.spinner("Scraping LinkedIn..."):
+                with st.spinner("🔍 Scraping LinkedIn..."):
                     posts = scrape_linkedin_posts(apify_client, t_linkedin)
-            except:
-                st.warning("Scraping LinkedIn échoué")
+                    st.success(f"✅ {len(posts)} posts LinkedIn (<6 mois)")
+            except Exception as e:
+                st.warning(f"Scraping LinkedIn échoué: {e}")
+        
+        # Recherche web
+        web_results = []
+        if SERPER_API_KEY:
+            with st.spinner("🌐 Recherche web..."):
+                web_results = search_web_prospect(f"{t_prenom} {t_nom}", t_company)
+                st.success(f"✅ {len(web_results)} résultats web")
         
         # Générer
-        with st.spinner("Génération..."):
-            sequence = generate_sequence_v28(prospect, posts, job_data)
+        with st.spinner("✨ Génération..."):
+            sequence = generate_sequence_v28(prospect, posts, web_results, job_data)
         
         if sequence:
+            st.divider()
+            
             st.subheader("📧 Objets")
             st.code(sequence['subject_lines'])
             
