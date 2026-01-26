@@ -1,1201 +1,275 @@
 """
 ═══════════════════════════════════════════════════════════════════
-MESSAGE SEQUENCE GENERATOR - V27.5 (PAIN POINTS 100% DYNAMIQUES)
-Modifications V27.5 :
-- generate_dynamic_pain_point() : extraction compétences rares via Claude
-- get_relevant_pain_point() : 100% dynamique, plus de fallback config.py
-- generate_message_2() : utilise compétences rares + reformulation obligatoire
-- Prompts renforcés : interdiction termes génériques, respect expérience
+SEQUENCE GENERATOR V28 - ARCHITECTURE SIMPLIFIÉE
+═══════════════════════════════════════════════════════════════════
+Philosophie :
+- ZÉRO logique de détection (métier, secteur, pain points)
+- Claude analyse TOUT en un seul appel
+- Structures de messages FIXES
+- Scraping LinkedIn/Web MAINTENU
 ═══════════════════════════════════════════════════════════════════
 """
 
 import anthropic
 import os
-import re 
+import re
+import json
 from datetime import datetime, timedelta
-from config import COMPANY_INFO, OUTCOMES_DETAILED
-
-# Imports utilitaires
-from prospection_utils.logger import log_event, log_error
-from prospection_utils.cost_tracker import tracker
-from prospection_utils.validator import validate_and_report
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
 
 if not ANTHROPIC_API_KEY:
     raise ValueError("❌ ANTHROPIC_API_KEY non trouvée")
 
 
 # ========================================
-# FILTRAGE HOOKS LINKEDIN - V27.4 ROBUSTE
+# LOGGER & COST TRACKER INTÉGRÉS
 # ========================================
 
-def filter_recent_posts(posts, max_age_months=3, max_posts=5):
-    """
-    Filtre les posts LinkedIn pour ne garder que ceux <3 mois
-    VERSION V27.4 : Parsing dates ROBUSTE multi-format + fallback intelligent
-    """
-    if not posts or posts == "NOT_FOUND":
-        return []
+def log_event(event_name, data=None):
+    """Log un événement"""
+    log_entry = {
+        'timestamp': datetime.now().isoformat(),
+        'event': event_name
+    }
+    if data:
+        log_entry.update(data)
+    print(f"📋 {json.dumps(log_entry, ensure_ascii=False)}")
+
+
+def log_error(error_type, message, data=None):
+    """Log une erreur"""
+    log_entry = {
+        'timestamp': datetime.now().isoformat(),
+        'error_type': error_type,
+        'message': message
+    }
+    if data:
+        log_entry.update(data)
+    print(f"❌ {json.dumps(log_entry, ensure_ascii=False)}")
+
+
+class CostTracker:
+    """Tracker de coûts API"""
     
-    if not isinstance(posts, list):
-        return []
+    def __init__(self):
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_cost = 0
+        self.calls = []
     
-    cutoff_date = datetime.now() - timedelta(days=max_age_months * 30)
-    recent_posts = []
-    posts_without_date = []
-    
-    for post in posts:
-        if not isinstance(post, dict):
-            continue
-            
-        # Chercher la date dans plusieurs champs possibles
-        post_date_str = (
-            post.get('date') or 
-            post.get('postedDate') or 
-            post.get('timestamp') or
-            post.get('publishedAt') or
-            post.get('created_at') or
-            ''
-        )
+    def track(self, usage, function_name):
+        """Enregistre un appel API"""
+        input_tokens = usage.input_tokens
+        output_tokens = usage.output_tokens
         
-        if not post_date_str:
-            # Pas de date → garder pour fallback
-            posts_without_date.append(post)
-            continue
+        # Prix Claude Sonnet
+        cost = (input_tokens * 0.003 + output_tokens * 0.015) / 1000
         
-        # Parser la date avec plusieurs formats
-        post_date = None
-        date_formats = [
-            '%Y-%m-%d',
-            '%Y-%m-%dT%H:%M:%S',
-            '%Y-%m-%dT%H:%M:%S.%fZ',
-            '%Y-%m-%dT%H:%M:%SZ',
-            '%d/%m/%Y',
-            '%d-%m-%Y',
-            '%Y/%m/%d',
-            '%B %d, %Y',  # "January 15, 2026"
-            '%b %d, %Y',  # "Jan 15, 2026"
-        ]
+        self.total_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
+        self.total_cost += cost
         
-        for fmt in date_formats:
-            try:
-                # Tronquer à 10 caractères pour formats date seule
-                date_to_parse = str(post_date_str)
-                if fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d']:
-                    date_to_parse = date_to_parse[:10]
-                
-                post_date = datetime.strptime(date_to_parse, fmt)
-                break
-            except (ValueError, TypeError):
-                continue
-        
-        # Essayer de parser les dates relatives ("il y a 2 jours", "2d", "3w")
-        if not post_date:
-            relative_date = parse_relative_date(str(post_date_str))
-            if relative_date:
-                post_date = relative_date
-        
-        # Vérifier si la date est récente
-        if post_date and post_date >= cutoff_date:
-            recent_posts.append(post)
-        elif post_date:
-            log_event('post_filtered_old', {
-                'date': str(post_date_str),
-                'parsed': post_date.strftime('%Y-%m-%d') if post_date else 'N/A',
-                'cutoff': cutoff_date.strftime('%Y-%m-%d')
-            })
-    
-    # Si aucun post récent mais des posts sans date → prendre les premiers (risque assumé)
-    if not recent_posts and posts_without_date:
-        log_event('using_posts_without_date', {
-            'count': min(max_posts, len(posts_without_date)),
-            'reason': 'No dated posts found within cutoff'
+        self.calls.append({
+            'function': function_name,
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'cost': cost
         })
-        recent_posts = posts_without_date[:max_posts]
-    
-    # Trier par date décroissante et limiter
-    def get_sort_date(p):
-        d = p.get('date') or p.get('postedDate') or p.get('timestamp') or '1900-01-01'
-        return str(d)
-    
-    recent_posts = sorted(recent_posts, key=get_sort_date, reverse=True)[:max_posts]
-    
-    log_event('posts_filtered_v27_4', {
-        'total_input': len(posts),
-        'recent_output': len(recent_posts),
-        'without_date': len(posts_without_date),
-        'cutoff_date': cutoff_date.strftime('%Y-%m-%d')
-    })
-    
-    return recent_posts
-
-
-def parse_relative_date(date_str):
-    """
-    Parse les dates relatives LinkedIn ("2d", "1w", "3mo", "il y a 2 jours")
-    VERSION V27.4 : Support multi-langue
-    """
-    if not date_str:
-        return None
-    
-    date_str_lower = date_str.lower().strip()
-    now = datetime.now()
-    
-    # Patterns anglais
-    patterns_en = [
-        (r'(\d+)\s*d(?:ay)?s?\s*ago', 'days'),
-        (r'(\d+)\s*w(?:eek)?s?\s*ago', 'weeks'),
-        (r'(\d+)\s*mo(?:nth)?s?\s*ago', 'months'),
-        (r'(\d+)\s*h(?:our)?s?\s*ago', 'hours'),
-        (r'(\d+)d\b', 'days'),
-        (r'(\d+)w\b', 'weeks'),
-        (r'(\d+)mo\b', 'months'),
-        (r'(\d+)h\b', 'hours'),
-    ]
-    
-    # Patterns français
-    patterns_fr = [
-        (r'il y a (\d+)\s*jour', 'days'),
-        (r'il y a (\d+)\s*semaine', 'weeks'),
-        (r'il y a (\d+)\s*mois', 'months'),
-        (r'il y a (\d+)\s*heure', 'hours'),
-    ]
-    
-    all_patterns = patterns_en + patterns_fr
-    
-    for pattern, unit in all_patterns:
-        match = re.search(pattern, date_str_lower)
-        if match:
-            value = int(match.group(1))
-            if unit == 'hours':
-                return now - timedelta(hours=value)
-            elif unit == 'days':
-                return now - timedelta(days=value)
-            elif unit == 'weeks':
-                return now - timedelta(weeks=value)
-            elif unit == 'months':
-                return now - timedelta(days=value * 30)
-    
-    return None
-
-
-# ========================================
-# DÉTECTION SECTEUR - V27.4 ENRICHIE
-# ========================================
-
-def detect_company_sector(job_posting_data):
-    """
-    Détecte le secteur de l'entreprise
-    VERSION V27.4 : Keywords enrichis + detection sans API call
-    """
-    if not job_posting_data:
-        return 'general'
-    
-    text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
-    
-    # ════════════════════════════════════════════════════════════════
-    # DÉTECTION PAR MOTS-CLÉS (PRIORITÉ)
-    # ════════════════════════════════════════════════════════════════
-    
-    sector_keywords = {
-        'banking': [
-            'banque', 'bank', 'bancaire', 'banking', 'cib', 'retail banking',
-            'private banking', 'bpce', 'bnp', 'société générale', 'crédit agricole',
-            'crédit mutuel', 'lcl', 'caisse d\'épargne', 'natixis', 'hsbc',
-            'banque palatine', 'banque populaire'
-        ],
-        'insurance': [
-            'assurance', 'insurance', 'mutuelle', 'iard', 'prévoyance',
-            'solvabilité', 'solvency', 'actuariat', 'actuariel', 'sinistre',
-            'cnp', 'axa', 'allianz', 'generali', 'groupama', 'maif', 'macif',
-            'covéa', 'ag2r', 'malakoff', 'kereis', 'camca'
-        ],
-        'logistics_transport': [
-            'logistique', 'logistics', 'supply chain', 'transport', 'freight',
-            'fret', 'entrepôt', 'warehouse', 'distribution', 'livraison',
-            'geodis', 'dhl', 'fedex', 'ups', 'kuehne', 'db schenker',
-            'ceva logistics', 'xpo', 'stef', 'id logistics', 'fm logistic',
-            '166 pays', '120 pays', 'réseau mondial', 'hub logistique'
-        ],
-        'manufacturing': [
-            'industrie', 'industriel', 'manufacturing', 'production', 'usine',
-            'factory', 'fabrication', 'sites de production', 'atelier',
-            'tarkett', 'michelin', 'renault', 'psa', 'stellantis', 'safran',
-            'airbus', 'saint-gobain', 'schneider', 'legrand', 'valeo',
-            '35 sites', '50 usines', 'sites industriels'
-        ],
-        'engineering': [
-            'ingénierie', 'engineering', 'btp', 'construction', 'infrastructure',
-            'travaux publics', 'génie civil', 'bureau d\'études',
-            'egis', 'vinci', 'bouygues', 'eiffage', 'colas', 'spie',
-            'artelia', 'setec', 'systra', 'arcadis', 'aecom',
-            'concession', 'autoroute', 'pont', 'tunnel'
-        ],
-        'retail': [
-            'retail', 'distribution', 'grande distribution', 'magasin',
-            'commerce', 'enseigne', 'point de vente', 'réseau de vente',
-            'carrefour', 'auchan', 'leclerc', 'intermarché', 'casino',
-            'fnac', 'darty', 'decathlon', 'leroy merlin', 'ikea'
-        ],
-        'fintech': [
-            'fintech', 'néobanque', 'neobank', 'payment', 'paiement',
-            'crypto', 'blockchain', 'startup', 'scale-up', 'licorne',
-            'memo bank', 'qonto', 'lydia', 'revolut', 'n26', 'alan',
-            'pennylane', 'payfit', 'spendesk', 'swile'
-        ],
-        'gaming': [
-            'jeu vidéo', 'video game', 'gaming', 'game studio', 'éditeur de jeux',
-            'ubisoft', 'activision', 'electronic arts', 'ea', 'gameloft',
-            'don\'t nod', 'focus entertainment', 'nacon', 'bigben'
-        ],
-        'services': [
-            'conseil', 'consulting', 'cabinet', 'services professionnels',
-            'audit externe', 'expertise comptable', 'commissariat aux comptes',
-            'big 4', 'big four', 'deloitte', 'ey', 'kpmg', 'pwc', 'mazars',
-            'grant thornton', 'bdo', 'rsm'
-        ]
-    }
-    
-    # Scorer chaque secteur
-    sector_scores = {sector: 0 for sector in sector_keywords}
-    
-    for sector, keywords in sector_keywords.items():
-        for keyword in keywords:
-            if keyword in text:
-                # Bonus si dans le nom d'entreprise (plus fiable)
-                company_name = job_posting_data.get('company', '').lower()
-                if keyword in company_name:
-                    sector_scores[sector] += 3
-                else:
-                    sector_scores[sector] += 1
-    
-    # Trouver le secteur dominant
-    max_score = max(sector_scores.values())
-    
-    if max_score >= 2:
-        detected_sector = max(sector_scores.items(), key=lambda x: x[1])[0]
-        log_event('sector_detected_v27_4', {
-            'sector': detected_sector,
-            'score': max_score,
-            'all_scores': {k: v for k, v in sector_scores.items() if v > 0}
-        })
-        return detected_sector
-    
-    log_event('sector_fallback_general', {'reason': 'No sector keywords found'})
-    return 'general'
-
-
-# ========================================
-# EXTRACTION OUTILS - V27.4 ENRICHIE
-# ========================================
-
-def extract_all_keywords_from_job(job_posting_data):
-    """
-    ÉTAPE 1 : Extraction brute de TOUS les mots-clés potentiels
-    VERSION V27.4 : Patterns enrichis
-    """
-    if not job_posting_data:
-        return {'acronyms': [], 'capitalized': [], 'technical': []}
-    
-    job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}"
-    
-    # 1. ACRONYMES (2-10 lettres majuscules)
-    acronyms = re.findall(r'\b[A-Z]{2,10}\b', job_text)
-    
-    # 2. MOTS CAPITALISÉS (noms propres, outils)
-    capitalized = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', job_text)
-    
-    # 3. EXPRESSIONS ENTRE PARENTHÈSES (souvent des listes d'outils)
-    in_parens = re.findall(r'\(([^)]+)\)', job_text)
-    technical_terms = []
-    for content in in_parens:
-        items = [item.strip() for item in content.split(',')]
-        technical_terms.extend(items)
-    
-    # 4. PATTERNS SPÉCIFIQUES V27.4
-    # SAP BFC, SAP BPC, Power BI, etc.
-    compound_tools = re.findall(r'\b(?:SAP|Power|Microsoft)\s+[A-Z][a-zA-Z]*\b', job_text)
-    technical_terms.extend(compound_tools)
-    
-    return {
-        'acronyms': list(set(acronyms)),
-        'capitalized': list(set(capitalized)),
-        'technical': list(set(technical_terms))
-    }
-
-
-def filter_real_tools(extracted_keywords):
-    """
-    ÉTAPE 2 : Filtrage pour ne garder QUE les vrais outils
-    VERSION V27.4 : Liste enrichie SAP BFC, Power Query, TCD
-    """
-    
-    # LISTE BLANCHE : Outils connus avec certitude
-    KNOWN_TOOLS = {
-        # EPM / Planning
-        'Pigment', 'Jedox', 'Lucanet', 'Tagetik', 'Anaplan', 'Hyperion', 
-        'OneStream', 'Board', 'Prophix', 'IBM Planning Analytics', 'TM1',
         
-        # ERP / SAP
-        'SAP', 'SAP BFC', 'SAP BPC', 'SAP S/4HANA', 'SAP FI', 'SAP CO',
-        'SAP FICO', 'SAP ECC', 'SAP R/3',
-        
-        # ERP Autres
-        'Oracle', 'Oracle EPM', 'Oracle HFM', 'Sage', 'Sage X3', 'Sage 100',
-        'Dynamics', 'Dynamics 365', 'NetSuite', 'Infor', 'Cegid', 'Navision',
-        
-        # BI / Analytics
-        'Tableau', 'Qlik', 'QlikView', 'Qlik Sense', 'Spotfire', 'Looker', 
-        'Microstrategy', 'Power BI', 'PowerBI', 'Business Objects', 'BO',
-        'Cognos', 'SSRS', 'SSIS', 'Alteryx',
-        
-        # Langages / Data
-        'Python', 'SQL', 'VBA', 'R', 'SAS', 'SPSS', 'Stata',
-        
-        # Office / Productivité
-        'Excel', 'Power Query', 'Power Pivot', 'PowerQuery', 'TCD',
-        'Access', 'Macro', 'Macros Excel',
-        
-        # Consolidation
-        'HFM', 'Hyperion Financial Management', 'FC', 'Magnitude',
-        'Sigma Conso', 'Talentia', 'Caseware',
-        
-        # Autres outils métier
-        'Coupa', 'Ariba', 'Concur', 'Workday', 'Salesforce', 'Kyriba',
-        'Blackline', 'Trintech', 'Cadency', 'FloQast', 'Vena',
-        
-        # Audit
-        'ACL', 'IDEA', 'TeamMate', 'AuditBoard', 'Galvanize',
-        
-        # Trésorerie
-        'Kyriba', 'FIS', 'Finastra', 'Calypso', 'Murex', 'Summit'
-    }
+        print(f"💰 [{function_name}] Tokens: {input_tokens}→{output_tokens} | Coût: ${cost:.4f}")
     
-    # LISTE NOIRE : Faux positifs à exclure systématiquement
-    EXCLUDE_LIST = {
-        # Géographie
-        'USA', 'UK', 'France', 'Paris', 'Europe', 'Germany', 'Spain',
-        'Lyon', 'Marseille', 'Bordeaux', 'Toulouse', 'Nantes', 'Lille',
-        
-        # Rôles / Titres
-        'CEO', 'CFO', 'COO', 'CTO', 'DAF', 'RAF', 'DRH', 'CDO', 'CMO',
-        'Manager', 'Director', 'Head', 'Chief', 'VP', 'Senior', 'Junior',
-        
-        # Contrats
-        'CDI', 'CDD', 'VIE', 'Stage', 'Interim', 'Alternance',
-        
-        # Indicateurs / KPI
-        'KPI', 'ROI', 'EBITDA', 'CAPEX', 'OPEX', 'SLA', 'NPS', 'MRR', 'ARR',
-        'CA', 'PNL', 'P&L', 'BS', 'CF',
-        
-        # Organisations
-        'ETI', 'PME', 'TPE', 'SME', 'BU', 'CODIR', 'COMEX', 'CSE',
-        'GIE', 'SAS', 'SA', 'SARL',
-        
-        # Départements
-        'IT', 'HR', 'RH', 'FTE', 'R&D', 'RD', 'DSI', 'DG', 'DAF',
-        
-        # Normes (pas des outils)
-        'IFRS', 'GAAP', 'SOX', 'COSO', 'IIA', 'ISA',
-        
-        # Certifications (pas des outils)
-        'PMP', 'SAFe', 'Scrum', 'Agile', 'PRINCE2', 'CIA', 'CPA', 'ACCA',
-        'DSCG', 'DEC', 'CISA', 'CISM',
-        
-        # Divers
-        'RTT', 'CV', 'PDF', 'EUR', 'USD', 'GBP', 'RER', 'RATP', 'SNCF',
-        'Groupe', 'Group', 'Company', 'International', 'Global',
-        'CDG', 'LBP', 'BNP', 'SG'  # Entreprises, pas outils
-    }
-    
-    detected_tools = []
-    
-    # Collecter tous les mots-clés
-    all_keywords = (
-        extracted_keywords.get('acronyms', []) + 
-        extracted_keywords.get('capitalized', []) + 
-        extracted_keywords.get('technical', [])
-    )
-    
-    for keyword in all_keywords:
-        keyword_clean = keyword.strip()
-        
-        # Ignorer vide ou trop court
-        if not keyword_clean or len(keyword_clean) < 2:
-            continue
-        
-        # Si dans liste blanche → garder
-        if keyword_clean in KNOWN_TOOLS:
-            if keyword_clean not in detected_tools:
-                detected_tools.append(keyword_clean)
-        
-        # Si dans liste noire → ignorer
-        elif keyword_clean.upper() in EXCLUDE_LIST or keyword_clean in EXCLUDE_LIST:
-            continue
-        
-        # Cas spéciaux composés
-        elif keyword_clean.startswith('SAP ') or keyword_clean.startswith('Power '):
-            if keyword_clean not in detected_tools:
-                detected_tools.append(keyword_clean)
-    
-    # Post-traitement : fusionner "Power" + "BI" en "Power BI"
-    if 'Power' in detected_tools and 'BI' in detected_tools:
-        detected_tools.remove('Power')
-        detected_tools.remove('BI')
-        if 'Power BI' not in detected_tools:
-            detected_tools.append('Power BI')
-    
-    # Dédupliquer
-    detected_tools = list(set(detected_tools))
-    
-    log_event('tools_filtered_v27_4', {
-        'raw_count': len(all_keywords),
-        'filtered_count': len(detected_tools),
-        'tools': detected_tools
-    })
-    
-    return detected_tools
-
-
-# ========================================
-# EXTRACTION CERTIFICATIONS - V27.4 ENRICHIE
-# ========================================
-
-def extract_certifications_and_norms(job_posting_data):
-    """
-    Détecte les certifications et normes métier mentionnées
-    VERSION V27.4 : Liste enrichie CIA, IIA, COSO, Solvabilité II
-    """
-    if not job_posting_data:
-        return []
-    
-    text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
-    
-    certifications = {
-        # Audit
-        'cia': 'CIA',
-        ' cia ': 'CIA',  # Avec espaces pour éviter faux positifs
-        'certified internal auditor': 'CIA',
-        'cpai': 'CPAI',
-        'cisa': 'CISA',
-        'cism': 'CISM',
-        'crma': 'CRMA',
-        'cfe': 'CFE',
-        
-        # Normes Audit
-        'normes iia': 'normes IIA',
-        'standards iia': 'normes IIA',
-        'iia standards': 'normes IIA',
-        ' iia': 'normes IIA',
-        'coso': 'COSO',
-        'cadre coso': 'COSO',
-        
-        # Comptabilité
-        'dscg': 'DSCG',
-        'dec': 'DEC',
-        'diplôme d\'expertise comptable': 'DEC',
-        'cpa': 'CPA',
-        'acca': 'ACCA',
-        'cma': 'CMA',
-        
-        # Normes Comptables
-        'ifrs': 'normes IFRS',
-        'normes ifrs': 'normes IFRS',
-        'gaap': 'normes GAAP',
-        'us gaap': 'normes US GAAP',
-        'french gaap': 'French GAAP',
-        'sox': 'SOX',
-        'sarbanes': 'SOX',
-        
-        # Assurance
-        'solvabilité ii': 'Solvabilité II',
-        'solvabilité 2': 'Solvabilité II',
-        'solvency ii': 'Solvabilité II',
-        'solvency 2': 'Solvabilité II',
-        
-        # Project Management
-        'pmp': 'PMP',
-        'prince2': 'PRINCE2',
-        'safe': 'SAFe',
-        'scrum master': 'Scrum Master',
-        'psm': 'PSM',
-        'csm': 'CSM',
-        
-        # Finance
-        'cfa': 'CFA',
-        'frm': 'FRM',
-        'amf': 'certification AMF'
-    }
-    
-    detected = []
-    for cert_key, cert_name in certifications.items():
-        if cert_key in text:
-            if cert_name not in detected:
-                detected.append(cert_name)
-    
-    log_event('certifications_detected_v27_4', {
-        'count': len(detected),
-        'certifications': detected
-    })
-    
-    return detected
-
-
-# ========================================
-# DÉTECTION MÉTIER - V27.4 PRIORITÉ TITRE
-# ========================================
-
-def detect_job_category(prospect_data, job_posting_data):
-    """
-    Détecte automatiquement la catégorie métier du prospect
-    VERSION V27.4 : PRIORITÉ TITRE > DESCRIPTION + exclusions contextuelles
-    """
-    
-    # ÉTAPE 1 : Extraire TITRE seul (prioritaire)
-    job_title = ""
-    if job_posting_data:
-        job_title = str(job_posting_data.get('title', '')).lower()
-    
-    # ÉTAPE 2 : Extraire description (secondaire)
-    job_desc = ""
-    if job_posting_data:
-        job_desc = str(job_posting_data.get('description', '')).lower()
-    
-    # ÉTAPE 3 : Headline prospect (tertiaire)
-    headline = f"{prospect_data.get('headline', '')} {prospect_data.get('title', '')}".lower()
-    
-    # ════════════════════════════════════════════════════════════════
-    # DÉTECTION SUR TITRE UNIQUEMENT (PRIORITÉ ABSOLUE)
-    # ════════════════════════════════════════════════════════════════
-    
-    # Comptable / Comptabilité (AVANT audit car "comptable" est plus spécifique)
-    if any(word in job_title for word in ['comptable', 'accountant', 'accounting']):
-        # EXCLUSION : "comptable" dans titre mais "consolidation" aussi → consolidation
-        if 'consolidation' in job_title or 'consolidateur' in job_title:
-            return 'consolidation'
-        return 'comptabilite'
-    
-    # Audit
-    if any(word in job_title for word in ['audit', 'auditeur', 'auditor']):
-        return 'audit'
-    
-    # Consolidation
-    if any(word in job_title for word in ['consolidation', 'consolidateur', 'consolidator']):
-        return 'consolidation'
-    
-    # Contrôle de gestion
-    if any(word in job_title for word in ['contrôle de gestion', 'controle de gestion', 'contrôleur de gestion', 'controller', 'business controller']):
-        return 'controle_gestion'
-    
-    # FP&A
-    if any(word in job_title for word in ['fp&a', 'fpa', 'financial planning', 'fpna']):
-        return 'fpna'
-    
-    # DAF / CFO
-    if any(word in job_title for word in ['daf', 'directeur administratif', 'cfo', 'chief financial', 'directeur financier']):
-        return 'daf'
-    
-    # RAF
-    if any(word in job_title for word in ['raf', 'responsable administratif']):
-        return 'raf'
-    
-    # Data / IA
-    if any(word in job_title for word in ['data officer', 'ia officer', 'ai officer', 'data & ia', 'chief data', 'cdo']):
-        return 'data_ia'
-    
-    # EPM
-    if any(word in job_title for word in ['epm', 'anaplan', 'hyperion', 'tagetik']):
-        return 'epm'
-    
-    # BI / Data
-    if any(word in job_title for word in ['bi ', 'business intelligence', ' data ', 'analytics']):
-        return 'bi_data'
-    
-    # ════════════════════════════════════════════════════════════════
-    # SI TITRE NON CONCLUANT → DESCRIPTION (avec exclusions)
-    # ════════════════════════════════════════════════════════════════
-    
-    # Nettoyer la description des mentions contextuelles
-    desc_cleaned = job_desc
-    
-    # Exclure "ou audit", "contrôles de niveau 2", etc.
-    contextual_exclusions = [
-        r'\bou audit\b',
-        r'\baudit externe\b',
-        r'\bcontrôles? de niveau \d\b',
-        r'\brelation avec.*audit\b',
-        r'\ben collaboration avec.*audit\b',
-        r'\baudit interne et externe\b'
-    ]
-    
-    for pattern in contextual_exclusions:
-        desc_cleaned = re.sub(pattern, '', desc_cleaned, flags=re.IGNORECASE)
-    
-    # Maintenant chercher dans description nettoyée
-    if any(word in desc_cleaned for word in ['comptable', 'comptabilité', 'accounting']) and 'audit' not in job_title:
-        return 'comptabilite'
-    
-    if any(word in desc_cleaned for word in ['auditeur', 'audit interne', 'internal audit']):
-        return 'audit'
-    
-    if any(word in desc_cleaned for word in ['consolidation', 'ifrs 10', 'normes ifrs']):
-        return 'consolidation'
-    
-    if any(word in desc_cleaned for word in ['contrôle de gestion', 'business controller']):
-        return 'controle_gestion'
-    
-    # ════════════════════════════════════════════════════════════════
-    # FALLBACK : HEADLINE PROSPECT
-    # ════════════════════════════════════════════════════════════════
-    
-    if any(word in headline for word in ['daf', 'cfo', 'directeur financier']):
-        return 'daf'
-    elif any(word in headline for word in ['audit']):
-        return 'audit'
-    elif any(word in headline for word in ['comptab']):
-        return 'comptabilite'
-    elif any(word in headline for word in ['contrôl']):
-        return 'controle_gestion'
-    
-    return 'general'
-
-
-# ========================================
-# PAIN POINTS - V27.5 EXTRACTION DYNAMIQUE
-# ========================================
-
-def generate_dynamic_pain_point(job_posting_data, job_category):
-    """
-    VERSION V27.5 : Génère un pain point PERSONNALISÉ basé sur la fiche de poste
-    Extrait les compétences RARES via Claude et construit un pain point spécifique
-    """
-    if not job_posting_data:
-        return None
-    
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
-    job_title = job_posting_data.get('title', 'N/A')
-    job_desc = job_posting_data.get('description', '')[:1500]
-    
-    prompt = f"""Analyse cette fiche de poste et extrais les compétences RARES qui rendent ce recrutement difficile.
-
-TITRE : {job_title}
-DESCRIPTION : {job_desc}
-
-MISSION : Identifier les 2-3 compétences TECHNIQUES SPÉCIFIQUES qui sont :
-1. Explicitement mentionnées dans la fiche
-2. Rares sur le marché (combinaison inhabituelle)
-3. Pas des soft skills génériques (pas "rigueur", "autonomie", "communication")
-
-EXEMPLES DE COMPÉTENCES RARES :
-- "réassurance acceptée et cédée" (comptabilité assurance)
-- "consolidation IFRS multi-entités" (consolidation)
-- "provisions techniques et arrêtés trimestriels" (comptabilité technique)
-- "audit supply chain multi-sites" (audit logistique)
-- "EPM Anaplan et conduite du changement" (EPM)
-
-FORMAT DE RÉPONSE (JSON uniquement, sans texte avant/après) :
-{{
-  "competences_rares": ["compétence 1", "compétence 2", "compétence 3"],
-  "pain_point_short": "phrase courte décrivant le défi de recrutement (15-20 mots max)",
-  "pain_point_context": "phrase plus longue expliquant pourquoi c'est difficile à trouver (25-35 mots)"
-}}
-
-RÈGLES :
-- Utilise UNIQUEMENT les termes EXACTS de la fiche
-- JAMAIS inventer de compétences non mentionnées
-- JAMAIS utiliser "rigueur", "agilité", "dynamisme", "croissance"
-- Le pain point doit mentionner au moins 2 compétences rares extraites"""
-
-    try:
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=500,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        tracker.track(message.usage, 'generate_dynamic_pain_point')
-        result = message.content[0].text.strip()
-        
-        # Parser le JSON
-        import json
-        
-        # Nettoyer les backticks markdown si présents
-        json_match = re.search(r'```json\s*(\{.*?\})\s*```', result, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-        else:
-            json_obj_match = re.search(r'(\{.*?\})', result, re.DOTALL)
-            if json_obj_match:
-                json_str = json_obj_match.group(1)
-            else:
-                json_str = result
-        
-        parsed = json.loads(json_str)
-        
-        pain_point = {
-            'short': parsed.get('pain_point_short', ''),
-            'context': parsed.get('pain_point_context', ''),
-            'competences_rares': parsed.get('competences_rares', [])
+    def get_summary(self):
+        return {
+            'total_calls': len(self.calls),
+            'total_input_tokens': self.total_input_tokens,
+            'total_output_tokens': self.total_output_tokens,
+            'total_cost': self.total_cost
         }
+    
+    def reset(self):
+        self.__init__()
+
+
+# Instance globale
+tracker = CostTracker()
+
+
+# ========================================
+# APIFY - SCRAPING LINKEDIN (INCHANGÉ)
+# ========================================
+
+def init_apify_client():
+    """Initialise le client Apify"""
+    try:
+        from apify_client import ApifyClient
         
-        log_event('dynamic_pain_point_generated', {
-            'job_title': job_title,
-            'competences_rares': pain_point['competences_rares'],
-            'pain_point_short': pain_point['short']
-        })
+        if not APIFY_API_TOKEN:
+            raise ValueError("❌ APIFY_API_TOKEN non trouvée")
         
-        return pain_point
+        client = ApifyClient(APIFY_API_TOKEN)
+        log_event('apify_client_initialized', {'success': True})
+        return client
+        
+    except ImportError:
+        log_error('apify_import_error', 'apify_client non installé', {})
+        raise ImportError("❌ Installez apify-client : pip install apify-client")
+
+
+def scrape_linkedin_profile(apify_client, linkedin_url):
+    """Scrape un profil LinkedIn via Apify"""
+    try:
+        log_event('scrape_linkedin_profile_start', {'url': linkedin_url})
+        
+        run_input = {"profileUrls": [linkedin_url]}
+        run = apify_client.actor("dev_fusion/Linkedin-Profile-Scraper").call(run_input=run_input)
+        items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
+        
+        if items:
+            log_event('scrape_linkedin_profile_success', {'items_count': len(items)})
+            return items[0]
+        return {}
         
     except Exception as e:
-        log_error('dynamic_pain_point_error', str(e), {'job_title': job_title})
-        return None
+        log_error('scrape_linkedin_profile_error', str(e), {'url': linkedin_url})
+        return {}
 
 
-def get_relevant_pain_point(job_category, job_posting_data):
-    """
-    VERSION V27.5 : Pain point 100% DYNAMIQUE extrait de la fiche
-    Plus de fallback sur config.py
-    """
-    
-    # ÉTAPE 1 : Extraction dynamique OBLIGATOIRE
-    if job_posting_data:
-        dynamic_pain_point = generate_dynamic_pain_point(job_posting_data, job_category)
-        if dynamic_pain_point and dynamic_pain_point.get('short'):
-            return dynamic_pain_point
-    
-    # ÉTAPE 2 : Fallback MINIMAL si pas de fiche ou extraction échouée
-    # Pain point neutre qui force l'analyse de la fiche dans le prompt
-    log_event('pain_point_fallback_minimal', {
-        'job_category': job_category,
-        'has_job_posting': bool(job_posting_data)
-    })
-    
-    return {
-        'short': f"trouver le bon profil pour ce poste de {job_category}",
-        'context': "Difficulté à identifier des candidats qui correspondent précisément aux exigences spécifiques de ce poste.",
-        'competences_rares': []
-    }
+def scrape_linkedin_posts(apify_client, linkedin_url):
+    """Scrape les posts LinkedIn d'un profil via Apify"""
+    try:
+        log_event('scrape_linkedin_posts_start', {'url': linkedin_url})
+        
+        run_input = {
+            "deepScrape": True,
+            "limitPerSource": 5,
+            "rawData": False,
+            "urls": [linkedin_url]
+        }
+        
+        run = apify_client.actor("supreme_coder/linkedin-post").call(run_input=run_input)
+        items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
+        
+        # Filtrer posts < 3 mois
+        filtered = filter_recent_posts(items)
+        
+        log_event('scrape_linkedin_posts_success', {
+            'total': len(items),
+            'filtered': len(filtered)
+        })
+        return filtered
+        
+    except Exception as e:
+        log_error('scrape_linkedin_posts_error', str(e), {'url': linkedin_url})
+        return []
 
 
-def get_relevant_outcomes(job_category, max_outcomes=2):
-    """Récupère les outcomes pertinents"""
-    outcomes = OUTCOMES_DETAILED.get(job_category, OUTCOMES_DETAILED['general'])
-    return outcomes[:max_outcomes]
-
-
-# ========================================
-# EXTRACTION SKILLS ENRICHIE
-# ========================================
-
-def extract_key_skills_from_job(job_posting_data, job_category):
-    """
-    VERSION V27.4 : Extraction enrichie avec secteur + certifications
-    """
-    skills = {
-        'tools': [],
-        'technical': [],
-        'soft': [],
-        'certifications': [],
-        'sector': 'le secteur',
-        'sector_code': 'general',
-        'context': []
-    }
+def filter_recent_posts(posts, max_age_months=3):
+    """Filtre les posts < 3 mois"""
+    if not posts:
+        return []
     
-    if not job_posting_data:
-        return skills
+    cutoff = datetime.now() - timedelta(days=max_age_months * 30)
+    recent = []
     
-    job_text = f"{job_posting_data.get('title', '')} {job_posting_data.get('description', '')}".lower()
+    for post in posts[:10]:
+        if not isinstance(post, dict):
+            continue
+        
+        date_str = post.get('date') or post.get('postedDate') or ''
+        
+        # Parser la date
+        post_date = None
+        for fmt in ['%Y-%m-%d', '%Y-%m-%dT%H:%M:%S', '%d/%m/%Y']:
+            try:
+                post_date = datetime.strptime(str(date_str)[:10], fmt)
+                break
+            except:
+                continue
+        
+        if post_date and post_date >= cutoff:
+            recent.append(post)
+        elif not post_date:
+            # Pas de date → garder par défaut (max 3)
+            if len(recent) < 3:
+                recent.append(post)
     
-    # ÉTAPE 1 : Détection secteur
-    skills['sector_code'] = detect_company_sector(job_posting_data)
-    
-    # ÉTAPE 2 : Extraction outils
-    extracted = extract_all_keywords_from_job(job_posting_data)
-    detected_tools = filter_real_tools(extracted)
-    skills['tools'] = detected_tools
-    
-    # ÉTAPE 3 : Certifications et normes
-    skills['certifications'] = extract_certifications_and_norms(job_posting_data)
-    
-    # ÉTAPE 4 : Compétences techniques
-    technical_keywords = {
-        'consolidation': 'consolidation',
-        'ifrs': 'normes IFRS',
-        'gaap': 'normes GAAP',
-        'sox': 'contrôles SOX',
-        'budget': 'budget',
-        'forecast': 'forecast',
-        'clôture': 'clôture',
-        'reporting': 'reporting',
-        'fp&a': 'FP&A',
-        'business partnering': 'business partnering',
-        'audit interne': 'audit interne',
-        'audit financier': 'audit financier',
-        'contrôle interne': 'contrôle interne',
-        'trésorerie': 'trésorerie',
-        'supply chain': 'supply chain',
-        'processus opérationnels': 'processus opérationnels',
-        'comptabilité technique': 'comptabilité technique',
-        'flux réassurance': 'flux réassurance',
-        'co-assurance': 'co-assurance',
-        'solvabilité': 'Solvabilité II'
-    }
-    
-    for keyword, tech_name in technical_keywords.items():
-        if keyword in job_text:
-            if tech_name not in skills['technical']:
-                skills['technical'].append(tech_name)
-    
-    # ÉTAPE 5 : Soft skills
-    soft_keywords = {
-        'change management': 'change management',
-        'conduite du changement': 'conduite du changement',
-        'adoption': 'adoption utilisateurs',
-        'formation': 'formation',
-        'pédagogie': 'pédagogie',
-        'communication': 'communication',
-        'stakeholder': 'stakeholder management',
-        'accompagnement': 'accompagnement',
-        'acculturation': 'acculturation',
-        'agile': 'méthodologie Agile',
-        'scrum': 'Scrum',
-        'project management': 'project management',
-        'autonomie': 'autonomie',
-        'rigueur': 'rigueur',
-        'animation': 'animation',
-        'encadrement': 'encadrement'
-    }
-    
-    for keyword, soft_name in soft_keywords.items():
-        if keyword in job_text:
-            if soft_name not in skills['soft']:
-                skills['soft'].append(soft_name)
-    
-    # ÉTAPE 6 : Contexte secteur
-    sector_contexts = {
-        'banking': ('le secteur bancaire', ['environnement bancaire', 'réglementation bancaire', 'CIB']),
-        'insurance': ('l\'assurance', ['compagnie d\'assurance', 'Solvabilité II', 'environnement réglementé']),
-        'logistics_transport': ('la logistique et le transport', ['supply chain', 'opérations logistiques', 'réseau international']),
-        'manufacturing': ('l\'industrie', ['sites de production', 'manufacturing', 'environnement industriel']),
-        'engineering': ('l\'ingénierie', ['infrastructure', 'construction', 'projets d\'envergure']),
-        'retail': ('le retail', ['réseau multi-sites', 'distribution']),
-        'fintech': ('la fintech', ['startup fintech', 'scale-up', 'innovation financière']),
-        'services': ('les services', ['conseil', 'prestations']),
-        'gaming': ('le gaming', ['jeu vidéo', 'entertainment', 'revenus récurrents'])
-    }
-    
-    if skills['sector_code'] in sector_contexts:
-        skills['sector'], skills['context'] = sector_contexts[skills['sector_code']]
-    else:
-        skills['sector'] = 'le secteur'
-        skills['context'] = ['grand groupe', 'international']
-    
-    log_event('skills_extracted_v27_4', {
-        'tools': skills['tools'],
-        'certifications': skills['certifications'],
-        'sector': skills['sector_code'],
-        'technical_count': len(skills['technical'])
-    })
-    
-    return skills
+    return recent[:5]
 
 
 # ========================================
-# FONCTIONS UTILITAIRES
+# UTILITAIRES
 # ========================================
 
-def get_safe_firstname(prospect_data):
-    """Trouve le prénom"""
-    target_keys = [
-        'first_name', 'firstname', 'first name', 
-        'prénom', 'prenom', 'name',
-        'user_first_name', 'user_firstname'
-    ]
+def get_firstname(prospect_data):
+    """Extrait le prénom du prospect"""
+    for key in ['first_name', 'firstname', 'prénom', 'prenom']:
+        val = prospect_data.get(key)
+        if val:
+            return str(val).strip().capitalize()
     
-    for key, value in prospect_data.items():
-        if str(key).lower().strip() in target_keys:
-            if value and str(value).strip():
-                return str(value).strip().capitalize()
-    
-    full_name = prospect_data.get('full_name') or prospect_data.get('user_full name')
+    full_name = prospect_data.get('full_name', '')
     if full_name and ' ' in str(full_name):
-        parts = str(full_name).split()
-        if len(parts) >= 1:
-            return parts[0].capitalize()
+        return str(full_name).split()[0].capitalize()
     
     return "[Prénom]"
 
 
-def get_smart_context(job_posting_data, prospect_data):
-    """Définit le sujet de la discussion"""
-    if job_posting_data and job_posting_data.get('title') and len(str(job_posting_data.get('title'))) > 2:
-        title = str(job_posting_data.get('title'))
-        title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', title, flags=re.IGNORECASE)
-        title = re.sub(r'\s*[-|]\s*.*$', '', title)
-        return title.strip().title(), True
-
-    headline = str(prospect_data.get('headline', '')).lower()
+def get_job_title(job_posting_data):
+    """Extrait le titre du poste"""
+    if not job_posting_data:
+        return "[Poste]"
     
-    if 'financ' in headline or 'daf' in headline or 'cfo' in headline:
-        return "vos équipes Finance", False
-    elif 'rh' in headline or 'drh' in headline or 'talents' in headline:
-        return "votre stratégie Talents", False
-    elif 'audit' in headline:
-        return "votre département Audit", False
-    else:
-        return "vos équipes", False
+    title = job_posting_data.get('title', '')
+    if not title:
+        return "[Poste]"
+    
+    # Nettoyer H/F, F/H, etc.
+    title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', title)
+    title = re.sub(r'\s*[-|]\s*.*$', '', title)
+    
+    return title.strip()
 
 
-def flexible_match(keyword, text):
-    """Match flexible : insensible à la casse, espaces, tirets"""
-    pattern = re.escape(keyword).replace(r'\ ', r'[\s\-_]*')
-    return bool(re.search(pattern, text, re.IGNORECASE))
+def format_posts_for_prompt(posts):
+    """Formate les posts LinkedIn pour le prompt"""
+    if not posts:
+        return "Aucun post LinkedIn récent trouvé."
+    
+    formatted = []
+    for i, post in enumerate(posts[:5], 1):
+        text = post.get('text', '')[:400]
+        date = post.get('date', post.get('postedDate', 'date inconnue'))
+        title = post.get('title', '')
+        
+        entry = f"POST {i} ({date})"
+        if title:
+            entry += f"\nTitre: {title}"
+        entry += f"\nContenu: {text}"
+        formatted.append(entry)
+    
+    return "\n\n".join(formatted)
+
+
+def format_profile_for_prompt(profile_data):
+    """Formate le profil LinkedIn pour le prompt"""
+    if not profile_data:
+        return "Profil LinkedIn non disponible."
+    
+    return f"""
+Nom: {profile_data.get('full_name', 'N/A')}
+Titre: {profile_data.get('headline', 'N/A')}
+Entreprise: {profile_data.get('company', 'N/A')}
+Localisation: {profile_data.get('location', 'N/A')}
+"""
 
 
 # ========================================
-# GÉNÉRATEURS DE MESSAGES
+# MESSAGE 3 - TEMPLATE FIXE
 # ========================================
 
-def generate_subject_lines(prospect_data, job_posting_data):
-    """Génère les objets d'email axés pain points"""
-    
-    log_event('generate_subject_lines_start', {
-        'prospect': prospect_data.get('_id', 'unknown')
-    })
-    
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
-    context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
-    job_category = detect_job_category(prospect_data, job_posting_data)
-    pain_point = get_relevant_pain_point(job_category, job_posting_data)
-    
-    skills = extract_key_skills_from_job(job_posting_data, job_category)
-    detected_keywords = skills['tools'] + skills['technical'][:3] + skills['soft'][:2]
-    
-    if is_hiring:
-        prompt_type = "recrutement actif"
-        subject_focus = f"Poste : {context_name}"
-    else:
-        prompt_type = "approche spontanée"
-        subject_focus = f"Sujet : {context_name}"
-    
-    job_title = job_posting_data.get('title', 'N/A') if job_posting_data else 'N/A'
-    
-    prompt = f"""Tu es expert en copywriting B2B pour cabinet de recrutement Finance.
-
-CONTEXTE :
-{prompt_type.capitalize()}
-{subject_focus}
-Entreprise : {prospect_data.get('company', 'l\'entreprise')}
-Métier détecté : {job_category}
-Secteur : {skills['sector_code']}
-
-MOTS-CLÉS DÉTECTÉS :
-{', '.join(detected_keywords[:10]) if detected_keywords else 'Aucun mot-clé spécifique'}
-
-PAIN POINT :
-{pain_point['short']}
-
-CONSIGNE :
-Génère 3 objets d'email courts (40-60 caractères) :
-1. Question avec mot-clé outil/secteur OU pain point
-2. Constat marché avec compétence spécifique
-3. Objet direct : "Re: [titre poste]"
-
-INTERDICTIONS :
-❌ Pas de "Opportunité", "Proposition", "Collaboration"
-❌ Pas de points d'exclamation
-❌ Pas de promesses directes
-
-Génère les 3 objets (numérotés 1, 2, 3) :"""
-    
-    try:
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        tracker.track(message.usage, 'generate_subject_lines')
-        result = message.content[0].text.strip()
-        
-        log_event('generate_subject_lines_success', {'length': len(result)})
-        return result
-        
-    except Exception as e:
-        log_error('generate_subject_lines_error', str(e), {})
-        return f"1. {pain_point['short'][:50]}\n2. {context_name} - Profils qualifiés\n3. Re: {context_name}"
-
-
-def generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content):
-    """
-    Génère le message 2 avec 2 profils ultra-différenciés
-    VERSION V27.5 : Utilise compétences rares + reformulation obligatoire
-    """
-    
-    log_event('generate_message_2_start', {
-        'prospect': prospect_data.get('_id', 'unknown')
-    })
-    
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
-    first_name = get_safe_firstname(prospect_data)
-    context_name, is_hiring = get_smart_context(job_posting_data, prospect_data)
-    job_category = detect_job_category(prospect_data, job_posting_data)
-    pain_point = get_relevant_pain_point(job_category, job_posting_data)
-    
-    skills = extract_key_skills_from_job(job_posting_data, job_category)
-    
-    if is_hiring:
-        intro_phrase = f"Je me permets de vous relancer concernant votre recherche de {context_name}."
-    else:
-        intro_phrase = f"Je reviens vers vous concernant la structuration de {context_name}."
-    
-    # Préparer outils/certifications
-    tools_str = ', '.join(skills['tools'][:5]) if skills['tools'] else 'AUCUN'
-    certs_str = ', '.join(skills['certifications']) if skills['certifications'] else 'AUCUNE'
-    technical_str = ', '.join(skills['technical'][:5]) if skills['technical'] else 'N/A'
-    
-    tools_warning = "" if skills['tools'] else "\n⚠️ AUCUN OUTIL DÉTECTÉ → NE MENTIONNE AUCUN OUTIL SPÉCIFIQUE"
-    cert_warning = "" if skills['certifications'] else "\n⚠️ AUCUNE CERTIFICATION → NE MENTIONNE AUCUNE CERTIFICATION"
-    
-    # Compétences rares si disponibles
-    competences_rares_str = ""
-    if pain_point.get('competences_rares'):
-        competences_rares_str = f"\nCOMPÉTENCES RARES (à utiliser pour les profils) : {', '.join(pain_point['competences_rares'])}"
-    
-    # Extraire le texte brut de la fiche
-    job_desc_raw = job_posting_data.get('description', '')[:1000] if job_posting_data else ''
-    
-    # Extraire l'expérience demandée si mentionnée
-    exp_match = re.search(r'(\d+)\s*(?:ans?|years?)\s*(?:d\'expérience|d\'experience|experience|minimum)', job_desc_raw.lower())
-    exp_required = f"{exp_match.group(1)} ans" if exp_match else "plusieurs années"
-    
-    prompt = f"""Tu es chasseur de têtes spécialisé Finance.
-
-CONTEXTE :
-Prospect : {first_name}
-Poste : {context_name}
-Métier : {job_category}
-Secteur : {skills['sector_code']}
-
-EXTRACTION FICHE :
-Outils : {tools_str}
-Certifications : {certs_str}
-Compétences techniques : {technical_str}
-Expérience demandée : {exp_required}
-{tools_warning}
-{cert_warning}
-{competences_rares_str}
-
-═══════════════════════════════════════════════════════════════════
-TEXTE BRUT DE LA FICHE (RÉFÉRENCE OBLIGATOIRE) :
-═══════════════════════════════════════════════════════════════════
-{job_desc_raw}
-═══════════════════════════════════════════════════════════════════
-
-🚨 RÈGLES ABSOLUES :
-
-1. OBSERVATION MARCHÉ (phrase 3) :
-   - DOIT mentionner des termes EXACTS de la fiche ci-dessus
-   - NE PAS répéter "rigueur", "agilité", "dynamique"
-   - Exemples de bonnes observations : 
-     * "Le défi réside dans la maîtrise simultanée des flux de réassurance et de coassurance"
-     * "Trouver des profils maîtrisant à la fois les provisions techniques et les arrêtés trimestriels reste rare"
-
-2. PROFILS (phrases 5-6) :
-   - Utiliser les compétences EXACTES de la fiche
-   - Respecter l'expérience demandée ({exp_required})
-   - Profil 1 : Spécialiste du secteur avec les compétences rares
-   - Profil 2 : Parcours alternatif (Big 4, reconversion) mais avec compétences pertinentes
-   - JAMAIS inventer "Solvabilité II", "CIA", etc. si pas dans la fiche
-
-3. Les 2 profils doivent être RADICALEMENT DIFFÉRENTS
-
-═══════════════════════════════════════════════════════════════════
-INTERDICTIONS ABSOLUES
-═══════════════════════════════════════════════════════════════════
-❌ JAMAIS inventer des compétences/outils/certifications non dans la fiche
-❌ JAMAIS utiliser "rigueur", "agilité", "dynamisme", "croissance"
-❌ JAMAIS exagérer l'expérience (si fiche dit {exp_required}, respecter)
-❌ JAMAIS dire "cabinet d'audit" si la fiche ne demande pas d'expérience audit
-
-FORMAT (100-120 mots) :
-1. "Bonjour {first_name},"
-2. "{intro_phrase}"
-3. Observation marché avec VOCABULAIRE EXACT de la fiche (20-25 mots)
-4. "J'ai identifié 2 profils qui pourraient retenir votre attention :"
-5. "- L'un [profil 1 spécialiste avec compétences EXACTES de la fiche]"
-6. "- L'autre [profil 2 parcours alternatif]"
-7. "Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ?"
-8. "Bien à vous,"
-
-Génère le message :"""
-    
-    log_event('message_2_prompt_built', {
-        'competences_rares': pain_point.get('competences_rares', []),
-        'exp_required': exp_required
-    })
-    
-    try:
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1200,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        tracker.track(message.usage, 'generate_message_2')
-        result = message.content[0].text.strip()
-        
-        log_event('generate_message_2_success', {'length': len(result)})
-        return result
-        
-    except Exception as e:
-        log_error('generate_message_2_error', str(e), {})
-        return generate_message_2_fallback(first_name, context_name, is_hiring, 
-                                          job_posting_data, skills, pain_point)
-
-
-def generate_message_2_fallback(first_name, context_name, is_hiring, job_posting_data, skills, pain_point):
-    """Fallback intelligent pour Message 2"""
-    
-    if is_hiring:
-        intro = f"Je me permets de vous relancer concernant votre recherche de {context_name}."
-    else:
-        intro = f"Je reviens vers vous concernant la structuration de {context_name}."
-    
-    observation = f"Le défi principal réside dans {pain_point['short']}."
-    
-    tool_1 = skills['tools'][0] if skills['tools'] else 'outils métier'
-    tech_1 = skills['technical'][0] if skills['technical'] else 'expertise technique'
-    soft_1 = skills['soft'][0] if skills['soft'] else 'conduite du changement'
-    
-    profile_1 = f"- L'un possède une expertise {tech_1} avec maîtrise de {tool_1}, ayant piloté des projets de transformation avec forte autonomie."
-    profile_2 = f"- L'autre combine expérience Big 4 et {soft_1}, expert accompagnement d'équipes et communication transverse."
-    
-    return f"""Bonjour {first_name},
-
-{intro}
-
-{observation}
-
-J'ai identifié 2 profils qui pourraient retenir votre attention :
-{profile_1}
-{profile_2}
-
-Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ? Cela vous permettrait de juger leur pertinence en 30 secondes.
-
-Bien à vous,"""
-
-
-def generate_message_3(prospect_data, message_1_content, job_posting_data):
-    """Message 3 - TEMPLATE FIXE"""
-    
-    first_name = get_safe_firstname(prospect_data)
-    
-    return f"""Bonjour {first_name},
+MESSAGE_3_TEMPLATE = """Bonjour {prenom},
 
 Je comprends que vous n'ayez pas eu le temps de revenir vers moi — je sais à quel point vos fonctions sont sollicitées.
 
@@ -1211,43 +285,223 @@ Bonne continuation,"""
 
 
 # ========================================
-# FONCTION PRINCIPALE
+# GÉNÉRATION SÉQUENCE - 1 APPEL CLAUDE
 # ========================================
 
-def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_1_content):
-    """Génère une séquence complète avec validation"""
+def generate_sequence_v28(prospect_data, posts_data, job_posting_data, profile_data=None):
+    """
+    Génère M1 + M2 en UN SEUL appel Claude
+    M3 = template fixe
+    """
     
-    log_event('sequence_generation_start', {
-        'prospect_id': prospect_data.get('_id', 'unknown'),
-        'prospect_name': prospect_data.get('full_name', 'unknown'),
-        'company': prospect_data.get('company', 'unknown'),
-        'has_job_posting': bool(job_posting_data),
-        'has_hooks': hooks_data != "NOT_FOUND"
+    log_event('generate_sequence_v28_start', {
+        'prospect': prospect_data.get('full_name', 'unknown'),
+        'has_posts': bool(posts_data),
+        'has_job_posting': bool(job_posting_data)
     })
     
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    
+    # Extraire données
+    prenom = get_firstname(prospect_data)
+    titre_poste = get_job_title(job_posting_data)
+    
+    # Formater pour le prompt
+    posts_formatted = format_posts_for_prompt(posts_data)
+    profile_formatted = format_profile_for_prompt(profile_data or prospect_data)
+    fiche_formatted = job_posting_data.get('description', 'Fiche de poste non disponible') if job_posting_data else 'Fiche de poste non disponible'
+    
+    prompt = f"""Tu es chasseur de têtes Finance chez Entourage Recrutement.
+Tu dois générer 2 messages de prospection pour ce prospect.
+
+═══════════════════════════════════════════════════════════════════
+DONNÉES PROSPECT
+═══════════════════════════════════════════════════════════════════
+{profile_formatted}
+
+═══════════════════════════════════════════════════════════════════
+POSTS LINKEDIN RÉCENTS
+═══════════════════════════════════════════════════════════════════
+{posts_formatted}
+
+═══════════════════════════════════════════════════════════════════
+FICHE DE POSTE : {titre_poste}
+═══════════════════════════════════════════════════════════════════
+{fiche_formatted[:2500]}
+
+═══════════════════════════════════════════════════════════════════
+GÉNÈRE LES 2 MESSAGES SUIVANTS
+═══════════════════════════════════════════════════════════════════
+
+**MESSAGE 1 (Icebreaker)** - Structure EXACTE :
+
+Bonjour {prenom},
+
+[HOOK - CHOISIS UNE OPTION :]
+Option A (si un post LinkedIn est pertinent et récent) : 
+  Référence personnalisée au post (mentionne le sujet PRÉCIS, pas de généralités)
+  Puis transition vers le poste.
+Option B (si pas de post pertinent) :
+  "Je vous contacte concernant votre recherche de {titre_poste}."
+
+[PAIN POINT #1]
+Identifie LA difficulté principale de ce recrutement en utilisant le VOCABULAIRE EXACT de la fiche.
+Exemples de bons pain points :
+- "La maîtrise simultanée des flux de réassurance, coassurance et provisions techniques est une combinaison rare."
+- "Trouver un profil qui allie expertise consolidation IFRS et accompagnement des filiales reste complexe."
+PAS de généralités comme "rigueur", "agilité", "dynamisme".
+
+Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
+
+Bien à vous,
+
+---
+
+**MESSAGE 2 (Relance avec profils)** - Structure EXACTE :
+
+Bonjour {prenom},
+
+Je me permets de vous relancer concernant votre recherche de {titre_poste}.
+
+[PAIN POINT #2 - DIFFÉRENT DE M1]
+Angle complémentaire sur une AUTRE difficulté du recrutement.
+Utilise d'AUTRES compétences/exigences de la fiche que M1.
+
+J'ai identifié 2 profils qui pourraient retenir votre attention :
+
+- L'un [PROFIL 1 : spécialiste avec les compétences EXACTES de la fiche. 
+  Respecte l'expérience demandée. Mentionne le secteur si exigé.]
+
+- L'autre [PROFIL 2 : parcours DIFFÉRENT mais compétences pertinentes.
+  PAS "Big 4" ou "reconversion" par défaut - seulement si cohérent avec la fiche.]
+
+Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ?
+
+Bien à vous,
+
+═══════════════════════════════════════════════════════════════════
+INTERDICTIONS ABSOLUES
+═══════════════════════════════════════════════════════════════════
+❌ "Je travaille sur...", "Je travaille actuellement..."
+❌ "rigueur", "agilité", "dynamisme", "dynamique", "croissance"
+❌ Inventer des compétences/certifications NON MENTIONNÉES dans la fiche
+❌ Répéter le MÊME pain point entre M1 et M2
+❌ Profils incohérents avec la fiche (ex: "Solvabilité II" si pas mentionné)
+❌ Exagérer l'expérience (si la fiche dit "5 ans", respecter)
+❌ Modifier les phrases de conclusion (question M1, proposition M2)
+
+═══════════════════════════════════════════════════════════════════
+FORMAT DE RÉPONSE
+═══════════════════════════════════════════════════════════════════
+Retourne UNIQUEMENT les 2 messages, séparés par une ligne :
+---MESSAGE_1---
+[contenu message 1]
+---MESSAGE_2---
+[contenu message 2]
+"""
+
     try:
-        subject_lines = generate_subject_lines(prospect_data, job_posting_data)
-        message_2 = generate_message_2(prospect_data, hooks_data, job_posting_data, message_1_content)
-        message_3 = generate_message_3(prospect_data, message_1_content, job_posting_data)
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}]
+        )
         
-        sequence = {
-            'subject_lines': subject_lines,
-            'message_1': message_1_content,
-            'message_2': message_2,
-            'message_3': message_3
+        tracker.track(message.usage, 'generate_sequence_v28')
+        result = message.content[0].text.strip()
+        
+        # Parser les messages
+        m1, m2 = parse_messages(result)
+        m3 = MESSAGE_3_TEMPLATE.format(prenom=prenom)
+        
+        log_event('generate_sequence_v28_success', {
+            'm1_length': len(m1),
+            'm2_length': len(m2)
+        })
+        
+        return {
+            'message_1': m1,
+            'message_2': m2,
+            'message_3': m3
         }
         
-        is_valid = validate_and_report(sequence, prospect_data, raise_on_error=False)
-        
-        log_event('sequence_generation_success', {
-            'prospect_id': prospect_data.get('_id', 'unknown'),
-            'valid': is_valid
-        })
-        
-        return sequence
-        
     except Exception as e:
-        log_error('sequence_generation_failed', str(e), {
-            'prospect_id': prospect_data.get('_id', 'unknown')
-        })
+        log_error('generate_sequence_v28_error', str(e), {})
         raise
+
+
+def parse_messages(response):
+    """Parse la réponse Claude pour extraire M1 et M2"""
+    
+    # Chercher les délimiteurs
+    if '---MESSAGE_1---' in response and '---MESSAGE_2---' in response:
+        parts = response.split('---MESSAGE_2---')
+        m1 = parts[0].replace('---MESSAGE_1---', '').strip()
+        m2 = parts[1].strip() if len(parts) > 1 else ""
+    else:
+        # Fallback : couper au milieu
+        lines = response.split('\n\n')
+        mid = len(lines) // 2
+        m1 = '\n\n'.join(lines[:mid])
+        m2 = '\n\n'.join(lines[mid:])
+    
+    return m1, m2
+
+
+# ========================================
+# FONCTION PRINCIPALE - COMPATIBILITÉ
+# ========================================
+
+def generate_full_sequence(prospect_data, hooks_data, job_posting_data, message_1_content=None):
+    """
+    Point d'entrée compatible avec l'ancienne API
+    """
+    return generate_sequence_v28(
+        prospect_data=prospect_data,
+        posts_data=hooks_data if hooks_data != "NOT_FOUND" else [],
+        job_posting_data=job_posting_data,
+        profile_data=prospect_data
+    )
+
+
+def generate_icebreaker(prospect_data, hooks_data, job_posting_data):
+    """
+    Compatibilité : génère seulement M1
+    """
+    result = generate_sequence_v28(
+        prospect_data=prospect_data,
+        posts_data=hooks_data if hooks_data != "NOT_FOUND" else [],
+        job_posting_data=job_posting_data,
+        profile_data=prospect_data
+    )
+    return result['message_1']
+
+
+def generate_advanced_icebreaker(prospect_data, hooks_data, job_posting_data):
+    """Alias pour compatibilité"""
+    return generate_icebreaker(prospect_data, hooks_data, job_posting_data)
+
+
+# ========================================
+# EXPORT FONCTIONS APIFY (COMPATIBILITÉ)
+# ========================================
+
+def extract_hooks_with_claude(profile_data, posts_data, web_results, company_data, 
+                               news_results, full_name, company_name):
+    """
+    Compatibilité : retourne simplement les posts formatés
+    V28 n'a plus besoin d'extraction séparée des hooks
+    """
+    if not posts_data:
+        return []
+    
+    hooks = []
+    for post in posts_data[:5]:
+        if isinstance(post, dict) and post.get('text'):
+            hooks.append({
+                'text': post.get('text', ''),
+                'type': 'post',
+                'date': post.get('date', post.get('postedDate', ''))
+            })
+    
+    return hooks
