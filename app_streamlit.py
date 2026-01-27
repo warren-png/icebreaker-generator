@@ -1,13 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28.2 - FIX RATE LIMIT
+APP STREAMLIT V28.3 - DEBUG LEONAR VISIBLE
 ═══════════════════════════════════════════════════════════════════
+- Debug Leonar visible (sans st.rerun qui efface)
 - Délai 3s entre chaque prospect (anti-rate-limit)
 - Retry automatique avec backoff si erreur 429
 - Zone URLs agrandie (plusieurs URLs possibles)
-- Scraping LinkedIn + Web (Serper)
-- Filtre strict 6 mois
-- Scraper HelloWork/Apec/Indeed/LinkedIn réparé
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -28,7 +26,7 @@ load_dotenv()
 # CONFIGURATION
 # ========================================
 
-st.set_page_config(page_title="Icebreaker Generator V28.2", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Icebreaker Generator V28.3", page_icon="🎯", layout="wide")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
@@ -975,7 +973,7 @@ def extract_prospect_data(leonar_prospect):
 # INTERFACE
 # ========================================
 
-st.title("🎯 Icebreaker Generator V28.2")
+st.title("🎯 Icebreaker Generator V28.3")
 st.caption("Leonar + Scraping LinkedIn/Web + Génération IA")
 
 # Sidebar
@@ -1067,22 +1065,22 @@ with tab1:
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         if st.button("🔄 Rafraîchir", type="secondary"):
-            st.session_state.leonar_prospects = get_new_prospects_leonar(token)
-            st.rerun()
+            with st.spinner("Chargement depuis Leonar..."):
+                st.session_state.leonar_prospects = get_new_prospects_leonar(token)
     
     with col2:
         if st.button("🗑️ Reset traités", type="secondary"):
             if os.path.exists(PROCESSED_FILE):
                 os.remove(PROCESSED_FILE)
-                st.toast("✅ Liste des prospects traités effacée")
-            st.session_state.leonar_prospects = get_new_prospects_leonar(token)
-            st.rerun()
+                st.success("✅ Liste des prospects traités effacée")
+            with st.spinner("Rechargement..."):
+                st.session_state.leonar_prospects = get_new_prospects_leonar(token)
     
     with col3:
         if st.session_state.leonar_prospects:
             st.success(f"✅ {len(st.session_state.leonar_prospects)} prospects à traiter")
         else:
-            st.info("Cliquez sur Rafraîchir pour charger les prospects")
+            st.warning("⚠️ 0 prospect - Cliquez sur Rafraîchir")
     
     # Liste des prospects
     if st.session_state.leonar_prospects:
