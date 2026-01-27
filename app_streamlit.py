@@ -1,11 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28.3 - DEBUG LEONAR VISIBLE
+APP STREAMLIT V28.4 - PAGINATION LEONAR
 ═══════════════════════════════════════════════════════════════════
-- Debug Leonar visible (sans st.rerun qui efface)
+- Pagination Leonar (récupère TOUS les prospects, pas juste 100)
+- Debug Leonar visible
 - Délai 3s entre chaque prospect (anti-rate-limit)
 - Retry automatique avec backoff si erreur 429
-- Zone URLs agrandie (plusieurs URLs possibles)
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -26,7 +26,7 @@ load_dotenv()
 # CONFIGURATION
 # ========================================
 
-st.set_page_config(page_title="Icebreaker Generator V28.3", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Icebreaker Generator V28.4", page_icon="🎯", layout="wide")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
@@ -68,22 +68,47 @@ def get_leonar_token():
 
 
 def get_new_prospects_leonar(token):
-    """Récupère les nouveaux prospects depuis Leonar"""
+    """Récupère les nouveaux prospects depuis Leonar (avec pagination)"""
     try:
-        r = requests.get(
-            f'https://dashboard.leonar.app/api/1.1/obj/matching?constraints=[{{"key":"campaign","constraint_type":"equals","value":"{LEONAR_CAMPAIGN_ID}"}}]&cursor=0',
-            headers={'Authorization': f'Bearer {token}'},
-            timeout=10
-        )
+        all_prospects = []
+        cursor = 0
+        page = 1
         
-        # DEBUG: Afficher le status
-        if r.status_code != 200:
-            st.error(f"❌ Leonar API erreur: status {r.status_code}")
-            return []
+        # Paginer pour récupérer TOUS les prospects
+        while True:
+            url = f'https://dashboard.leonar.app/api/1.1/obj/matching?constraints=[{{"key":"campaign","constraint_type":"equals","value":"{LEONAR_CAMPAIGN_ID}"}}]&cursor={cursor}&limit=100'
+            
+            r = requests.get(
+                url,
+                headers={'Authorization': f'Bearer {token}'},
+                timeout=15
+            )
+            
+            if r.status_code != 200:
+                st.error(f"❌ Leonar API erreur: status {r.status_code}")
+                break
+            
+            data = r.json()
+            results = data.get('response', {}).get('results', [])
+            remaining = data.get('response', {}).get('remaining', 0)
+            
+            all_prospects.extend(results)
+            st.info(f"📊 Page {page}: {len(results)} prospects (total: {len(all_prospects)}, remaining: {remaining})")
+            
+            # S'il n'y a plus de résultats, arrêter
+            if not results or remaining == 0:
+                break
+            
+            # Passer à la page suivante
+            cursor += len(results)
+            page += 1
+            
+            # Sécurité : max 10 pages (1000 prospects)
+            if page > 10:
+                st.warning("⚠️ Limite de 1000 prospects atteinte")
+                break
         
-        data = r.json()
-        all_prospects = data.get('response', {}).get('results', [])
-        st.info(f"📊 Debug: {len(all_prospects)} prospects trouvés dans Leonar")
+        st.info(f"📊 Debug: {len(all_prospects)} prospects TOTAL trouvés dans Leonar")
         
         processed = load_processed()
         st.info(f"📊 Debug: {len(processed)} prospects déjà traités dans le fichier")
@@ -973,7 +998,7 @@ def extract_prospect_data(leonar_prospect):
 # INTERFACE
 # ========================================
 
-st.title("🎯 Icebreaker Generator V28.3")
+st.title("🎯 Icebreaker Generator V28.4")
 st.caption("Leonar + Scraping LinkedIn/Web + Génération IA")
 
 # Sidebar
