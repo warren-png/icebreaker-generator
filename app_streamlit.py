@@ -1135,6 +1135,16 @@ with tab1:
                 
                 st.write(f"{i+1}. **{name}** | {company} | LinkedIn: {has_linkedin} | {has_url}")
         
+        # Debug : voir les champs disponibles
+        with st.expander("🔍 Debug: voir les champs Leonar", expanded=False):
+            if st.session_state.leonar_prospects:
+                p = st.session_state.leonar_prospects[0]
+                st.write("**Champs disponibles sur le 1er prospect :**")
+                for key in sorted(p.keys()):
+                    value = p.get(key, '')
+                    if value and str(value).strip():
+                        st.write(f"- `{key}` = {str(value)[:100]}")
+        
         # Bouton génération
         if st.button("🚀 LANCER LA GÉNÉRATION", type="primary", use_container_width=True):
             
