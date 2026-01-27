@@ -77,18 +77,36 @@ def get_new_prospects_leonar(token):
             headers={'Authorization': f'Bearer {token}'},
             timeout=10
         )
+        
+        # DEBUG: Afficher le status
         if r.status_code != 200:
+            st.error(f"❌ Leonar API erreur: status {r.status_code}")
             return []
         
+        data = r.json()
+        all_prospects = data.get('response', {}).get('results', [])
+        st.info(f"📊 Debug: {len(all_prospects)} prospects trouvés dans Leonar")
+        
         processed = load_processed()
-        return [
-            p for p in r.json()['response']['results']
-            if p['_id'] not in processed and (
-                not p.get('notes') or
-                len(p.get('notes', '')) < 100 or
-                'MESSAGE 1' not in p.get('notes', '')
-            )
-        ]
+        st.info(f"📊 Debug: {len(processed)} prospects déjà traités dans le fichier")
+        
+        # Filtrer
+        filtered = []
+        for p in all_prospects:
+            pid = p['_id']
+            notes = p.get('notes', '')
+            
+            if pid in processed:
+                continue  # Déjà traité (fichier local)
+            
+            if notes and len(notes) >= 100 and 'MESSAGE 1' in notes:
+                continue  # Déjà traité (notes Leonar)
+            
+            filtered.append(p)
+        
+        st.success(f"✅ {len(filtered)} prospects à traiter après filtrage")
+        return filtered
+        
     except Exception as e:
         st.error(f"Erreur Leonar: {e}")
         return []
@@ -957,7 +975,7 @@ def extract_prospect_data(leonar_prospect):
 # INTERFACE
 # ========================================
 
-st.title("🎯 Icebreaker Generator V28")
+st.title("🎯 Icebreaker Generator V28.2")
 st.caption("Leonar + Scraping LinkedIn/Web + Génération IA")
 
 # Sidebar
