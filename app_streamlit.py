@@ -1,11 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28.5 - SÉQUENCE AUTO LEONAR
+APP STREAMLIT V28.6 - URLs FICHES DEPUIS LEONAR
 ═══════════════════════════════════════════════════════════════════
+- URLs fiches de poste depuis Leonar (custom_text_1) ou manuelles
 - Messages injectés dans custom_variable_1/2/3 (séquence auto)
 - Backup dans notes (lisible)
 - Pagination Leonar (récupère tous les prospects)
-- Délai 3s entre chaque prospect (anti-rate-limit)
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -26,7 +26,7 @@ load_dotenv()
 # CONFIGURATION
 # ========================================
 
-st.set_page_config(page_title="Icebreaker Generator V28.5", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Icebreaker Generator V28.6", page_icon="🎯", layout="wide")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
@@ -1005,7 +1005,7 @@ def extract_prospect_data(leonar_prospect):
 # INTERFACE
 # ========================================
 
-st.title("🎯 Icebreaker Generator V28.5")
+st.title("🎯 Icebreaker Generator V28.6")
 st.caption("Leonar + Scraping LinkedIn/Web + Génération IA")
 
 # Sidebar
@@ -1062,8 +1062,8 @@ with tab1:
         st.stop()
     
     # Zone URLs fiches de poste - AGRANDIE
-    st.subheader("📄 URLs des fiches de poste")
-    st.caption("⚠️ Une URL par ligne, dans le MÊME ORDRE que les prospects Leonar")
+    st.subheader("📄 URLs des fiches de poste (optionnel)")
+    st.caption("💡 Priorité : URL dans Leonar (`custom_text_1`) > URL ci-dessous. Si tu remplis `custom_text_1` dans Leonar, tu peux laisser vide ici.")
     
     job_urls_input = st.text_area(
         "URLs (une par ligne)",
@@ -1121,14 +1121,34 @@ with tab1:
                 name = p.get('user_full name', 'Inconnu')
                 company = p.get('linkedin_company', 'N/A')
                 has_linkedin = "✅" if p.get('linkedin_url') else "❌"
-                has_url = f"📄 URL {i+1}" if (job_urls_list and i < len(job_urls_list)) else "⚠️ Pas d'URL"
+                
+                # URL fiche : priorité Leonar (custom_text_1) > manuelle
+                leonar_url = p.get('custom_text_1', '').strip()
+                manual_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
+                
+                if leonar_url:
+                    has_url = "📄 URL Leonar ✅"
+                elif manual_url:
+                    has_url = f"📄 URL manuelle"
+                else:
+                    has_url = "⚠️ Pas d'URL"
+                
                 st.write(f"{i+1}. **{name}** | {company} | LinkedIn: {has_linkedin} | {has_url}")
         
         # Bouton génération
         if st.button("🚀 LANCER LA GÉNÉRATION", type="primary", use_container_width=True):
             
-            if not job_urls_list:
-                st.error("⚠️ Entrez au moins une URL de fiche de poste")
+            # Vérifier qu'on a des URLs (Leonar ou manuelles)
+            has_any_url = False
+            for i, p in enumerate(st.session_state.leonar_prospects):
+                leonar_url = p.get('custom_text_1', '').strip()
+                manual_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
+                if leonar_url or manual_url:
+                    has_any_url = True
+                    break
+            
+            if not has_any_url:
+                st.error("⚠️ Aucune URL de fiche de poste. Ajoutez-les dans Leonar (custom_text_1) ou collez-les ci-dessus.")
                 st.stop()
             
             # Init Apify
@@ -1154,8 +1174,19 @@ with tab1:
                     # Extraire données prospect
                     p_data = extract_prospect_data(prospect)
                     
-                    # URL fiche de poste pour ce prospect
-                    job_url = job_urls_list[i] if i < len(job_urls_list) else job_urls_list[0]
+                    # URL fiche de poste : priorité Leonar (custom_text_1) > manuelle
+                    leonar_url = prospect.get('custom_text_1', '').strip()
+                    manual_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
+                    
+                    if leonar_url:
+                        job_url = leonar_url
+                        st.caption(f"   📄 URL depuis Leonar")
+                    elif manual_url:
+                        job_url = manual_url
+                        st.caption(f"   📄 URL manuelle")
+                    else:
+                        st.warning(f"   ⚠️ Pas d'URL pour ce prospect - ignoré")
+                        continue
                     
                     # 1. Scraper la fiche de poste (ou utiliser description manuelle pour Apec)
                     job_data = None
