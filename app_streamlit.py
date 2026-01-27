@@ -1,7 +1,9 @@
 """
 ═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28.1 - CORRECTIONS SCRAPING
+APP STREAMLIT V28.2 - FIX RATE LIMIT
 ═══════════════════════════════════════════════════════════════════
+- Délai 3s entre chaque prospect (anti-rate-limit)
+- Retry automatique avec backoff si erreur 429
 - Zone URLs agrandie (plusieurs URLs possibles)
 - Scraping LinkedIn + Web (Serper)
 - Filtre strict 6 mois
@@ -14,6 +16,7 @@ import requests
 import os
 import re
 import json
+import time
 import anthropic
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -25,7 +28,7 @@ load_dotenv()
 # CONFIGURATION
 # ========================================
 
-st.set_page_config(page_title="Icebreaker Generator V28", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Icebreaker Generator V28.2", page_icon="🎯", layout="wide")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
@@ -757,11 +760,25 @@ FORMAT DE RÉPONSE
 """
 
     try:
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        # Retry avec backoff exponentiel pour rate limit
+        max_retries = 3
+        base_delay = 30  # secondes
+        
+        for attempt in range(max_retries):
+            try:
+                message = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=1500,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                break  # Succès, sortir de la boucle
+            except anthropic.RateLimitError as e:
+                if attempt < max_retries - 1:
+                    wait_time = base_delay * (2 ** attempt)  # 30s, 60s, 120s
+                    st.warning(f"⏳ Rate limit atteint. Attente {wait_time}s avant retry ({attempt + 1}/{max_retries})...")
+                    time.sleep(wait_time)
+                else:
+                    raise e  # Dernière tentative échouée, propager l'erreur
         
         # Stats
         st.session_state.generation_stats['calls'] += 1
@@ -1029,13 +1046,21 @@ with tab1:
         )
     
     # Rafraîchir prospects
-    col1, col2 = st.columns([1, 3])
+    col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         if st.button("🔄 Rafraîchir", type="secondary"):
             st.session_state.leonar_prospects = get_new_prospects_leonar(token)
             st.rerun()
     
     with col2:
+        if st.button("🗑️ Reset traités", type="secondary"):
+            if os.path.exists(PROCESSED_FILE):
+                os.remove(PROCESSED_FILE)
+                st.toast("✅ Liste des prospects traités effacée")
+            st.session_state.leonar_prospects = get_new_prospects_leonar(token)
+            st.rerun()
+    
+    with col3:
         if st.session_state.leonar_prospects:
             st.success(f"✅ {len(st.session_state.leonar_prospects)} prospects à traiter")
         else:
@@ -1135,6 +1160,11 @@ with tab1:
                 
                 except Exception as e:
                     st.error(f"❌ Erreur pour {name}: {e}")
+                
+                # Pause anti-rate-limit entre chaque prospect (sauf le dernier)
+                if i < len(st.session_state.leonar_prospects) - 1:
+                    status.write(f"⏳ Pause anti-rate-limit (3s)...")
+                    time.sleep(3)
             
             progress.progress(1.0)
             status.empty()
