@@ -1,11 +1,11 @@
 """
 ═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28.4 - PAGINATION LEONAR
+APP STREAMLIT V28.5 - SÉQUENCE AUTO LEONAR
 ═══════════════════════════════════════════════════════════════════
-- Pagination Leonar (récupère TOUS les prospects, pas juste 100)
-- Debug Leonar visible
+- Messages injectés dans custom_variable_1/2/3 (séquence auto)
+- Backup dans notes (lisible)
+- Pagination Leonar (récupère tous les prospects)
 - Délai 3s entre chaque prospect (anti-rate-limit)
-- Retry automatique avec backoff si erreur 429
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -26,7 +26,7 @@ load_dotenv()
 # CONFIGURATION
 # ========================================
 
-st.set_page_config(page_title="Icebreaker Generator V28.4", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Icebreaker Generator V28.5", page_icon="🎯", layout="wide")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
@@ -138,6 +138,7 @@ def get_new_prospects_leonar(token):
 def update_prospect_leonar(token, prospect_id, sequence_data):
     """Met à jour le prospect dans Leonar avec la séquence générée"""
     try:
+        # Backup dans les notes (lisible)
         formatted_notes = f"""═══════════════════════════════════════════════════════════════
 OBJETS SUGGÉRÉS
 ═══════════════════════════════════════════════════════════════
@@ -164,10 +165,16 @@ MESSAGE 3 (BREAK-UP - J+12)
 
 ═══════════════════════════════════════════════════════════════"""
 
+        # Envoi : notes (backup) + custom_variables (séquence auto)
         requests.patch(
             f'https://dashboard.leonar.app/api/1.1/obj/matching/{prospect_id}',
             headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-            json={"notes": formatted_notes},
+            json={
+                "notes": formatted_notes,
+                "custom_variable_1": sequence_data.get('message_1', ''),
+                "custom_variable_2": sequence_data.get('message_2', ''),
+                "custom_variable_3": sequence_data.get('message_3', '')
+            },
             timeout=10
         )
         return True
@@ -998,7 +1005,7 @@ def extract_prospect_data(leonar_prospect):
 # INTERFACE
 # ========================================
 
-st.title("🎯 Icebreaker Generator V28.4")
+st.title("🎯 Icebreaker Generator V28.5")
 st.caption("Leonar + Scraping LinkedIn/Web + Génération IA")
 
 # Sidebar
