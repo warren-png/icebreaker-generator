@@ -1,10 +1,10 @@
 """
 ═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28.8 - INDEED VIA APIFY + HELLOWORK/APEC COPIER-COLLER
+APP STREAMLIT V28.8 - LINKEDIN AUTO + COPIER-COLLER POUR LE RESTE
 ═══════════════════════════════════════════════════════════════════
 - URLs fiches de poste depuis Leonar (custom_text_1) ou manuelles
-- Scraping automatique Indeed via Apify (stealth_mode/indeed-jobs-details-scraper)
-- HelloWork/Apec : copier-coller (pas de scraper fiable)
+- LinkedIn Jobs : scraping automatique
+- Indeed/HelloWork/Apec : copier-coller (JS non supporté)
 - Messages injectés dans custom_variable_1/2/3 (séquence auto)
 - Backup dans notes (lisible)
 - Pagination Leonar (récupère tous les prospects)
@@ -489,54 +489,11 @@ def scrape_hellowork_apify(url):
 
 def scrape_indeed_apify(url):
     """
-    Scrape Indeed via Apify stealth_mode/indeed-jobs-details-scraper
-    Accepte les URLs viewjob directement
+    Indeed : pas de scraper Apify fiable pour URL directe
+    Retourne None pour déclencher le fallback copier-coller
     """
-    if not APIFY_API_TOKEN:
-        print("APIFY_API_TOKEN manquant - fallback sur scraping basique")
-        return scrape_indeed_basic(url)
-    
-    try:
-        from apify_client import ApifyClient
-        client = ApifyClient(APIFY_API_TOKEN)
-        
-        # Utiliser le scraper Indeed spécifique qui accepte les URLs viewjob
-        run = client.actor("stealth_mode/indeed-jobs-details-scraper").call(
-            run_input={
-                "startUrls": [url],
-                "maxItems": 1,
-            },
-            timeout_secs=120
-        )
-        
-        # Récupérer le résultat
-        items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
-        
-        if items and len(items) > 0:
-            item = items[0]
-            
-            # Extraire les données du job
-            title = item.get('title') or item.get('positionName') or item.get('jobTitle') or '[Poste]'
-            description = item.get('description') or item.get('descriptionText') or item.get('jobDescription') or ''
-            
-            # Nettoyer le titre (enlever H/F)
-            title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', title)
-            
-            if len(description) > 100:
-                return {
-                    'title': title[:200],
-                    'description': description[:4000],
-                    'source': 'Indeed (Apify)',
-                    'url': url
-                }
-        
-        # Fallback si pas de contenu
-        print("Indeed Apify: pas de résultat, fallback basique")
-        return scrape_indeed_basic(url)
-        
-    except Exception as e:
-        print(f"Erreur Apify Indeed: {e}")
-        return scrape_indeed_basic(url)
+    print("Indeed: scraping auto non supporté, utiliser copier-coller")
+    return None
 
 
 def extract_title_from_text(text):
@@ -1101,7 +1058,7 @@ def extract_prospect_data(leonar_prospect):
 # ========================================
 
 st.title("🎯 Icebreaker Generator V28.8")
-st.caption("Leonar + Scraping LinkedIn/Web + Génération IA | Indeed auto, HelloWork/Apec copier-coller")
+st.caption("Leonar + Scraping LinkedIn/Web + Génération IA | LinkedIn auto, autres copier-coller")
 
 # Sidebar
 with st.sidebar:
@@ -1142,7 +1099,7 @@ with st.sidebar:
     | Source | Méthode |
     |--------|---------|
     | **LinkedIn Jobs** | Auto ✅ |
-    | **Indeed** | Auto ✅ (Apify) |
+    | **Indeed** | Copier-coller 📋 |
     | **HelloWork** | Copier-coller 📋 |
     | **Apec** | Copier-coller 📋 |
     """)
@@ -1184,19 +1141,19 @@ with tab1:
         job_urls_list = [u.strip() for u in job_urls_input.strip().split('\n') if u.strip()]
         st.info(f"✅ {len(job_urls_list)} URL(s) détectée(s)")
         
-        # Détecter URLs nécessitant copier-coller (HelloWork et Apec, mais PAS Indeed)
-        manual_urls = [u for u in job_urls_list if 'apec.fr' in u.lower() or 'hellowork.com' in u.lower()]
+        # Détecter URLs nécessitant copier-coller (HelloWork, Apec, Indeed)
+        manual_urls = [u for u in job_urls_list if 'apec.fr' in u.lower() or 'hellowork.com' in u.lower() or 'indeed.' in u.lower()]
         if manual_urls:
             has_manual_urls = True
-            st.warning(f"⚠️ {len(manual_urls)} URL(s) HelloWork/Apec détectée(s). Collez le texte ci-dessous.")
+            st.warning(f"⚠️ {len(manual_urls)} URL(s) HelloWork/Apec/Indeed détectée(s). Collez le texte ci-dessous.")
     
-    # Champ fallback pour HelloWork/Apec
+    # Champ fallback pour HelloWork/Apec/Indeed
     manual_description = ""
     if has_manual_urls:
         manual_description = st.text_area(
-            "📋 Description HelloWork/Apec (coller le texte de la fiche)",
+            "📋 Description de la fiche de poste (copier-coller)",
             height=300,
-            placeholder="Copiez-collez ici le contenu de la fiche de poste HelloWork ou Apec...\n\nAstuce : Sur la page, sélectionnez tout le texte de la description et collez-le ici."
+            placeholder="Copiez-collez ici le contenu de la fiche de poste HelloWork, Apec ou Indeed...\n\nAstuce : Sur la page, sélectionnez tout le texte de la description et collez-le ici."
         )
     
     # Rafraîchir prospects
@@ -1304,21 +1261,21 @@ with tab1:
                         st.warning(f"   ⚠️ Pas d'URL pour ce prospect - ignoré")
                         continue
                     
-                    # 1. Scraper la fiche de poste (ou utiliser description manuelle pour HelloWork/Apec)
+                    # 1. Scraper la fiche de poste (ou utiliser description manuelle pour HelloWork/Apec/Indeed)
                     job_data = None
-                    is_manual_url = 'apec.fr' in job_url.lower() or 'hellowork.com' in job_url.lower()
+                    is_manual_url = 'apec.fr' in job_url.lower() or 'hellowork.com' in job_url.lower() or 'indeed.' in job_url.lower()
                     
                     if is_manual_url and manual_description:
-                        # Utiliser la description manuelle pour HelloWork/Apec
+                        # Utiliser la description manuelle
                         job_data = {
                             'title': 'Poste',
                             'description': manual_description,
-                            'source': 'HelloWork/Apec (manuel)',
+                            'source': 'Manuel (copier-coller)',
                             'url': job_url
                         }
                         st.caption(f"   ✅ Description manuelle")
                     elif is_manual_url and not manual_description:
-                        st.warning(f"   ⚠️ URL HelloWork/Apec détectée mais pas de description manuelle")
+                        st.warning(f"   ⚠️ URL HelloWork/Apec/Indeed détectée mais pas de description manuelle")
                     else:
                         with st.spinner(f"📄 Scraping fiche de poste..."):
                             job_data = scrape_job_posting(job_url)
