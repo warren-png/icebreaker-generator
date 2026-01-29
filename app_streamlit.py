@@ -1,8 +1,9 @@
 """
 ═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28.6 - URLs FICHES DEPUIS LEONAR
+APP STREAMLIT V28.7 - SCRAPING APIFY POUR HELLOWORK/INDEED
 ═══════════════════════════════════════════════════════════════════
 - URLs fiches de poste depuis Leonar (custom_text_1) ou manuelles
+- Scraping automatique HelloWork/Indeed via Apify (plus de copier-coller)
 - Messages injectés dans custom_variable_1/2/3 (séquence auto)
 - Backup dans notes (lisible)
 - Pagination Leonar (récupère tous les prospects)
@@ -26,7 +27,7 @@ load_dotenv()
 # CONFIGURATION
 # ========================================
 
-st.set_page_config(page_title="Icebreaker Generator V28.6", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Icebreaker Generator V28.7", page_icon="🎯", layout="wide")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
@@ -456,13 +457,13 @@ def scrape_job_posting(url):
     
     try:
         if "hellowork.com" in url:
-            return scrape_hellowork(url)
+            return scrape_hellowork_apify(url)
         elif "linkedin.com/jobs" in url:
             return scrape_linkedin_job(url)
         elif "apec.fr" in url:
             return scrape_apec(url)
         elif "indeed.com" in url or "indeed.fr" in url:
-            return scrape_indeed(url)
+            return scrape_indeed_apify(url)
         else:
             return scrape_generic(url)
     except Exception as e:
@@ -470,8 +471,134 @@ def scrape_job_posting(url):
         return scrape_generic(url)
 
 
-def scrape_hellowork(url):
-    """Scrape HelloWork"""
+# ========================================
+# NOUVEAU : SCRAPING APIFY POUR HELLOWORK/INDEED
+# ========================================
+
+def scrape_hellowork_apify(url):
+    """
+    Scrape HelloWork via Apify Website Content Crawler
+    Utilise un vrai navigateur pour charger le JavaScript
+    """
+    if not APIFY_API_TOKEN:
+        print("APIFY_API_TOKEN manquant - fallback sur scraping basique")
+        return scrape_hellowork_basic(url)
+    
+    try:
+        from apify_client import ApifyClient
+        client = ApifyClient(APIFY_API_TOKEN)
+        
+        # Utiliser Website Content Crawler pour charger la page avec JS
+        run = client.actor("apify/website-content-crawler").call(
+            run_input={
+                "startUrls": [{"url": url}],
+                "maxCrawlPages": 1,
+                "crawlerType": "playwright:firefox",  # Navigateur complet pour JS
+                "maxCrawlDepth": 0,  # Ne pas suivre les liens
+                "outputFormats": ["text"],
+            },
+            timeout_secs=120
+        )
+        
+        # Récupérer le résultat
+        items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+        
+        if items and len(items) > 0:
+            item = items[0]
+            text_content = item.get('text', '')
+            
+            # Extraire le titre (première ligne non vide significative)
+            title = extract_title_from_text(text_content)
+            
+            if len(text_content) > 200:
+                return {
+                    'title': title[:200],
+                    'description': text_content[:4000],
+                    'source': 'HelloWork (Apify)',
+                    'url': url
+                }
+        
+        # Fallback si pas de contenu
+        return scrape_hellowork_basic(url)
+        
+    except Exception as e:
+        print(f"Erreur Apify HelloWork: {e}")
+        return scrape_hellowork_basic(url)
+
+
+def scrape_indeed_apify(url):
+    """
+    Scrape Indeed via Apify Website Content Crawler
+    Utilise un vrai navigateur pour charger le JavaScript
+    """
+    if not APIFY_API_TOKEN:
+        print("APIFY_API_TOKEN manquant - fallback sur scraping basique")
+        return scrape_indeed_basic(url)
+    
+    try:
+        from apify_client import ApifyClient
+        client = ApifyClient(APIFY_API_TOKEN)
+        
+        # Utiliser Website Content Crawler pour charger la page avec JS
+        run = client.actor("apify/website-content-crawler").call(
+            run_input={
+                "startUrls": [{"url": url}],
+                "maxCrawlPages": 1,
+                "crawlerType": "playwright:firefox",  # Navigateur complet pour JS
+                "maxCrawlDepth": 0,  # Ne pas suivre les liens
+                "outputFormats": ["text"],
+            },
+            timeout_secs=120
+        )
+        
+        # Récupérer le résultat
+        items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+        
+        if items and len(items) > 0:
+            item = items[0]
+            text_content = item.get('text', '')
+            
+            # Extraire le titre (première ligne non vide significative)
+            title = extract_title_from_text(text_content)
+            
+            if len(text_content) > 200:
+                return {
+                    'title': title[:200],
+                    'description': text_content[:4000],
+                    'source': 'Indeed (Apify)',
+                    'url': url
+                }
+        
+        # Fallback si pas de contenu
+        return scrape_indeed_basic(url)
+        
+    except Exception as e:
+        print(f"Erreur Apify Indeed: {e}")
+        return scrape_indeed_basic(url)
+
+
+def extract_title_from_text(text):
+    """Extrait le titre depuis le contenu textuel"""
+    if not text:
+        return "[Poste]"
+    
+    lines = text.strip().split('\n')
+    for line in lines:
+        line = line.strip()
+        # Chercher une ligne qui ressemble à un titre de poste
+        if line and 10 < len(line) < 150:
+            # Éviter les lignes trop génériques
+            if not any(skip in line.lower() for skip in ['cookie', 'accept', 'menu', 'navigation', 'connexion', 'login']):
+                # Nettoyer H/F
+                title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', line)
+                return title.strip()
+    
+    return "[Poste]"
+
+
+# Fallback : scraping basique (sans JS)
+def scrape_hellowork_basic(url):
+    """Scrape HelloWork - Fallback sans Apify"""
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -482,7 +609,7 @@ def scrape_hellowork(url):
         response = requests.get(url, headers=headers, timeout=15)
         
         if response.status_code != 200:
-            return scrape_generic(url)
+            return None
         
         soup = BeautifulSoup(response.content, 'html.parser')
         
@@ -508,6 +635,9 @@ def scrape_hellowork(url):
             paragraphs = soup.find_all(['p', 'li'])
             description = '\n'.join([p.get_text(strip=True) for p in paragraphs])
         
+        if len(description) < 100:
+            return None  # Pas assez de contenu
+        
         return {
             'title': title[:200],
             'description': description[:4000],
@@ -515,7 +645,51 @@ def scrape_hellowork(url):
             'url': url
         }
     except:
-        return scrape_generic(url)
+        return None
+
+
+def scrape_indeed_basic(url):
+    """Scrape Indeed - Fallback sans Apify"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code != 200:
+            return None
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Titre
+        title = ""
+        for selector in ['h1.jobsearch-JobInfoHeader-title', 'h1[data-testid="jobTitle"]', 'h1']:
+            elem = soup.select_one(selector)
+            if elem:
+                title = elem.get_text(strip=True)
+                break
+        
+        # Description
+        description = ""
+        for selector in ['div#jobDescriptionText', 'div.jobsearch-jobDescriptionText', 'div[data-testid="jobDescription"]']:
+            elem = soup.select_one(selector)
+            if elem:
+                description = elem.get_text(separator='\n', strip=True)
+                break
+        
+        if len(description) < 100:
+            return None  # Pas assez de contenu
+        
+        return {
+            'title': title[:200],
+            'description': description[:4000],
+            'source': 'Indeed',
+            'url': url
+        }
+    except:
+        return None
 
 
 def scrape_linkedin_job(url):
@@ -603,47 +777,6 @@ def scrape_apec(url):
             'title': title[:200],
             'description': description[:4000],
             'source': 'Apec',
-            'url': url
-        }
-    except:
-        return scrape_generic(url)
-
-
-def scrape_indeed(url):
-    """Scrape Indeed"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-        }
-        
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return scrape_generic(url)
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Titre
-        title = ""
-        for selector in ['h1.jobsearch-JobInfoHeader-title', 'h1[data-testid="jobTitle"]', 'h1']:
-            elem = soup.select_one(selector)
-            if elem:
-                title = elem.get_text(strip=True)
-                break
-        
-        # Description
-        description = ""
-        for selector in ['div#jobDescriptionText', 'div.jobsearch-jobDescriptionText', 'div[data-testid="jobDescription"]']:
-            elem = soup.select_one(selector)
-            if elem:
-                description = elem.get_text(separator='\n', strip=True)
-                break
-        
-        return {
-            'title': title[:200],
-            'description': description[:4000],
-            'source': 'Indeed',
             'url': url
         }
     except:
@@ -1005,8 +1138,8 @@ def extract_prospect_data(leonar_prospect):
 # INTERFACE
 # ========================================
 
-st.title("🎯 Icebreaker Generator V28.6")
-st.caption("Leonar + Scraping LinkedIn/Web + Génération IA")
+st.title("🎯 Icebreaker Generator V28.7")
+st.caption("Leonar + Scraping LinkedIn/Web + Génération IA | HelloWork/Indeed via Apify")
 
 # Sidebar
 with st.sidebar:
@@ -1040,6 +1173,17 @@ with st.sidebar:
     st.metric("Appels API", st.session_state.generation_stats['calls'])
     st.metric("Tokens", f"{st.session_state.generation_stats['tokens']:,}")
     st.metric("Coût", f"${st.session_state.generation_stats['cost']:.4f}")
+    
+    st.divider()
+    st.header("ℹ️ Sources supportées")
+    st.markdown("""
+    | Source | Méthode |
+    |--------|---------|
+    | **LinkedIn Jobs** | Auto ✅ |
+    | **HelloWork** | Apify ✅ |
+    | **Indeed** | Apify ✅ |
+    | **Apec** | Copier-coller 📋 |
+    """)
 
 
 # Onglets
@@ -1063,12 +1207,12 @@ with tab1:
     
     # Zone URLs fiches de poste - AGRANDIE
     st.subheader("📄 URLs des fiches de poste (optionnel)")
-    st.caption("💡 Priorité : URL dans Leonar (`custom_text_1`) > URL ci-dessous. Si tu remplis `custom_text_1` dans Leonar, tu peux laisser vide ici.")
+    st.caption("💡 Priorité : URL dans Leonar (`custom_text_1`) > URL ci-dessous. LinkedIn/HelloWork/Indeed sont scrapés automatiquement.")
     
     job_urls_input = st.text_area(
         "URLs (une par ligne)",
         height=200,
-        placeholder="https://www.hellowork.com/...\nhttps://www.apec.fr/...\nhttps://www.linkedin.com/jobs/..."
+        placeholder="https://www.hellowork.com/...\nhttps://www.indeed.fr/...\nhttps://www.linkedin.com/jobs/..."
     )
     
     # Parser les URLs
@@ -1217,7 +1361,13 @@ with tab1:
                         with st.spinner(f"📄 Scraping fiche de poste..."):
                             job_data = scrape_job_posting(job_url)
                             if job_data:
-                                st.caption(f"   ✅ Fiche: {job_data.get('title', 'N/A')[:40]}...")
+                                st.caption(f"   ✅ Fiche ({job_data.get('source', 'N/A')}): {job_data.get('title', 'N/A')[:40]}...")
+                            else:
+                                st.warning(f"   ⚠️ Scraping échoué pour {job_url[:50]}...")
+                    
+                    if not job_data or len(job_data.get('description', '')) < 100:
+                        st.warning(f"   ⚠️ Pas de description valide - ignoré")
+                        continue
                     
                     # 2. Scraper LinkedIn posts
                     posts = []
@@ -1299,7 +1449,13 @@ with tab2:
             with st.spinner("📄 Scraping fiche de poste..."):
                 job_data = scrape_job_posting(t_job_url)
                 if job_data:
-                    st.success(f"✅ Fiche: {job_data.get('title', '')[:50]}")
+                    st.success(f"✅ Fiche ({job_data.get('source', 'N/A')}): {job_data.get('title', '')[:50]}")
+                else:
+                    st.error("❌ Scraping échoué")
+        
+        if not job_data:
+            st.error("❌ Pas de fiche de poste valide")
+            st.stop()
         
         # Scraper LinkedIn
         posts = []
