@@ -11,6 +11,7 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 import os
 
+FOLDER_ID = "1hBkY_8disGqL3ctfLxh79PB5fPcGagfb"
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 CREDENTIALS_FILE = os.getenv('GOOGLE_CREDENTIALS_FILE', 'google-credentials.json')
@@ -186,7 +187,8 @@ def upload_cv(pdf_bytes, job_title, prospect_name=None, folder_name="CVs Icebrea
     
     try:
         # Créer/récupérer le dossier
-        folder_id = create_cv_folder(folder_name)
+        folder_id = FOLDER_ID
+        "1hBkY_8disGqL3ctfLxh79PB5fPcGagfb" (folder_name)
         
         # Générer nom de fichier
         filename = generate_filename(job_title, prospect_name)
