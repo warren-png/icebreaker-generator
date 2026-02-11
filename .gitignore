@@ -28,4 +28,4 @@ venv/
 Thumbs.db
 
 # Streamlit
-.streamlit/secrets.toml
+.streamlit/secrets.tomlgoogle-credentials.json
