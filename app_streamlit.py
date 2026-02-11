@@ -21,6 +21,10 @@ import anthropic
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
+from cv_generator import generate_cv_content, estimate_cv_length, condense_cv_content
+from cv_templates import create_cv_pdf
+from google_drive_uploader import upload_cv
+from message_cv_sequence import generate_sequence_with_cv, generate_subject_lines_cv
 
 load_dotenv()
 
@@ -1106,7 +1110,7 @@ with st.sidebar:
 
 
 # Onglets
-tab1, tab2 = st.tabs(["🚀 Génération Leonar", "🧪 Test Manuel"])
+tab1, tab2, tab3 = st.tabs(["🚀 Génération Leonar", "🧪 Test Manuel", "🎯 Génération avec CV"])
 
 
 # ========================================
@@ -1412,3 +1416,263 @@ with tab2:
             
             st.subheader("✉️ Message 3")
             st.info(sequence['message_3'])
+
+# ========================================
+# TAB 3 : GÉNÉRATION AVEC CV
+# ========================================
+with tab3:
+    st.header("🎯 Génération avec CV anonymisé")
+    st.caption("Séquence 2 messages : Message 1 (CV joint) + Message 2 (relance douce)")
+    
+    if not all([LEONAR_EMAIL, LEONAR_PASSWORD, LEONAR_CAMPAIGN_ID]):
+        st.error("Configuration Leonar manquante")
+        st.stop()
+    
+    token = get_leonar_token()
+    if not token:
+        st.error("Impossible de se connecter à Leonar")
+        st.stop()
+    
+    # ========================================
+    # CONFIGURATION
+    # ========================================
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📋 Fiche de poste")
+        job_url_cv = st.text_input("URL fiche de poste", key="job_url_cv")
+        
+        # Fallback copier-coller
+        manual_desc_cv = st.text_area(
+            "📋 Ou collez la description (HelloWork/Indeed/Apec)",
+            height=200,
+            key="manual_desc_cv",
+            placeholder="Copiez-collez le contenu de la fiche..."
+        )
+    
+    with col2:
+        st.subheader("👤 Prospect")
+        
+        # Rafraîchir prospects
+        if st.button("🔄 Charger prospects", type="secondary", key="refresh_cv"):
+            with st.spinner("Chargement..."):
+                st.session_state.leonar_prospects_cv = get_new_prospects_leonar(token)
+        
+        # Sélection prospect
+        if 'leonar_prospects_cv' not in st.session_state:
+            st.session_state.leonar_prospects_cv = []
+        
+        if st.session_state.leonar_prospects_cv:
+            prospect_cv = st.selectbox(
+                "Sélectionner un prospect",
+                options=st.session_state.leonar_prospects_cv,
+                format_func=lambda x: f"{x.get('user_full name', 'Inconnu')} - {x.get('linkedin_company', 'N/A')}",
+                key="prospect_select_cv"
+            )
+        else:
+            st.warning("Aucun prospect chargé. Cliquez sur 'Charger prospects'")
+            prospect_cv = None
+    
+    # ========================================
+    # GÉNÉRATION
+    # ========================================
+    
+    if st.button("🚀 GÉNÉRER CV + SÉQUENCE", type="primary", use_container_width=True):
+        
+        if not job_url_cv and not manual_desc_cv:
+            st.error("⚠️ Fournissez une URL ou collez la description")
+            st.stop()
+        
+        if not prospect_cv:
+            st.error("⚠️ Sélectionnez un prospect")
+            st.stop()
+        
+        # Extraire données prospect
+        p_data = extract_prospect_data(prospect_cv)
+        first_name = get_firstname(p_data)
+        
+        # ========================================
+        # ÉTAPE 1 : SCRAPER FICHE DE POSTE
+        # ========================================
+        
+        with st.spinner("📄 Scraping fiche de poste..."):
+            job_data = None
+            
+            if manual_desc_cv:
+                # Utiliser description manuelle
+                job_data = {
+                    'title': 'Poste',
+                    'description': manual_desc_cv,
+                    'source': 'Manuel',
+                    'url': job_url_cv or ''
+                }
+                st.success("✅ Description manuelle")
+            elif job_url_cv:
+                # Scraper l'URL
+                job_data = scrape_job_posting(job_url_cv)
+                if job_data:
+                    st.success(f"✅ Fiche scrapée : {job_data.get('title', 'N/A')[:50]}")
+                else:
+                    st.error("❌ Scraping échoué")
+                    st.stop()
+        
+        if not job_data or len(job_data.get('description', '')) < 100:
+            st.error("❌ Description trop courte ou invalide")
+            st.stop()
+        
+        # ========================================
+        # ÉTAPE 2 : GÉNÉRER LE CV
+        # ========================================
+        
+        with st.spinner("✨ Génération du CV (15-20 sec)..."):
+            try:
+                cv_content = generate_cv_content(job_data, p_data)
+                st.success(f"✅ CV généré : {cv_content['metadata']['job_title']}")
+                
+                # Vérifier longueur
+                if not estimate_cv_length(cv_content):
+                    st.warning("⚠️ CV trop long, condensation automatique...")
+                    cv_content = condense_cv_content(cv_content)
+                
+            except Exception as e:
+                st.error(f"❌ Erreur génération CV : {e}")
+                st.stop()
+        
+        # ========================================
+        # ÉTAPE 3 : CRÉER LE PDF
+        # ========================================
+        
+        with st.spinner("📄 Création du PDF..."):
+            try:
+                pdf_bytes = create_cv_pdf(cv_content, template_name='classic')
+                st.success("✅ PDF créé")
+            except Exception as e:
+                st.error(f"❌ Erreur création PDF : {e}")
+                st.stop()
+        
+        # ========================================
+        # ÉTAPE 4 : UPLOAD GOOGLE DRIVE
+        # ========================================
+        
+        with st.spinner("☁️ Upload Google Drive..."):
+            try:
+                upload_result = upload_cv(
+                    pdf_bytes,
+                    job_data['title'],
+                    prospect_name=p_data.get('full_name')
+                )
+                
+                if upload_result:
+                    cv_url = upload_result['url']
+                    st.success(f"✅ CV uploadé : [Voir le CV]({cv_url})")
+                else:
+                    st.error("❌ Erreur upload Google Drive")
+                    st.stop()
+                    
+            except Exception as e:
+                st.error(f"❌ Erreur upload : {e}")
+                st.stop()
+        
+        # ========================================
+        # ÉTAPE 5 : GÉNÉRER LES MESSAGES
+        # ========================================
+        
+        with st.spinner("✉️ Génération des messages..."):
+            try:
+                sequence = generate_sequence_with_cv(
+                    prospect_data=p_data,
+                    job_posting_data=job_data,
+                    cv_url=cv_url,
+                    cv_gaps=cv_content.get('gaps_vs_fiche', [])
+                )
+                
+                subject_lines = generate_subject_lines_cv(job_data['title'])
+                
+                st.success("✅ Séquence générée")
+                
+            except Exception as e:
+                st.error(f"❌ Erreur génération messages : {e}")
+                st.stop()
+        
+        # ========================================
+        # ÉTAPE 6 : SAUVEGARDER DANS LEONAR
+        # ========================================
+        
+        with st.spinner("💾 Sauvegarde dans Leonar..."):
+            try:
+                # Format pour Leonar
+                formatted_notes = f'''═══════════════════════════════════════════════════════════════
+OBJETS SUGGÉRÉS
+═══════════════════════════════════════════════════════════════
+
+{subject_lines}
+
+═══════════════════════════════════════════════════════════════
+MESSAGE 1 (CV JOINT - J+0)
+═══════════════════════════════════════════════════════════════
+
+{sequence['message_1']}
+
+═══════════════════════════════════════════════════════════════
+MESSAGE 2 (RELANCE - J+7)
+═══════════════════════════════════════════════════════════════
+
+{sequence['message_2']}
+
+═══════════════════════════════════════════════════════════════
+LIEN CV
+═══════════════════════════════════════════════════════════════
+{cv_url}
+'''
+                
+                # Update Leonar
+                requests.patch(
+                    f'https://dashboard.leonar.app/api/1.1/obj/matching/{prospect_cv["_id"]}',
+                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                    json={
+                        "notes": formatted_notes,
+                        "custom_variable_1": sequence['message_1'],
+                        "custom_variable_2": sequence['message_2'],
+                        "custom_text_2": cv_url  # Stocker l'URL du CV
+                    },
+                    timeout=10
+                )
+                
+                save_processed(prospect_cv['_id'])
+                st.success("✅ Sauvegardé dans Leonar")
+                
+            except Exception as e:
+                st.error(f"❌ Erreur Leonar : {e}")
+        
+        # ========================================
+        # AFFICHAGE DES RÉSULTATS
+        # ========================================
+        
+        st.divider()
+        st.balloons()
+        
+        # CV
+        st.subheader("📄 CV Généré")
+        st.markdown(f"**[👉 Voir le CV sur Google Drive]({cv_url})**")
+        
+        with st.expander("🔍 Détails du CV", expanded=False):
+            st.json(cv_content.get('gaps_vs_fiche', []))
+        
+        # Objets
+        st.subheader("📧 Objets d'email")
+        st.code(subject_lines)
+        
+        # Message 1
+        st.subheader("✉️ Message 1 (à envoyer maintenant)")
+        st.text_area("Message 1", value=sequence['message_1'], height=300, key="result_msg1")
+        if st.button("📋 Copier Message 1", key="copy_msg1"):
+            st.code(sequence['message_1'])
+        
+        # Message 2
+        st.subheader("✉️ Message 2 (à envoyer J+7)")
+        st.text_area("Message 2", value=sequence['message_2'], height=200, key="result_msg2")
+        if st.button("📋 Copier Message 2", key="copy_msg2"):
+            st.code(sequence['message_2'])
+        
+        st.info(f"📅 Dates d'envoi suggérées : {sequence['send_dates']['message_1']} et {sequence['send_dates']['message_2']}")

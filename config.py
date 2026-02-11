@@ -76,11 +76,208 @@ COMPANY_INFO = {
 
 
 # ========================================
-# 7. PAIN POINTS DÉTAILLÉS PAR MÉTIER
-# VERSION V27.2.1 : Pain points SAFE sans présupposés
+# 7. PAIN POINTS DÉTAILLÉS PAR MÉTIER (VERSION ENRICHIE)
 # ========================================
 
 PAIN_POINTS_DETAILED = {
+    'daf': {
+        'visibility': {
+            'short': "manque de visibilité fiable et rapide",
+            'context': "Reporting lent. Indicateurs discutés plutôt qu'utilisés. Décisions prises avec retard."
+        },
+        'production_focus': {
+            'short': "organisation finance trop orientée production",
+            'context': "Équipes absorbées par la clôture. Peu de bande passante pour l'analyse et la stratégie."
+        },
+        'transformation': {
+            'short': "transformation permanente (ERP, EPM, BI) qui épuise les équipes",
+            'context': "Projets ERP, EPM, BI, CSP, digitalisation. Fatigue organisationnelle."
+        },
+        'key_man_risk': {
+            'short': "dépendance forte à quelques profils clés",
+            'context': "Key-man risk élevé. Difficulté à sécuriser les compétences critiques."
+        },
+        'attractiveness': {
+            'short': "attractivité limitée de la fonction finance",
+            'context': "Concurrence forte pour les bons profils. Difficulté à attirer des talents haut potentiel."
+        }
+    },
+    
+    'raf': {
+        'polyvalence': {
+            'short': "polyvalence extrême sans relais managérial",
+            'context': "Comptabilité, contrôle, trésorerie, fiscalité avec peu de relais managérial."
+        },
+        'undersizing': {
+            'short': "sous-dimensionnement chronique des équipes",
+            'context': "Difficulté à absorber la charge. Priorisation constante entre urgence et structuration."
+        },
+        'tools': {
+            'short': "outillage finance insuffisant",
+            'context': "ERP partiellement exploité. Reporting artisanal."
+        },
+        'structuration': {
+            'short': "projets de structuration à mener en parallèle de la production",
+            'context': "Process, contrôle interne, reporting groupe. Peu de temps pour conduire le changement."
+        }
+    },
+    
+    'controle_gestion': {
+        'data_quality': {
+            'short': "données peu fiables et disponibles trop tard",
+            'context': "Dépendance à Excel. Retraitements multiples. Indicateurs disponibles trop tard pour décider."
+        },
+        'hybrid_profiles': {
+            'short': "manque de profils hybrides finance + data",
+            'context': "Profils très finance mais peu outillés. Profils data ne comprenant pas les logiques business."
+        },
+        'business_partnering': {
+            'short': "difficulté à passer du reporting au business partnering",
+            'context': "Équipes cantonnées au reporting. Faible influence dans les décisions opérationnelles."
+        },
+        'demand_overflow': {
+            'short': "multiplication des demandes métiers sans priorisation",
+            'context': "Sollicitations constantes. Arbitrages difficiles. Frustration des opérationnels."
+        }
+    },
+    
+    'fpna': {
+        'excel_dependency': {
+            'short': "trop de dépendance à Excel, retraitements manuels multiples",
+            'context': "Tableurs critiques. Fichiers partagés instables. Erreurs de version."
+        },
+        'reporting_trap': {
+            'short': "équipes cantonnées au reporting, faible influence stratégique",
+            'context': "Production de slides. Peu d'écoute en CODIR. Rôle de « faiseur de chiffres »."
+        },
+        'demand_overflow': {
+            'short': "multiplication des demandes métiers sans priorisation claire",
+            'context': "Sollicitations constantes. Arbitrages difficiles."
+        },
+        'volatility': {
+            'short': "difficulté à modéliser rapidement dans un contexte volatil",
+            'context': "Volatilité des coûts, prix, volumes. Scénarios difficiles à modéliser."
+        }
+    },
+    
+    'comptabilite': {
+        'closing_pressure': {
+            'short': "charge de clôture excessive et récurrente",
+            'context': "Deadlines serrées. Heures sup structurelles. Peu de marge pour traiter les anomalies."
+        },
+        'talent_shortage': {
+            'short': "pénurie de profils comptables opérationnels fiables",
+            'context': "Difficulté à recruter des comptables autonomes. Courbe d'apprentissage longue."
+        },
+        'key_person_dependency': {
+            'short': "dépendance à des personnes clés",
+            'context': "Connaissance concentrée sur 1-2 seniors. Risque élevé en cas d'absence ou départ."
+        },
+        'transformation_projects': {
+            'short': "projets de transformation en parallèle de la production",
+            'context': "ERP, CSP, dématérialisation, e-invoicing. Double charge run + projet."
+        }
+    },
+    
+    'consolidation': {
+        'manual_processes': {
+            'short': "process lourds et peu automatisés",
+            'context': "Retraitements manuels. Fichiers critiques multiples. Forte dépendance à Excel."
+        },
+        'deadline_pressure': {
+            'short': "pression extrême sur les délais de clôture groupe",
+            'context': "Deadlines groupe non négociables. Arbitrages permanents qualité / rapidité."
+        },
+        'data_quality': {
+            'short': "qualité hétérogène des données filiales",
+            'context': "Niveau comptable variable selon pays/BU. Retards de remontée. Reprises fréquentes."
+        },
+        'key_man_risk': {
+            'short': "key-man risk élevé",
+            'context': "Connaissance concentrée sur 1-2 personnes. Risque majeur en cas de départ."
+        }
+    },
+    
+    'audit': {
+        'coverage': {
+            'short': "couverture de risques insuffisante face à la croissance",
+            'context': "Périmètres en croissance. Nouveaux risques (cyber, data, fournisseurs). Ressources stables."
+        },
+        'senior_profiles': {
+            'short': "manque de profils seniors autonomes",
+            'context': "Difficulté à recruter des auditeurs capables de dialoguer avec la DG."
+        },
+        'recommendations_backlog': {
+            'short': "backlog de recommandations non suivies",
+            'context': "Faible taux de mise en œuvre. Crédibilité de la fonction en jeu."
+        },
+        'data_driven': {
+            'short': "transformation vers l'audit data-driven difficile",
+            'context': "Outillage insuffisant. Analyses très manuelles. Faible exploitation de la data."
+        }
+    },
+    
+    'epm': {
+        'project_delays': {
+            'short': "projets EPM qui s'éternisent",
+            'context': "Roadmaps surchargées. Dépendance aux intégrateurs. Faible capacité interne d'évolution."
+        },
+        'adoption': {
+            'short': "faible adoption des outils par les utilisateurs",
+            'context': "Contournements Excel. Process parallèles non maîtrisés."
+        },
+        'hybrid_profiles': {
+            'short': "difficulté à trouver des profils Tech + Finance",
+            'context': "Profils techniques sans culture finance. Profils finance sans compétences outils."
+        },
+        'support_load': {
+            'short': "charge élevée de support utilisateurs",
+            'context': "Peu de bande passante pour les projets stratégiques. Mode pompier permanent."
+        }
+    },
+    
+    'bi_data': {
+        'data_access': {
+            'short': "accès aux données lent et instable",
+            'context': "Pipelines fragiles. Dépendance à la DSI ou aux prestataires."
+        },
+        'kpi_credibility': {
+            'short': "KPI contestés en comité de direction",
+            'context': "Définitions variables selon BU. Référentiels absents. Multiples versions de la vérité."
+        },
+        'hybrid_profiles': {
+            'short': "manque de profils hybrides data + finance",
+            'context': "Data engineers sans culture finance. Contrôleurs sans compétences data avancées."
+        },
+        'analytical_debt': {
+            'short': "dette analytique importante",
+            'context': "Tableurs critiques. Retraitements manuels avant CODIR."
+        }
+    },
+    
+    'data_ia': {
+        'hybrid_profiles': {
+            'short': "difficulté à trouver des profils technique + business",
+            'context': "Maîtrise Python, SQL, ML mais compréhension limitée des enjeux métiers."
+        },
+        'acculturation': {
+            'short': "acculturation IA lente dans les métiers",
+            'context': "Résistance au changement. Manque de formation. Faible appropriation."
+        },
+        'use_cases': {
+            'short': "cas d'usage IA qui n'aboutissent pas",
+            'context': "Faute de sponsor métier engagé. POCs qui ne passent pas en production."
+        },
+        'leadership': {
+            'short': "manque de profils capables d'animer un centre d'excellence IA",
+            'context': "Leadership transverse. Capacité à former, évangéliser, structurer la gouvernance."
+        }
+    }
+}
+"""
+
+# Pain points GÉNÉRIQUES (sûrs, sans présupposés)
+PAIN_POINTS_SAFE = {
     'audit': {
         'multi_site_international': {
             'short': "audit en environnement multi-sites international",
@@ -167,79 +364,11 @@ PAIN_POINTS_DETAILED = {
             'short': "profils techniques ET fonctionnels en BI",
             'context': "Difficulté à trouver des profils qui allient compétences techniques (BI, data) et compréhension des besoins métier pour créer des outils de pilotage réellement utilisés."
         }
-    },
-    
-    'daf': {
-        'visibility': {
-            'short': "manque de visibilité fiable et rapide",
-            'context': "Reporting lent. Indicateurs discutés plutôt qu'utilisés. Décisions prises avec retard."
-        },
-        'production_focus': {
-            'short': "organisation finance trop orientée production",
-            'context': "Équipes absorbées par la clôture. Peu de bande passante pour l'analyse et la stratégie."
-        },
-        'transformation': {
-            'short': "transformation permanente (ERP, EPM, BI) qui épuise les équipes",
-            'context': "Projets ERP, EPM, BI, CSP, digitalisation. Fatigue organisationnelle."
-        }
-    },
-    
-    'raf': {
-        'polyvalence': {
-            'short': "polyvalence extrême sans relais managérial",
-            'context': "Comptabilité, contrôle, trésorerie, fiscalité avec peu de relais managérial."
-        },
-        'undersizing': {
-            'short': "sous-dimensionnement chronique des équipes",
-            'context': "Difficulté à absorber la charge. Priorisation constante entre urgence et structuration."
-        }
     }
 }
 
 
 """
-═══════════════════════════════════════════════════════════════════
-PAIN_POINTS_DETAILED - ANCIENNE VERSION (DÉSACTIVÉE)
-Conservé en commentaire pour référence historique
-═══════════════════════════════════════════════════════════════════
-
-Cette version contenait des présupposés qui pouvaient générer des 
-inventions de contenu (ex: "data_driven" pour audit même sans mention
-de data/analytics dans la fiche de poste).
-
-PAIN_POINTS_DETAILED_OLD = {
-    'daf': {
-        'visibility': {
-            'short': "manque de visibilité fiable et rapide",
-            'context': "Reporting lent. Indicateurs discutés plutôt qu'utilisés. Décisions prises avec retard."
-        },
-        'production_focus': {
-            'short': "organisation finance trop orientée production",
-            'context': "Équipes absorbées par la clôture. Peu de bande passante pour l'analyse et la stratégie."
-        },
-        'transformation': {
-            'short': "transformation permanente (ERP, EPM, BI) qui épuise les équipes",
-            'context': "Projets ERP, EPM, BI, CSP, digitalisation. Fatigue organisationnelle."
-        },
-        'key_man_risk': {
-            'short': "dépendance forte à quelques profils clés",
-            'context': "Key-man risk élevé. Difficulté à sécuriser les compétences critiques."
-        },
-        'attractiveness': {
-            'short': "attractivité limitée de la fonction finance",
-            'context': "Concurrence forte pour les bons profils. Difficulté à attirer des talents haut potentiel."
-        }
-    },
-    
-    'audit': {
-        'data_driven': {  # ← PROBLÉMATIQUE : présuppose data/analytics
-            'short': "transformation vers l'audit data-driven difficile",
-            'context': "Outillage insuffisant. Analyses très manuelles. Faible exploitation de la data."
-        }
-    }
-}
-"""
-
 
 # ========================================
 # 8. OUTCOMES DÉTAILLÉS PAR MÉTIER
@@ -337,14 +466,26 @@ WEB_SEARCH_ENABLED = True  # Activer/désactiver facilement
 MAX_SEARCH_RESULTS = 5  # Limiter le nombre de résultats
 
 # ========================================
-# 10. COLONNES GOOGLE SHEET
+# 10. CONFIGURATION CV GENERATOR
+# ========================================
+CLAUDE_MODEL_CV = "claude-opus-4-20250514"  # Opus 4.6 pour génération CVs
+CLAUDE_MODEL_MESSAGES = "claude-sonnet-4-20250514"  # Sonnet pour messages
+
+# Google Drive
+GOOGLE_DRIVE_FOLDER_NAME = "CVs Icebreaker"  # Nom du dossier dans Drive
+
+# Templates CV disponibles
+CV_TEMPLATES = ['classic', 'two_columns', 'timeline']
+
+# ========================================
+# 11. COLONNES GOOGLE SHEET
 # ========================================
 COL_LINKEDIN_URL = 4      # Colonne D
 COL_HOOKS = 7             # Colonne G
 COL_ICEBREAKER = 11       # Colonne K
 
 # ========================================
-# 11. VÉRIFICATION DES CLÉS API
+# 12. VÉRIFICATION DES CLÉS API
 # ========================================
 def check_api_keys():
     """Vérifie que toutes les clés API sont configurées"""
