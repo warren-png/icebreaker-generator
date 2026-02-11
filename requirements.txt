@@ -12,3 +12,7 @@ python-dotenv==1.0.1
 
 # Web scraping
 beautifulsoup4==4.12.3
+
+reportlab
+google-api-python-client
+google-auth
