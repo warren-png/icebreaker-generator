@@ -509,44 +509,34 @@ def detect_job_category(prospect_data, job_posting_data):
     
     # Comptable / Comptabilité
     if any(word in job_title for word in ['comptable', 'accountant', 'accounting']):
-        # EXCLUSION : "comptable" dans titre mais "consolidation" aussi → consolidation
         if 'consolidation' in job_title or 'consolidateur' in job_title:
             return 'consolidation'
         return 'comptabilite'
     
-    # Audit
     if any(word in job_title for word in ['audit', 'auditeur', 'auditor']):
         return 'audit'
     
-    # Consolidation
     if any(word in job_title for word in ['consolidation', 'consolidateur', 'consolidator']):
         return 'consolidation'
     
-    # Contrôle de gestion
     if any(word in job_title for word in ['contrôle de gestion', 'controle de gestion', 'contrôleur de gestion', 'controller', 'business controller']):
         return 'controle_gestion'
     
-    # FP&A
     if any(word in job_title for word in ['fp&a', 'fpa', 'financial planning', 'fpna']):
         return 'fpna'
     
-    # DAF / CFO
     if any(word in job_title for word in ['daf', 'directeur administratif', 'cfo', 'chief financial', 'directeur financier']):
         return 'daf'
     
-    # RAF
     if any(word in job_title for word in ['raf', 'responsable administratif']):
         return 'raf'
     
-    # Data / IA
     if any(word in job_title for word in ['data officer', 'ia officer', 'ai officer', 'data & ia', 'chief data', 'cdo']):
         return 'data_ia'
     
-    # EPM
     if any(word in job_title for word in ['epm', 'anaplan', 'hyperion', 'tagetik']):
         return 'epm'
     
-    # BI / Data
     if any(word in job_title for word in ['bi ', 'business intelligence', ' data ', 'analytics']):
         return 'bi_data'
     
@@ -554,23 +544,20 @@ def detect_job_category(prospect_data, job_posting_data):
     # SI TITRE NON CONCLUANT → DESCRIPTION (avec exclusions)
     # ════════════════════════════════════════════════════════════════
     
-    # Nettoyer la description des mentions contextuelles
     desc_cleaned = job_desc
     
-    # Exclure "ou audit", "contrôles de niveau 2", etc.
     contextual_exclusions = [
         r'\bou audit\b',
-        r'\baudit externe\b',  # Souvent mentionné comme "en lien avec audit externe"
+        r'\baudit externe\b',
         r'\bcontrôles? de niveau \d\b',
         r'\brelation avec.*audit\b',
         r'\ben collaboration avec.*audit\b',
-        r'\baudit interne et externe\b'  # Contexte, pas le poste
+        r'\baudit interne et externe\b'
     ]
     
     for pattern in contextual_exclusions:
         desc_cleaned = re.sub(pattern, '', desc_cleaned, flags=re.IGNORECASE)
     
-    # Maintenant chercher dans description nettoyée
     if any(word in desc_cleaned for word in ['comptable', 'comptabilité', 'accounting']) and 'audit' not in job_title:
         return 'comptabilite'
     
@@ -604,7 +591,6 @@ def get_relevant_pain_point(job_category, job_posting_data):
     Sélectionne LE pain point le plus pertinent selon le métier et la fiche de poste
     VERSION V27.5 : 100% dynamique via Claude, plus de fallback config.py
     """
-    # Importer depuis message_sequence_generator pour cohérence
     from message_sequence_generator import get_relevant_pain_point as get_pain_point_v2
     return get_pain_point_v2(job_category, job_posting_data)
 
@@ -755,8 +741,10 @@ STRUCTURE OBLIGATOIRE :
    → Mentionne des compétences EXACTES de la fiche (ex: réassurance, consolidation IFRS, etc.)
    → JAMAIS de généralités ("rigueur", "agilité", "dynamisme")
 
-5. Question finale OBLIGATOIRE (TOUJOURS LA MÊME) :
-   "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
+5. Question finale CONTEXTUALISÉE :
+   Formule une question courte qui reprend 2-3 compétences critiques du pain point.
+   Structure : "Qu'est-ce qui manque le plus dans les profils rencontrés aujourd'hui : [compétence A], [compétence B], ou les deux ?"
+   La question DOIT être spécifique au poste, JAMAIS générique.
 
 6. "Bien à vous,"
 
@@ -770,7 +758,7 @@ INTERDICTIONS ABSOLUES
 ❌ Jamais citer verbatim plus de 5 mots du hook
 ❌ Jamais mentionner le cabinet ou "nos services"
 ❌ Jamais de superlatifs ou ton commercial
-❌ Jamais modifier la question finale (elle est TOUJOURS identique)
+❌ Jamais utiliser une question générique type "Quels sont les principaux écarts..."
 ❌ Jamais ajouter de signature au-delà de "Bien à vous,"
 
 Génère l'icebreaker maintenant :"""
@@ -815,7 +803,10 @@ STRATÉGIE : Le hook est peu pertinent, donc structure ainsi
    - "J'ai consulté votre annonce pour le poste de {context_name}."
 4. Référence BRÈVE au hook (10-15 mots max)
 5. Pain point SPÉCIFIQUE avec vocabulaire EXACT de la fiche (25-30 mots)
-6. Question finale OBLIGATOIRE : "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
+6. Question finale CONTEXTUALISÉE :
+   Formule une question courte qui reprend 2-3 compétences critiques du pain point.
+   Structure : "Qu'est-ce qui manque le plus dans les profils rencontrés aujourd'hui : [compétence A], [compétence B], ou les deux ?"
+   La question DOIT être spécifique au poste, JAMAIS générique.
 7. "Bien à vous,"
 
 Total : 70-90 mots
@@ -826,7 +817,7 @@ INTERDICTIONS ABSOLUES
 ❌ JAMAIS écrire "Je travaille sur..." ou "Je travaille actuellement..."
 ❌ JAMAIS utiliser de termes génériques ("rigueur", "agilité", "dynamique", "croissance")
 ❌ JAMAIS inventer des compétences non mentionnées dans la fiche
-❌ Jamais modifier la question finale
+❌ Jamais utiliser une question générique type "Quels sont les principaux écarts..."
 ❌ Jamais ajouter de signature au-delà de "Bien à vous,"
 
 Génère l'icebreaker maintenant :"""
@@ -870,7 +861,10 @@ STRATÉGIE : Pas de hook LinkedIn disponible
 4. Pain point SPÉCIFIQUE extrait de la fiche (35-40 mots)
    → Mentionne les COMPÉTENCES RARES demandées dans la fiche
    → Utilise le VOCABULAIRE EXACT de la fiche (ex: réassurance, coassurance, provisions)
-5. Question finale OBLIGATOIRE : "Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?"
+5. Question finale CONTEXTUALISÉE :
+   Formule une question courte qui reprend 2-3 compétences critiques du pain point.
+   Structure : "Qu'est-ce qui manque le plus dans les profils rencontrés aujourd'hui : [compétence A], [compétence B], ou les deux ?"
+   La question DOIT être spécifique au poste, JAMAIS générique.
 6. "Bien à vous,"
 
 Total : 70-90 mots
@@ -882,7 +876,7 @@ INTERDICTIONS ABSOLUES
 ❌ JAMAIS écrire "Je gère un poste de..."
 ❌ JAMAIS inventer des compétences non mentionnées dans la fiche
 ❌ JAMAIS utiliser des pain points génériques ("rigueur", "agilité", "dynamique")
-❌ Jamais modifier la question finale
+❌ Jamais utiliser une question générique type "Quels sont les principaux écarts..."
 ❌ Jamais ajouter de signature au-delà de "Bien à vous,"
 
 Génère l'icebreaker maintenant :"""
@@ -971,7 +965,7 @@ def clean_signature(message):
 def generate_fallback_icebreaker(first_name, context_name, is_hiring):
     """
     Génère un icebreaker de secours
-    VERSION V27.4 : Question finale correcte
+    VERSION V27.5 : Question finale contextualisée
     """
     if is_hiring:
         return f"""Bonjour {first_name},
@@ -980,7 +974,7 @@ J'ai consulté votre annonce pour le poste de {context_name}.
 
 Le marché actuel rend ce type de recrutement particulièrement complexe : trouver des profils qui combinent expertise technique et capacités relationnelles devient rare.
 
-Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
+Qu'est-ce qui manque le plus dans les profils rencontrés aujourd'hui : l'expertise technique, la dimension relationnelle, ou les deux ?
 
 Bien à vous,"""
     else:
@@ -990,6 +984,6 @@ J'accompagne des entreprises comme la vôtre dans la structuration de {context_n
 
 Le défi principal que nous observons est de trouver des profils qui allient expertise technique et vision stratégique.
 
-Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
+Qu'est-ce qui manque le plus dans les profils rencontrés aujourd'hui : l'expertise technique, la vision stratégique, ou les deux ?
 
 Bien à vous,"""

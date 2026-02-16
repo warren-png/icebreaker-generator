@@ -351,7 +351,13 @@ Exemples de bons pain points :
 - "Trouver un profil qui allie expertise consolidation IFRS et accompagnement des filiales reste complexe."
 PAS de généralités comme "rigueur", "agilité", "dynamisme".
 
-Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
+[QUESTION FINALE CONTEXTUALISÉE]
+Formule une question courte qui reprend 2-3 compétences critiques identifiées dans le pain point.
+Structure : "Qu'est-ce qui manque le plus dans les profils rencontrés aujourd'hui : [compétence A], [compétence B], ou les deux ?"
+Exemples :
+- "Qu'est-ce qui manque le plus : le niveau de modélisation, l'expérience d'exécution end-to-end, ou les deux ?"
+- "Qu'est-ce qui manque le plus : la maîtrise des flux de réassurance, l'expérience en consolidation IFRS, ou les deux ?"
+La question DOIT être spécifique au poste, JAMAIS générique.
 
 Bien à vous,
 
@@ -388,7 +394,8 @@ INTERDICTIONS ABSOLUES
 ❌ Répéter le MÊME pain point entre M1 et M2
 ❌ Profils incohérents avec la fiche (ex: "Solvabilité II" si pas mentionné)
 ❌ Exagérer l'expérience (si la fiche dit "5 ans", respecter)
-❌ Modifier les phrases de conclusion (question M1, proposition M2)
+❌ Modifier la proposition de M2 (synthèses anonymisées)
+❌ Utiliser une question finale générique type "Quels sont les principaux écarts..."
 
 ═══════════════════════════════════════════════════════════════════
 FORMAT DE RÉPONSE

@@ -273,7 +273,6 @@ def filter_recent_posts(posts, max_age_months=6):
         )
         
         # Si pas de date trouvée, on INCLUT quand même le post
-        # (approche permissive - mieux vaut un post potentiellement vieux qu'aucun post)
         if not date_str:
             recent.append(post)
             continue
@@ -485,8 +484,6 @@ def scrape_hellowork_apify(url):
     HelloWork : pas de scraper Apify fiable pour URL directe
     Retourne None pour déclencher le fallback copier-coller
     """
-    # Les scrapers HelloWork Apify sont conçus pour des recherches, pas des URLs directes
-    # On retourne None pour que l'UI demande le copier-coller
     print("HelloWork: scraping auto non supporté, utiliser copier-coller")
     return None
 
@@ -819,7 +816,13 @@ Identifie LA difficulté principale de ce recrutement avec le VOCABULAIRE EXACT 
 Mentionne les compétences RARES demandées (réassurance, consolidation IFRS, provisions techniques, etc.)
 PAS de généralités ("rigueur", "agilité", "dynamisme").
 
-Quels sont les principaux écarts que vous observez entre vos attentes et les profils rencontrés ?
+[QUESTION FINALE CONTEXTUALISÉE]
+Formule une question courte qui reprend 2-3 compétences critiques identifiées dans le pain point.
+Structure : "Qu'est-ce qui manque le plus dans les profils rencontrés aujourd'hui : [compétence A], [compétence B], ou les deux ?"
+Exemples :
+- "Qu'est-ce qui manque le plus : le niveau de modélisation, l'expérience d'exécution end-to-end, ou les deux ?"
+- "Qu'est-ce qui manque le plus : la maîtrise des flux de réassurance, l'expérience en consolidation IFRS, ou les deux ?"
+La question DOIT être spécifique au poste, JAMAIS générique.
 
 Bien à vous,
 
@@ -853,6 +856,7 @@ INTERDICTIONS ABSOLUES
 ❌ Répéter le MÊME pain point entre M1 et M2
 ❌ Utiliser des informations datant de plus de 6 mois
 ❌ Profils incohérents avec la fiche
+❌ Utiliser une question finale générique type "Quels sont les principaux écarts..."
 
 ═══════════════════════════════════════════════════════════════════
 FORMAT DE RÉPONSE
