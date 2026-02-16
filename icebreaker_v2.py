@@ -753,6 +753,8 @@ INTERDICTIONS ABSOLUES
 ═══════════════════════════════════════════════════════════════════
 
 ❌ JAMAIS écrire "Je travaille sur..." ou "Je travaille actuellement..."
+❌ JAMAIS écrire "Nous recherchons...", "Nous accompagnons...", "Nous recrutons..."
+❌ JAMAIS adopter une posture où TU recrutes — c'est le PROSPECT qui recrute
 ❌ JAMAIS inventer des compétences/outils non mentionnés dans la fiche
 ❌ JAMAIS utiliser de termes génériques ("rigueur", "agilité", "dynamique", "croissance")
 ❌ Jamais citer verbatim plus de 5 mots du hook
@@ -760,6 +762,7 @@ INTERDICTIONS ABSOLUES
 ❌ Jamais de superlatifs ou ton commercial
 ❌ Jamais utiliser une question générique type "Quels sont les principaux écarts..."
 ❌ Jamais ajouter de signature au-delà de "Bien à vous,"
+❌ JAMAIS dépasser 100 mots — le pain point tient en 2-3 phrases max
 
 Génère l'icebreaker maintenant :"""
 
@@ -815,10 +818,13 @@ Total : 70-90 mots
 INTERDICTIONS ABSOLUES
 ═══════════════════════════════════════════════════════════════════
 ❌ JAMAIS écrire "Je travaille sur..." ou "Je travaille actuellement..."
+❌ JAMAIS écrire "Nous recherchons...", "Nous accompagnons...", "Nous recrutons..."
+❌ JAMAIS adopter une posture où TU recrutes — c'est le PROSPECT qui recrute
 ❌ JAMAIS utiliser de termes génériques ("rigueur", "agilité", "dynamique", "croissance")
 ❌ JAMAIS inventer des compétences non mentionnées dans la fiche
 ❌ Jamais utiliser une question générique type "Quels sont les principaux écarts..."
 ❌ Jamais ajouter de signature au-delà de "Bien à vous,"
+❌ JAMAIS dépasser 100 mots — le pain point tient en 2-3 phrases max
 
 Génère l'icebreaker maintenant :"""
 
@@ -873,11 +879,14 @@ Total : 70-90 mots
 INTERDICTIONS ABSOLUES
 ═══════════════════════════════════════════════════════════════════
 ❌ JAMAIS écrire "Je travaille sur..." ou "Je travaille actuellement..."
+❌ JAMAIS écrire "Nous recherchons...", "Nous accompagnons...", "Nous recrutons..."
 ❌ JAMAIS écrire "Je gère un poste de..."
+❌ JAMAIS adopter une posture où TU recrutes — c'est le PROSPECT qui recrute
 ❌ JAMAIS inventer des compétences non mentionnées dans la fiche
 ❌ JAMAIS utiliser des pain points génériques ("rigueur", "agilité", "dynamique")
 ❌ Jamais utiliser une question générique type "Quels sont les principaux écarts..."
 ❌ Jamais ajouter de signature au-delà de "Bien à vous,"
+❌ JAMAIS dépasser 100 mots — le pain point tient en 2-3 phrases max
 
 Génère l'icebreaker maintenant :"""
 

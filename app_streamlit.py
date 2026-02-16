@@ -848,9 +848,17 @@ Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ?
 Bien à vous,
 
 ═══════════════════════════════════════════════════════════════════
+CONTRAINTE DE LONGUEUR (CRITIQUE)
+═══════════════════════════════════════════════════════════════════
+Le MESSAGE 1 doit faire entre 70 et 100 mots MAXIMUM. Sois concis.
+Le pain point doit tenir en 2-3 phrases, pas un paragraphe entier.
+
+═══════════════════════════════════════════════════════════════════
 INTERDICTIONS ABSOLUES
 ═══════════════════════════════════════════════════════════════════
 ❌ "Je travaille sur...", "Je travaille actuellement..."
+❌ "Nous recherchons...", "Nous accompagnons...", "Nous recrutons..."
+❌ JAMAIS adopter une posture où TU recrutes — c'est le PROSPECT qui recrute, tu le contactes en tant que prestataire
 ❌ "rigueur", "agilité", "dynamisme", "dynamique", "croissance"
 ❌ Inventer des compétences/certifications NON dans la fiche
 ❌ Répéter le MÊME pain point entre M1 et M2
