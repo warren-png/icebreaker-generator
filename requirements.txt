@@ -16,3 +16,7 @@ beautifulsoup4==4.12.3
 reportlab
 google-api-python-client
 google-auth
+
+# Lecture de fichiers pour le générateur de scorecard
+pdfplumber
+python-docx
