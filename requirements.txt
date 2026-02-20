@@ -6,6 +6,7 @@ requests==2.32.3
 # Google Sheets (VERSION MODERNE)
 gspread==6.1.4
 google-auth==2.36.0
+google-api-python-client==2.154.0
 
 # Configuration
 python-dotenv==1.0.1
@@ -13,6 +14,5 @@ python-dotenv==1.0.1
 # Web scraping
 beautifulsoup4==4.12.3
 
-reportlab
-google-api-python-client
-google-auth
+# PDF generation
+reportlab==4.2.5
