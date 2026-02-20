@@ -15,20 +15,25 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# LOGO
+# LOGO — chargé depuis la sidebar ou depuis le disque en fallback
 # ---------------------------------------------------------------------------
 
 def get_logo_base64() -> str | None:
+    # 1. Priorité : logo uploadé via la sidebar dans cette session
+    if "logo_b64" in st.session_state and st.session_state.logo_b64:
+        return st.session_state.logo_b64
+    # 2. Fallback : chercher le fichier sur le disque
     candidates = [
-        Path(__file__).parent.parent / "logo_entourage.png",  # worktree root
-        Path(__file__).parent / "logo_entourage.png",          # pages/ dir
-        Path(os.getcwd()) / "logo_entourage.png",              # répertoire de lancement
-        Path(os.getcwd()) / "pages" / "logo_entourage.png",
+        Path(__file__).parent.parent / "logo_entourage.png",
+        Path(__file__).parent / "logo_entourage.png",
+        Path(os.getcwd()) / "logo_entourage.png",
     ]
     for path in candidates:
         if path.exists():
             with open(path, "rb") as f:
-                return base64.b64encode(f.read()).decode()
+                data = base64.b64encode(f.read()).decode()
+                st.session_state.logo_b64 = data
+                return data
     return None
 
 
@@ -338,15 +343,34 @@ Retourne le HTML complet avec tous les placeholders {{{{...}}}} remplacés par l
 # UI
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# SIDEBAR — upload du logo
+# ---------------------------------------------------------------------------
+
+with st.sidebar:
+    st.markdown("### 🖼 Logo Entourage")
+    logo_file = st.file_uploader(
+        "Charger le logo",
+        type=["png", "jpg", "jpeg"],
+        label_visibility="collapsed",
+        key="logo_uploader"
+    )
+    if logo_file:
+        st.session_state.logo_b64 = base64.b64encode(logo_file.read()).decode()
+        st.success("Logo chargé ✓")
+
+    if get_logo_base64():
+        st.image(
+            f"data:image/png;base64,{st.session_state.get('logo_b64', '')}",
+            use_container_width=True
+        )
+
+# ---------------------------------------------------------------------------
+# PAGE PRINCIPALE
+# ---------------------------------------------------------------------------
+
 st.title("🎯 Générateur de Scorecard")
 st.caption("Upload une retranscription → génération automatique du Brief de Mission")
-
-# Avertissement logo si absent
-if not get_logo_base64():
-    st.warning(
-        "⚠️ Logo non trouvé. Sauvegardez votre logo comme **`logo_entourage.png`** "
-        "à la racine du projet pour qu'il apparaisse dans les documents."
-    )
 
 st.divider()
 
