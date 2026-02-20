@@ -19,10 +19,16 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 
 def get_logo_base64() -> str | None:
-    logo_path = Path(__file__).parent.parent / "logo_entourage.png"
-    if logo_path.exists():
-        with open(logo_path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+    candidates = [
+        Path(__file__).parent.parent / "logo_entourage.png",  # worktree root
+        Path(__file__).parent / "logo_entourage.png",          # pages/ dir
+        Path(os.getcwd()) / "logo_entourage.png",              # répertoire de lancement
+        Path(os.getcwd()) / "pages" / "logo_entourage.png",
+    ]
+    for path in candidates:
+        if path.exists():
+            with open(path, "rb") as f:
+                return base64.b64encode(f.read()).decode()
     return None
 
 
