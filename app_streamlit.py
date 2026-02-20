@@ -16,9 +16,11 @@ import requests
 import os
 import re
 import json
+import hashlib
 import time
 import anthropic
 from datetime import datetime, timedelta
+from urllib.parse import quote as url_quote
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from cv_generator import generate_cv_content, estimate_cv_length, condense_cv_content
@@ -34,6 +36,49 @@ load_dotenv()
 
 st.set_page_config(page_title="Icebreaker Generator V28.7", page_icon="🎯", layout="wide")
 
+# ========================================
+# AUTHENTIFICATION
+# ========================================
+
+def check_auth():
+    """Vérifie le mot de passe de l'application.
+
+    Utilise un hash du password configuré stocké en session_state.
+    Toute session qui ne porte pas ce hash exact est forcée à se
+    reconnecter — même si l'onglet était déjà ouvert avant le
+    déploiement du code d'authentification.
+    """
+    try:
+        app_password = st.secrets["APP_PASSWORD"]
+    except Exception:
+        app_password = os.getenv("APP_PASSWORD")
+
+    if not app_password:
+        st.error("APP_PASSWORD non configuré. Définissez-le dans .streamlit/secrets.toml ou .env.")
+        st.stop()
+
+    # Hash du password actuellement configuré
+    expected_hash = hashlib.sha256(app_password.encode()).hexdigest()
+
+    # Si la session ne porte pas le bon hash → déconnecter
+    if st.session_state.get("auth_hash") != expected_hash:
+        st.session_state.authenticated = False
+        st.session_state.auth_hash = None
+
+    if not st.session_state.get("authenticated"):
+        st.title("Icebreaker Generator — Connexion")
+        pwd = st.text_input("Mot de passe", type="password")
+        if st.button("Se connecter"):
+            if pwd == app_password:
+                st.session_state.authenticated = True
+                st.session_state.auth_hash = expected_hash
+                st.rerun()
+            else:
+                st.error("Mot de passe incorrect.")
+        st.stop()
+
+check_auth()
+
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
@@ -42,12 +87,41 @@ try:
     LEONAR_EMAIL = st.secrets["LEONAR_EMAIL"]
     LEONAR_PASSWORD = st.secrets["LEONAR_PASSWORD"]
     LEONAR_CAMPAIGN_ID = st.secrets["LEONAR_CAMPAIGN_ID"]
-except:
+except KeyError:
     LEONAR_EMAIL = os.getenv("LEONAR_EMAIL")
     LEONAR_PASSWORD = os.getenv("LEONAR_PASSWORD")
     LEONAR_CAMPAIGN_ID = os.getenv("LEONAR_CAMPAIGN_ID")
 
 PROCESSED_FILE = "processed_prospects.txt"
+
+# ========================================
+# SÉCURITÉ - SANITISATION DES INPUTS
+# ========================================
+
+# Longueurs maximales pour éviter les DoS et les dépassements de tokens
+MAX_JOB_DESC_LEN = 4000
+MAX_FIELD_LEN = 500
+MAX_URL_LEN = 2048
+MAX_MANUAL_DESC_LEN = 8000
+
+def sanitize_text(text, max_length=MAX_FIELD_LEN):
+    """Tronque et nettoie un champ texte avant injection dans un prompt.
+    Supprime les séquences de contrôle qui pourraient perturber l'interprétation du prompt.
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    # Supprimer les caractères nuls et de contrôle (hors newline/tab)
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    return text[:max_length]
+
+def sanitize_url(url):
+    """Valide et nettoie une URL : doit commencer par https://"""
+    if not url or not isinstance(url, str):
+        return ""
+    url = url.strip()[:MAX_URL_LEN]
+    if not url.startswith("https://"):
+        return ""
+    return url
 
 # Session state
 if 'leonar_prospects' not in st.session_state:
@@ -69,7 +143,8 @@ def get_leonar_token():
             timeout=10
         )
         return r.json()['response']['token'] if r.status_code == 200 else None
-    except:
+    except Exception as e:
+        print(f"Erreur authentification Leonar: {e}")
         return None
 
 
@@ -82,7 +157,8 @@ def get_new_prospects_leonar(token):
         
         # Paginer pour récupérer TOUS les prospects
         while True:
-            url = f'https://dashboard.leonar.app/api/1.1/obj/matching?constraints=[{{"key":"campaign","constraint_type":"equals","value":"{LEONAR_CAMPAIGN_ID}"}}]&cursor={cursor}&limit=100'
+            campaign_id_safe = url_quote(str(LEONAR_CAMPAIGN_ID), safe='')
+            url = f'https://dashboard.leonar.app/api/1.1/obj/matching?constraints=[{{"key":"campaign","constraint_type":"equals","value":"{campaign_id_safe}"}}]&cursor={cursor}&limit=100'
             
             r = requests.get(
                 url,
@@ -184,7 +260,8 @@ MESSAGE 3 (BREAK-UP - J+12)
             timeout=10
         )
         return True
-    except:
+    except Exception as e:
+        print(f"Erreur mise à jour prospect Leonar: {e}")
         return False
 
 
@@ -222,7 +299,8 @@ def scrape_linkedin_profile(apify_client, linkedin_url):
         )
         items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
         return items[0] if items else {}
-    except:
+    except Exception as e:
+        print(f"Erreur scraping profil LinkedIn: {e}")
         return {}
 
 
@@ -240,7 +318,8 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
         items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
         # Filtre strict 6 mois
         return filter_recent_posts(items, max_age_months=6)
-    except:
+    except Exception as e:
+        print(f"Erreur scraping posts LinkedIn: {e}")
         return []
 
 
@@ -315,7 +394,7 @@ def parse_date(date_str):
     for fmt in formats:
         try:
             return datetime.strptime(date_str[:19], fmt)
-        except:
+        except ValueError:
             continue
     
     # Dates relatives ("2d ago", "3w ago", "il y a 2 jours")
@@ -456,9 +535,12 @@ def scrape_job_posting(url):
     """
     if not url or not url.strip():
         return None
-    
-    url = url.strip()
-    
+
+    url = sanitize_url(url)
+    if not url:
+        print("scrape_job_posting: URL rejetée (doit être HTTPS)")
+        return None
+
     try:
         if "hellowork.com" in url:
             return scrape_hellowork_apify(url)
@@ -564,7 +646,8 @@ def scrape_hellowork_basic(url):
             'source': 'HelloWork',
             'url': url
         }
-    except:
+    except Exception as e:
+        print(f"Erreur scraping HelloWork: {e}")
         return None
 
 
@@ -608,7 +691,8 @@ def scrape_indeed_basic(url):
             'source': 'Indeed',
             'url': url
         }
-    except:
+    except Exception as e:
+        print(f"Erreur scraping Indeed: {e}")
         return None
 
 
@@ -649,7 +733,8 @@ def scrape_linkedin_job(url):
             'source': 'LinkedIn',
             'url': url
         }
-    except:
+    except Exception as e:
+        print(f"Erreur scraping LinkedIn job: {e}")
         return scrape_generic(url)
 
 
@@ -699,7 +784,8 @@ def scrape_apec(url):
             'source': 'Apec',
             'url': url
         }
-    except:
+    except Exception as e:
+        print(f"Erreur scraping Apec: {e}")
         return scrape_generic(url)
 
 
@@ -764,14 +850,17 @@ def generate_sequence_v28(prospect_data, posts_data, web_data, job_posting_data)
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     
     # Extraire données
-    prenom = get_firstname(prospect_data)
-    titre_poste = get_job_title(job_posting_data)
-    
+    prenom = sanitize_text(get_firstname(prospect_data), MAX_FIELD_LEN)
+    titre_poste = sanitize_text(get_job_title(job_posting_data), MAX_FIELD_LEN)
+
     # Formater pour le prompt
-    posts_formatted = format_posts(posts_data)
-    web_formatted = format_web_results(web_data)
-    profile_formatted = format_profile(prospect_data)
-    fiche_formatted = job_posting_data.get('description', '') if job_posting_data else ''
+    posts_formatted = sanitize_text(format_posts(posts_data), MAX_JOB_DESC_LEN)
+    web_formatted = sanitize_text(format_web_results(web_data), MAX_JOB_DESC_LEN)
+    profile_formatted = sanitize_text(format_profile(prospect_data), MAX_JOB_DESC_LEN)
+    fiche_formatted = sanitize_text(
+        job_posting_data.get('description', '') if job_posting_data else '',
+        MAX_JOB_DESC_LEN
+    )
     
     prompt = f"""Tu es chasseur de têtes Finance chez Entourage Recrutement.
 Tu dois générer 2 messages de prospection pour ce prospect.
@@ -1149,12 +1238,17 @@ with tab1:
         height=200,
         placeholder="https://www.hellowork.com/...\nhttps://www.indeed.fr/...\nhttps://www.linkedin.com/jobs/..."
     )
-    
-    # Parser les URLs
+
+    # Parser les URLs avec validation HTTPS
     job_urls_list = []
     has_manual_urls = False
     if job_urls_input:
-        job_urls_list = [u.strip() for u in job_urls_input.strip().split('\n') if u.strip()]
+        raw_urls = [u.strip() for u in job_urls_input.strip().split('\n') if u.strip()]
+        job_urls_list = [sanitize_url(u) for u in raw_urls]
+        rejected = sum(1 for u in job_urls_list if not u)
+        job_urls_list = [u for u in job_urls_list if u]
+        if rejected:
+            st.warning(f"⚠️ {rejected} URL(s) ignorée(s) : seules les URLs HTTPS sont acceptées.")
         st.info(f"✅ {len(job_urls_list)} URL(s) détectée(s)")
         
         # Détecter URLs nécessitant copier-coller (HelloWork, Apec, Indeed)
@@ -1166,11 +1260,14 @@ with tab1:
     # Champ fallback pour HelloWork/Apec/Indeed
     manual_description = ""
     if has_manual_urls:
-        manual_description = st.text_area(
+        raw_manual = st.text_area(
             "📋 Description de la fiche de poste (copier-coller)",
             height=300,
             placeholder="Copiez-collez ici le contenu de la fiche de poste HelloWork, Apec ou Indeed...\n\nAstuce : Sur la page, sélectionnez tout le texte de la description et collez-le ici."
         )
+        manual_description = sanitize_text(raw_manual, MAX_MANUAL_DESC_LEN)
+        if raw_manual and len(raw_manual) > MAX_MANUAL_DESC_LEN:
+            st.info(f"ℹ️ Description tronquée à {MAX_MANUAL_DESC_LEN} caractères.")
     
     # Rafraîchir prospects
     col1, col2, col3 = st.columns([1, 1, 2])

@@ -11,10 +11,10 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 import os
 
-FOLDER_ID = "1hBkY_8disGqL3ctfLxh79PB5fPcGagfb"
+FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
-CREDENTIALS_FILE = os.getenv('GOOGLE_CREDENTIALS_FILE', 'google-credentials.json')
+CREDENTIALS_FILE = os.getenv('GOOGLE_CREDENTIALS_FILE')
 
 
 def get_drive_service():
@@ -22,11 +22,22 @@ def get_drive_service():
     Initialise le service Google Drive
     Utilise les credentials du job monitor
     """
-    
+    if not CREDENTIALS_FILE:
+        raise EnvironmentError(
+            "Variable d'environnement GOOGLE_CREDENTIALS_FILE non définie. "
+            "Définissez-la dans votre fichier .env ou vos secrets Streamlit."
+        )
+
+    if not FOLDER_ID:
+        raise EnvironmentError(
+            "Variable d'environnement GOOGLE_DRIVE_FOLDER_ID non définie. "
+            "Définissez-la dans votre fichier .env ou vos secrets Streamlit."
+        )
+
     if not os.path.exists(CREDENTIALS_FILE):
         raise FileNotFoundError(
             f"Fichier credentials Google Cloud introuvable: {CREDENTIALS_FILE}\n"
-            "Placez votre fichier de credentials (JSON) à la racine du projet."
+            "Vérifiez le chemin indiqué dans GOOGLE_CREDENTIALS_FILE."
         )
     
     credentials = service_account.Credentials.from_service_account_file(
@@ -186,10 +197,9 @@ def upload_cv(pdf_bytes, job_title, prospect_name=None, folder_name="CVs Icebrea
     """
     
     try:
-        # Créer/récupérer le dossier
+        # Utiliser le dossier configuré par variable d'environnement
         folder_id = FOLDER_ID
-        "1hBkY_8disGqL3ctfLxh79PB5fPcGagfb" (folder_name)
-        
+
         # Générer nom de fichier
         filename = generate_filename(job_title, prospect_name)
         

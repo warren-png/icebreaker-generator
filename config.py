@@ -35,7 +35,7 @@ APIFY_ACTORS = {
 # ========================================
 GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "Prospects Icebreaker")
 WORKSHEET_NAME = os.getenv("WORKSHEET_NAME", "Feuille 1")
-GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "google-credentials.json")
+GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE")
 
 # ========================================
 # 6. INFORMATIONS ENTREPRISE
