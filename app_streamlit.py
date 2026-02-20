@@ -16,6 +16,7 @@ import requests
 import os
 import re
 import json
+import hashlib
 import time
 import anthropic
 from datetime import datetime, timedelta
@@ -40,7 +41,13 @@ st.set_page_config(page_title="Icebreaker Generator V28.7", page_icon="🎯", la
 # ========================================
 
 def check_auth():
-    """Vérifie le mot de passe de l'application"""
+    """Vérifie le mot de passe de l'application.
+
+    Utilise un hash du password configuré stocké en session_state.
+    Toute session qui ne porte pas ce hash exact est forcée à se
+    reconnecter — même si l'onglet était déjà ouvert avant le
+    déploiement du code d'authentification.
+    """
     try:
         app_password = st.secrets["APP_PASSWORD"]
     except Exception:
@@ -50,15 +57,21 @@ def check_auth():
         st.error("APP_PASSWORD non configuré. Définissez-le dans .streamlit/secrets.toml ou .env.")
         st.stop()
 
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
+    # Hash du password actuellement configuré
+    expected_hash = hashlib.sha256(app_password.encode()).hexdigest()
 
-    if not st.session_state.authenticated:
+    # Si la session ne porte pas le bon hash → déconnecter
+    if st.session_state.get("auth_hash") != expected_hash:
+        st.session_state.authenticated = False
+        st.session_state.auth_hash = None
+
+    if not st.session_state.get("authenticated"):
         st.title("Icebreaker Generator — Connexion")
         pwd = st.text_input("Mot de passe", type="password")
         if st.button("Se connecter"):
             if pwd == app_password:
                 st.session_state.authenticated = True
+                st.session_state.auth_hash = expected_hash
                 st.rerun()
             else:
                 st.error("Mot de passe incorrect.")
