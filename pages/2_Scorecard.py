@@ -360,10 +360,8 @@ with st.sidebar:
         st.success("Logo chargé ✓")
 
     if get_logo_base64():
-        st.image(
-            f"data:image/png;base64,{st.session_state.get('logo_b64', '')}",
-            use_container_width=True
-        )
+        logo_bytes = base64.b64decode(st.session_state.logo_b64)
+        st.image(io.BytesIO(logo_bytes), use_container_width=True)
 
 # ---------------------------------------------------------------------------
 # PAGE PRINCIPALE
