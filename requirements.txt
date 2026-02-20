@@ -3,7 +3,7 @@ anthropic==0.40.0
 apify-client==2.4.0
 requests==2.32.3
 
-# Google Sheets (VERSION MODERNE)
+# Google Sheets & Drive
 gspread==6.1.4
 google-auth==2.36.0
 google-api-python-client==2.154.0
@@ -16,3 +16,7 @@ beautifulsoup4==4.12.3
 
 # PDF generation
 reportlab==4.2.5
+
+# Lecture de fichiers pour le générateur de scorecard
+pdfplumber
+python-docx
