@@ -6,7 +6,7 @@ requests==2.32.3
 # Google Sheets & Drive
 gspread==6.1.4
 google-auth==2.36.0
-google-api-python-client
+google-api-python-client==2.154.0
 
 # Configuration
 python-dotenv==1.0.1
@@ -15,7 +15,7 @@ python-dotenv==1.0.1
 beautifulsoup4==4.12.3
 
 # PDF generation
-reportlab
+reportlab==4.2.5
 
 # Lecture de fichiers pour le générateur de scorecard
 pdfplumber
