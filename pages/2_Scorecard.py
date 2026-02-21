@@ -397,7 +397,7 @@ TEMPLATE À REMPLIR :
 Retourne le HTML complet avec tous les autres placeholders {{{{...}}}} remplacés par les vraies informations."""
 
     message = client.messages.create(
-        model="claude-opus-4-6",
+        model="claude-sonnet-4-5",
         max_tokens=8096,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_content}]

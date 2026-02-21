@@ -16,7 +16,6 @@ import requests
 import os
 import re
 import json
-import hashlib
 import time
 from utils.auth import check_password
 
@@ -41,48 +40,6 @@ load_dotenv()
 
 st.set_page_config(page_title="Icebreaker Generator V28.7", page_icon="🎯", layout="wide")
 
-# ========================================
-# AUTHENTIFICATION
-# ========================================
-
-def check_auth():
-    """Vérifie le mot de passe de l'application.
-
-    Utilise un hash du password configuré stocké en session_state.
-    Toute session qui ne porte pas ce hash exact est forcée à se
-    reconnecter — même si l'onglet était déjà ouvert avant le
-    déploiement du code d'authentification.
-    """
-    try:
-        app_password = st.secrets["APP_PASSWORD"]
-    except Exception:
-        app_password = os.getenv("APP_PASSWORD")
-
-    if not app_password:
-        st.error("APP_PASSWORD non configuré. Définissez-le dans .streamlit/secrets.toml ou .env.")
-        st.stop()
-
-    # Hash du password actuellement configuré
-    expected_hash = hashlib.sha256(app_password.encode()).hexdigest()
-
-    # Si la session ne porte pas le bon hash → déconnecter
-    if st.session_state.get("auth_hash") != expected_hash:
-        st.session_state.authenticated = False
-        st.session_state.auth_hash = None
-
-    if not st.session_state.get("authenticated"):
-        st.title("Icebreaker Generator — Connexion")
-        pwd = st.text_input("Mot de passe", type="password")
-        if st.button("Se connecter"):
-            if pwd == app_password:
-                st.session_state.authenticated = True
-                st.session_state.auth_hash = expected_hash
-                st.rerun()
-            else:
-                st.error("Mot de passe incorrect.")
-        st.stop()
-
-check_auth()
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
