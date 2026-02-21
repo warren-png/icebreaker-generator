@@ -5,6 +5,7 @@ import os
 import io
 from pathlib import Path
 from dotenv import load_dotenv
+from utils.auth import check_password
 
 load_dotenv()
 
@@ -13,6 +14,10 @@ st.set_page_config(
     page_icon="🎯",
     layout="wide"
 )
+
+# — Authentification —
+if not check_password():
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # COMMERCIAUX

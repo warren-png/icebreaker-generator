@@ -18,6 +18,11 @@ import re
 import json
 import hashlib
 import time
+from utils.auth import check_password
+
+# — Authentification globale —
+if not check_password():
+    st.stop()
 import anthropic
 from datetime import datetime, timedelta
 from urllib.parse import quote as url_quote
