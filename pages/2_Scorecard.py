@@ -190,19 +190,19 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
         .doc-title { color: #fff; font-size: 10pt; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; text-align: right; }
         .doc-title .mandat { display: block; font-size: 7pt; color: #FFD700; margin-top: 3px; }
         .doc-title .client { display: block; font-size: 8pt; color: #fff; opacity: 0.85; margin-top: 2px; letter-spacing: 0.5px; }
-        .content { padding: 5mm 15mm; flex-grow: 1; display: flex; flex-direction: column; gap: 4mm; }
+        .content { padding: 6mm 15mm 5mm; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
         .section-title {
             font-family: 'Playfair Display', serif;
-            font-size: 12pt;
+            font-size: 13pt;
             color: #000;
             border-bottom: 1px solid #eee;
             padding-bottom: 1.5mm;
-            margin-bottom: 3mm;
+            margin-bottom: 4mm;
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .section-title i { color: #FFD700; font-size: 10pt; }
+        .section-title i { color: #FFD700; font-size: 11pt; }
         .summary-box {
             background: #f8f9fa;
             border-left: 3mm solid #000;
@@ -212,10 +212,10 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
             gap: 4mm;
         }
         .sum-col h4 { font-family: 'Playfair Display', serif; font-size: 10pt; margin-bottom: 1.5mm; color: #000; border-bottom: 1px solid #FFD700; display: inline-block; text-transform: uppercase; }
-        .sum-col p { font-size: 8pt; line-height: 1.35; color: #444; text-align: justify; }
-        .score-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
-        .score-table th { text-align: left; padding: 2mm 3mm; background: #000; color: #fff; text-transform: uppercase; font-size: 7.5pt; letter-spacing: 0.5px; }
-        .score-table td { padding: 2mm 3mm; border-bottom: 1px solid #eee; vertical-align: middle; }
+        .sum-col p { font-size: 8.5pt; line-height: 1.4; color: #444; text-align: justify; }
+        .score-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+        .score-table th { text-align: left; padding: 2mm 3mm; background: #000; color: #fff; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }
+        .score-table td { padding: 2.5mm 3mm; border-bottom: 1px solid #eee; vertical-align: middle; }
         .score-cat { width: 25%; font-weight: 800; color: #000; border-right: 2px solid #FFD700; text-transform: uppercase; }
         .score-weight { width: 15%; text-align: center; font-weight: 800; color: #000; font-size: 9pt; background-color: #fcfcfc; border-right: 1px solid #eee; }
         .score-desc { color: #444; line-height: 1.3; padding-left: 15px !important; }
@@ -356,11 +356,11 @@ Règles absolues :
 
 CONTRAINTE DE FORMAT STRICTE — PRIORITÉ ABSOLUE :
 - Le document doit tenir sur UNE SEULE page A4 (210mm × 297mm). Tout débordement sera coupé.
-- Blocs "Vision & Contexte" (sum-col) : 2 phrases MAXIMUM par bloc, 180 caractères maximum chacun. Aller à l'essentiel.
-- Scorecard : 4 à 5 critères maximum. Chaque description de succès : 1 ligne, 100 caractères maximum.
-- Processus de recrutement : exactement 4 étapes. Titres de 2-3 mots. Intervenants en 1-2 mots.
-- Package : une seule ligne (ex: "80-95K€ fixe + 15-20% variable").
-- Style télégraphique : mots-clés et formules courtes, pas de longues phrases."""
+- Blocs "Vision & Contexte" (sum-col) : 3 phrases maximum par bloc, 280 caractères maximum chacun.
+- Scorecard : 4 à 5 critères maximum. Chaque description de succès : 1 à 2 lignes, 180 caractères maximum.
+- Processus de recrutement : exactement 4 étapes. Titres de 2-4 mots. Intervenants en 2-3 mots.
+- Package : une seule ligne synthétique (ex: "90-110K€ fixe + 15-20% variable + BSPCE").
+- Langage professionnel et précis, orienté résultats. Pas de répétitions entre les sections."""
 
 
 def generate_scorecard(
