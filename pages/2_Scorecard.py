@@ -161,7 +161,9 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
         }
         .page {
             width: 210mm;
-            min-height: 297mm;
+            height: 297mm;
+            max-height: 297mm;
+            overflow: hidden;
             background: white;
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
             position: relative;
@@ -169,8 +171,9 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
             flex-direction: column;
         }
         @media print {
+            @page { size: A4 portrait; margin: 0; }
             body { background: none; padding: 0; }
-            .page { margin: 0; box-shadow: none; width: 210mm; }
+            .page { margin: 0; box-shadow: none; width: 210mm; height: 297mm; }
         }
         .header {
             height: 25mm;
@@ -187,32 +190,32 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
         .doc-title { color: #fff; font-size: 10pt; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; text-align: right; }
         .doc-title .mandat { display: block; font-size: 7pt; color: #FFD700; margin-top: 3px; }
         .doc-title .client { display: block; font-size: 8pt; color: #fff; opacity: 0.85; margin-top: 2px; letter-spacing: 0.5px; }
-        .content { padding: 8mm 15mm; flex-grow: 1; display: flex; flex-direction: column; gap: 6mm; }
+        .content { padding: 5mm 15mm; flex-grow: 1; display: flex; flex-direction: column; gap: 4mm; }
         .section-title {
             font-family: 'Playfair Display', serif;
-            font-size: 14pt;
+            font-size: 12pt;
             color: #000;
             border-bottom: 1px solid #eee;
-            padding-bottom: 2mm;
-            margin-bottom: 4mm;
+            padding-bottom: 1.5mm;
+            margin-bottom: 3mm;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
-        .section-title i { color: #FFD700; font-size: 12pt; }
+        .section-title i { color: #FFD700; font-size: 10pt; }
         .summary-box {
             background: #f8f9fa;
             border-left: 3mm solid #000;
-            padding: 5mm;
+            padding: 4mm;
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
-            gap: 5mm;
+            gap: 4mm;
         }
-        .sum-col h4 { font-family: 'Playfair Display', serif; font-size: 11pt; margin-bottom: 2mm; color: #000; border-bottom: 1px solid #FFD700; display: inline-block; text-transform: uppercase; }
-        .sum-col p { font-size: 8.5pt; line-height: 1.4; color: #444; text-align: justify; }
-        .score-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-        .score-table th { text-align: left; padding: 2mm 3mm; background: #000; color: #fff; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }
-        .score-table td { padding: 3mm 3mm; border-bottom: 1px solid #eee; vertical-align: middle; }
+        .sum-col h4 { font-family: 'Playfair Display', serif; font-size: 10pt; margin-bottom: 1.5mm; color: #000; border-bottom: 1px solid #FFD700; display: inline-block; text-transform: uppercase; }
+        .sum-col p { font-size: 8pt; line-height: 1.35; color: #444; text-align: justify; }
+        .score-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+        .score-table th { text-align: left; padding: 2mm 3mm; background: #000; color: #fff; text-transform: uppercase; font-size: 7.5pt; letter-spacing: 0.5px; }
+        .score-table td { padding: 2mm 3mm; border-bottom: 1px solid #eee; vertical-align: middle; }
         .score-cat { width: 25%; font-weight: 800; color: #000; border-right: 2px solid #FFD700; text-transform: uppercase; }
         .score-weight { width: 15%; text-align: center; font-weight: 800; color: #000; font-size: 9pt; background-color: #fcfcfc; border-right: 1px solid #eee; }
         .score-desc { color: #444; line-height: 1.3; padding-left: 15px !important; }
@@ -229,32 +232,32 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
         }
         .step { position: relative; z-index: 1; text-align: center; width: 22%; }
         .step-num {
-            width: 14mm; height: 14mm; background: #000; color: #FFD700;
+            width: 11mm; height: 11mm; background: #000; color: #FFD700;
             border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            font-weight: 800; font-size: 10pt; margin: 0 auto 3mm auto;
+            font-weight: 800; font-size: 9pt; margin: 0 auto 2mm auto;
             border: 2px solid #fff; box-shadow: 0 0 0 1px #000;
         }
-        .step-title { font-weight: 800; font-size: 9pt; margin-bottom: 2px; text-transform: uppercase; }
-        .step-who { font-size: 8pt; color: #555; font-style: italic; }
+        .step-title { font-weight: 800; font-size: 8pt; margin-bottom: 1px; text-transform: uppercase; }
+        .step-who { font-size: 7.5pt; color: #555; font-style: italic; }
         .salary-box {
-            margin-top: 8mm;
+            margin-top: 4mm;
             text-align: center;
             border: 1px dashed #ccc;
-            padding: 3mm;
+            padding: 2.5mm;
             border-radius: 4px;
             background: #fffcf5;
             font-family: 'Playfair Display', serif;
-            font-size: 11pt;
+            font-size: 10pt;
             color: #000;
         }
         .footer {
-            height: 12mm;
+            height: 10mm;
             background: #f8f9fa;
             border-top: 1px solid #ddd;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 9pt;
+            font-size: 8pt;
             color: #555;
             margin-top: auto;
             gap: 6px;
@@ -347,9 +350,17 @@ Règles absolues :
 - Respecte scrupuleusement la structure du template fourni
 - Ne modifie JAMAIS les placeholders {{LOGO}}, {{NOM_CLIENT}}, {{FOOTER_COMMERCIAL}} — laisse-les exactement tels quels
 - Les pondérations de la scorecard doivent totaliser exactement 100%
-- Entre 4 et 6 critères dans la scorecard selon la complexité du poste
+- Entre 4 et 5 critères dans la scorecard (pas plus)
 - Utilise un langage professionnel, précis et orienté résultats
-- Si une info n'est pas explicite dans la retranscription, déduis-la intelligemment du contexte"""
+- Si une info n'est pas explicite dans la retranscription, déduis-la intelligemment du contexte
+
+CONTRAINTE DE FORMAT STRICTE — PRIORITÉ ABSOLUE :
+- Le document doit tenir sur UNE SEULE page A4 (210mm × 297mm). Tout débordement sera coupé.
+- Blocs "Vision & Contexte" (sum-col) : 2 phrases MAXIMUM par bloc, 180 caractères maximum chacun. Aller à l'essentiel.
+- Scorecard : 4 à 5 critères maximum. Chaque description de succès : 1 ligne, 100 caractères maximum.
+- Processus de recrutement : exactement 4 étapes. Titres de 2-3 mots. Intervenants en 1-2 mots.
+- Package : une seule ligne (ex: "80-95K€ fixe + 15-20% variable").
+- Style télégraphique : mots-clés et formules courtes, pas de longues phrases."""
 
 
 def generate_scorecard(
@@ -413,7 +424,8 @@ def get_print_button_html(html_content: str, label: str = "📄 Télécharger PD
     <script>
     function printDoc() {{
         var w = window.open('', '_blank');
-        var html = atob('{b64}');
+        var bytes = Uint8Array.from(atob('{b64}'), function(c) {{ return c.charCodeAt(0); }});
+        var html = new TextDecoder('utf-8').decode(bytes);
         w.document.open();
         w.document.write(html);
         w.document.close();
