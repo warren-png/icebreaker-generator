@@ -21,6 +21,5 @@ reportlab==4.2.5
 pdfplumber
 python-docx
 
-# Scorecard : resize logo + export PDF
+# Scorecard : resize logo
 Pillow
-weasyprint

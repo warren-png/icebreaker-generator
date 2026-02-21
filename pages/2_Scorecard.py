@@ -398,19 +398,39 @@ Retourne le HTML complet avec tous les autres placeholders {{{{...}}}} remplacé
 
 
 # ---------------------------------------------------------------------------
-# EXPORT PDF
+# EXPORT PDF — via impression navigateur (rendu parfait, zéro dépendance)
 # ---------------------------------------------------------------------------
 
-def generate_pdf(html: str) -> bytes:
-    try:
-        from weasyprint import HTML
-        return HTML(string=html, base_url="https://cdnjs.cloudflare.com").write_pdf()
-    except ImportError:
-        st.error("weasyprint non installé : `pip install weasyprint`")
-        return b""
-    except Exception as e:
-        st.error(f"Erreur génération PDF : {e}")
-        return b""
+def get_print_button_html(html_content: str, label: str = "📄 Télécharger PDF") -> str:
+    """Bouton qui ouvre le document dans une nouvelle fenêtre et déclenche l'impression."""
+    b64 = base64.b64encode(html_content.encode("utf-8")).decode()
+    return f"""
+    <script>
+    function printDoc() {{
+        var w = window.open('', '_blank');
+        var html = atob('{b64}');
+        w.document.open();
+        w.document.write(html);
+        w.document.close();
+        w.onload = function() {{
+            setTimeout(function() {{ w.print(); }}, 400);
+        }};
+    }}
+    </script>
+    <button onclick="printDoc()" style="
+        background-color: #000;
+        color: #FFD700;
+        border: none;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 700;
+        border-radius: 6px;
+        cursor: pointer;
+        width: 100%;
+        font-family: sans-serif;
+        letter-spacing: 0.5px;
+    ">{label}</button>
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -507,17 +527,9 @@ if "scorecard_html" in st.session_state:
     # Boutons d'action
     col1, col2, col3 = st.columns([2, 2, 6])
     with col1:
-        with st.spinner("Préparation du PDF...") if False else st.empty():
-            pass
-        pdf_bytes = generate_pdf(st.session_state.scorecard_html)
-        client_slug = st.session_state.get("scorecard_client", "client").replace(" ", "_")
-        st.download_button(
-            label="📄 Télécharger PDF",
-            data=pdf_bytes,
-            file_name=f"brief_{client_slug}.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-            disabled=len(pdf_bytes) == 0
+        st.components.v1.html(
+            get_print_button_html(st.session_state.scorecard_html),
+            height=50
         )
     with col2:
         if st.button("🗑️ Réinitialiser", use_container_width=True):
@@ -525,7 +537,7 @@ if "scorecard_html" in st.session_state:
                 st.session_state.pop(k, None)
             st.rerun()
 
-    st.caption("💡 Le PDF intègre le logo, le nom du client et la signature du commercial.")
+    st.caption("💡 Cliquez sur 📄 Télécharger PDF → une fenêtre s'ouvre → Fichier → Imprimer → Enregistrer en PDF.")
 
     # Aperçu
     st.subheader("Aperçu")
