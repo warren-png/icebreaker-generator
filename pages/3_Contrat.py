@@ -74,10 +74,17 @@ def get_logo_entourage() -> str:
 
 def build_contract_html(fields: dict) -> str:
     logo_b64 = get_logo_entourage()
-    logo_tag = (
-        f'<img src="data:image/png;base64,{logo_b64}" style="height:14mm;object-fit:contain;">'
+    # Page 1 : header 24mm — logo plus grand
+    logo_tag_cover = (
+        f'<img src="data:image/png;base64,{logo_b64}" style="height:18mm;max-width:80mm;object-fit:contain;">'
         if logo_b64 else
-        '<span style="color:#FFD700;font-weight:800;font-size:11pt;letter-spacing:1px;">ENTOURAGE RECRUTEMENT</span>'
+        '<span style="color:#FFD700;font-weight:800;font-size:13pt;letter-spacing:1px;">ENTOURAGE RECRUTEMENT</span>'
+    )
+    # Pages 2-3-4 : header 16mm — logo contraint en hauteur et largeur
+    logo_tag_content = (
+        f'<img src="data:image/png;base64,{logo_b64}" style="height:11mm;max-width:55mm;object-fit:contain;display:block;">'
+        if logo_b64 else
+        '<span style="color:#FFD700;font-weight:800;font-size:9pt;letter-spacing:1px;">ENTOURAGE RECRUTEMENT</span>'
     )
 
     client_logo_tag = ""
@@ -139,29 +146,37 @@ def build_contract_html(fields: dict) -> str:
   .cover-footer a {{ color: #000; font-weight: 700; text-decoration: none; border-bottom: 1px solid #FFD700; }}
 
   /* HEADER PAGES DE CONTENU (avec logo) */
-  .content-header {{ background: #000; height: 16mm; display: flex; align-items: center; padding: 0 14mm; border-bottom: 1.5mm solid #FFD700; flex-shrink: 0; justify-content: space-between; }}
-  .content-header-doc {{ color: #FFD700; font-size: 7pt; text-align: right; }}
+  .content-header {{ background: #000; height: 16mm; display: flex; align-items: center; padding: 0 14mm; border-bottom: 1.5mm solid #FFD700; flex-shrink: 0; justify-content: space-between; overflow: hidden; }}
+  .content-header-doc {{ color: #FFD700; font-size: 7pt; text-align: right; white-space: nowrap; margin-left: 4mm; }}
   .content-body {{ padding: 6mm 14mm 4mm; flex-grow: 1; }}
+
+  /* PAGE 2 — layout flex colonne pour remplir toute la hauteur */
+  .content-body-p2 {{ padding: 8mm 14mm 6mm; flex-grow: 1; display: flex; flex-direction: column; }}
+  .toc-expand {{ flex-grow: 1; display: flex; flex-direction: column; margin-top: 5mm; }}
+  .toc-expand .toc {{ flex-grow: 1; }}
+
   .content-footer {{ background: #f8f9fa; border-top: 1px solid #eee; padding: 3mm 14mm; display: flex; justify-content: space-between; font-size: 7.5pt; color: #999; flex-shrink: 0; }}
   .content-footer a {{ color: #000; font-weight: 700; text-decoration: none; border-bottom: 1px solid #FFD700; }}
 
   /* PARTIES */
-  .parties {{ display: grid; grid-template-columns: 1fr auto 1fr; gap: 5mm; align-items: start; margin-bottom: 3mm; }}
-  .party-box {{ background: #f8f9fa; border-left: 3px solid #000; padding: 4mm 5mm; }}
+  .parties {{ display: grid; grid-template-columns: 1fr auto 1fr; gap: 6mm; align-items: stretch; margin-bottom: 3mm; }}
+  .party-box {{ background: #f8f9fa; border-left: 3px solid #000; padding: 7mm 8mm; }}
   .party-box.client {{ border-left-color: #FFD700; }}
-  .party-label {{ font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; color: #999; font-weight: 700; margin-bottom: 2mm; }}
-  .party-name {{ font-family: 'Playfair Display', serif; font-size: 12pt; color: #000; margin-bottom: 2mm; }}
-  .party-info {{ font-size: 7.5pt; color: #555; line-height: 1.45; }}
+  .party-label {{ font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; color: #999; font-weight: 700; margin-bottom: 3mm; }}
+  .party-name {{ font-family: 'Playfair Display', serif; font-size: 13pt; color: #000; margin-bottom: 3mm; }}
+  .party-info {{ font-size: 8.5pt; color: #555; line-height: 1.55; }}
   .party-info strong {{ color: #000; }}
   .and-separator {{ display: flex; align-items: center; justify-content: center; }}
-  .and-circle {{ width: 10mm; height: 10mm; background: #000; color: #FFD700; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 9pt; flex-shrink: 0; }}
+  .and-circle {{ width: 12mm; height: 12mm; background: #000; color: #FFD700; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 10pt; flex-shrink: 0; }}
 
-  /* TABLE DES MATIÈRES — 1 colonne */
-  .toc {{ background: #f8f9fa; border-left: 3px solid #FFD700; padding: 5mm 6mm; margin-top: 3mm; }}
-  .toc-title {{ font-weight: 800; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3mm; color: #000; }}
-  .toc-grid {{ display: grid; grid-template-columns: 1fr; gap: 2mm; }}
-  .toc-item {{ font-size: 9pt; color: #555; }}
-  .toc-item strong {{ color: #000; }}
+  /* TABLE DES MATIÈRES — 1 colonne, items espacés */
+  .toc {{ background: #f8f9fa; border-left: 3px solid #FFD700; padding: 6mm 8mm; }}
+  .toc-title {{ font-weight: 800; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4mm; color: #000; }}
+  .toc-grid {{ display: grid; grid-template-columns: 1fr; gap: 0; }}
+  .toc-item {{ font-size: 10.5pt; color: #444; padding: 2.5mm 0; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center; }}
+  .toc-item:last-child {{ border-bottom: none; }}
+  .toc-item strong {{ color: #000; margin-right: 4px; }}
+  .toc-page {{ color: #bbb; font-size: 8.5pt; font-weight: 600; }}
 
   /* ARTICLES */
   .article {{ margin-bottom: 4mm; }}
@@ -215,7 +230,7 @@ def build_contract_html(fields: dict) -> str:
 <!-- ═══════════════════════════════════════ PAGE 1 : COUVERTURE ═══════════════════════════════════════ -->
 <div class="page">
   <div class="header">
-    <div>{logo_tag}</div>
+    <div>{logo_tag_cover}</div>
     <div class="header-right">
       <div class="doc-label">Document contractuel</div>
       <div class="doc-ref">Contrat de prestations de services — Recrutement</div>
@@ -240,11 +255,11 @@ def build_contract_html(fields: dict) -> str:
 <!-- ═══════════════════════════════════════ PAGE 2 : PARTIES + TABLE DES MATIÈRES ═══════════════════════════════════════ -->
 <div class="page">
   <div class="content-header">
-    <div>{logo_tag}</div>
+    <div>{logo_tag_content}</div>
     <div class="content-header-doc">Contrat de Prestations · {fields["client_nom"].upper()}</div>
   </div>
 
-  <div class="content-body">
+  <div class="content-body-p2">
 
     <div class="parties">
       <div class="party-box">
@@ -275,27 +290,29 @@ def build_contract_html(fields: dict) -> str:
       </div>
     </div>
 
-    <div style="text-align:right; font-size:7.5pt; color:#888; margin: 2mm 0 4mm;">
+    <div style="text-align:right; font-size:8pt; color:#888; margin: 3mm 0 5mm;">
       Fait à Paris, le {date_str}
     </div>
 
-    <div style="border-top: 2px solid #FFD700; margin-bottom: 4mm;"></div>
+    <div style="border-top: 2px solid #FFD700;"></div>
 
-    <div class="toc">
-      <div class="toc-title">Table des matières</div>
-      <div class="toc-grid">
-        <div class="toc-item"><strong>1.</strong> Préambule</div>
-        <div class="toc-item"><strong>2.</strong> Objet</div>
-        <div class="toc-item"><strong>3.</strong> Obligations des parties</div>
-        <div class="toc-item"><strong>4.</strong> Durée &amp; Résiliation</div>
-        <div class="toc-item"><strong>5.</strong> Conditions financières</div>
-        <div class="toc-item"><strong>6.</strong> Facturation &amp; Paiement</div>
-        <div class="toc-item"><strong>7.</strong> Garantie</div>
-        <div class="toc-item"><strong>8.</strong> Exclusivité</div>
-        <div class="toc-item"><strong>9.</strong> Confidentialité</div>
-        <div class="toc-item"><strong>10.</strong> Responsabilité</div>
-        <div class="toc-item"><strong>11.</strong> Divers</div>
-        <div class="toc-item"><strong>12.</strong> Loi applicable &amp; Juridiction</div>
+    <div class="toc-expand">
+      <div class="toc">
+        <div class="toc-title">Table des matières</div>
+        <div class="toc-grid">
+          <div class="toc-item"><span><strong>1.</strong> Préambule</span><span class="toc-page">p.3</span></div>
+          <div class="toc-item"><span><strong>2.</strong> Objet</span><span class="toc-page">p.3</span></div>
+          <div class="toc-item"><span><strong>3.</strong> Obligations des parties</span><span class="toc-page">p.3</span></div>
+          <div class="toc-item"><span><strong>4.</strong> Durée &amp; Résiliation</span><span class="toc-page">p.3</span></div>
+          <div class="toc-item"><span><strong>5.</strong> Conditions financières</span><span class="toc-page">p.3</span></div>
+          <div class="toc-item"><span><strong>6.</strong> Facturation &amp; Paiement</span><span class="toc-page">p.4</span></div>
+          <div class="toc-item"><span><strong>7.</strong> Garantie</span><span class="toc-page">p.4</span></div>
+          <div class="toc-item"><span><strong>8.</strong> Exclusivité</span><span class="toc-page">p.4</span></div>
+          <div class="toc-item"><span><strong>9.</strong> Confidentialité</span><span class="toc-page">p.4</span></div>
+          <div class="toc-item"><span><strong>10.</strong> Responsabilité</span><span class="toc-page">p.4</span></div>
+          <div class="toc-item"><span><strong>11.</strong> Divers</span><span class="toc-page">p.4</span></div>
+          <div class="toc-item"><span><strong>12.</strong> Loi applicable &amp; Juridiction</span><span class="toc-page">p.4</span></div>
+        </div>
       </div>
     </div>
 
@@ -311,7 +328,7 @@ def build_contract_html(fields: dict) -> str:
 <!-- ═══════════════════════════════════════ PAGE 3 : ARTICLES 1–5 ═══════════════════════════════════════ -->
 <div class="page">
   <div class="content-header">
-    <div>{logo_tag}</div>
+    <div>{logo_tag_content}</div>
     <div class="content-header-doc">Contrat de Prestations · {fields["client_nom"].upper()}</div>
   </div>
 
@@ -385,7 +402,7 @@ def build_contract_html(fields: dict) -> str:
 <!-- ═══════════════════════════════════════ PAGE 4 : ARTICLES 6–12 + SIGNATURE ═══════════════════════════════════════ -->
 <div class="page">
   <div class="content-header">
-    <div>{logo_tag}</div>
+    <div>{logo_tag_content}</div>
     <div class="content-header-doc">Contrat de Prestations · {fields["client_nom"].upper()}</div>
   </div>
 
