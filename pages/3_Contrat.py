@@ -84,17 +84,30 @@ def build_contract_html(fields: dict) -> str:
     if fields.get("client_logo_b64"):
         client_logo_tag = (
             f'<img src="data:image/png;base64,{fields["client_logo_b64"]}" '
-            f'style="max-height:20mm;max-width:60mm;object-fit:contain;">'
+            f'style="max-height:35mm;max-width:90mm;object-fit:contain;">'
         )
     elif fields.get("client_logo_url"):
         client_logo_tag = (
             f'<img src="{fields["client_logo_url"]}" '
-            f'style="max-height:20mm;max-width:60mm;object-fit:contain;" '
+            f'style="max-height:35mm;max-width:90mm;object-fit:contain;" '
             f'onerror="this.style.display=\'none\'">'
         )
 
     commercial = COMMERCIAUX[fields["commercial"]]
     date_str = fields["date_signature"].strftime("%d/%m/%Y") if fields.get("date_signature") else "___/___/______"
+
+    # Champs optionnels : représentant & titre
+    rep_line = (
+        f'<strong>Représenté par : {fields["client_representant"]}</strong><br>'
+        if fields.get("client_representant") else ""
+    )
+    titre_line = (
+        f'{fields["client_titre_rep"]}'
+        if fields.get("client_titre_rep") else ""
+    )
+
+    client_sig_name = fields.get("client_representant") or "________________________"
+    client_sig_title_prefix = f'{fields["client_titre_rep"]} · ' if fields.get("client_titre_rep") else ""
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -107,7 +120,7 @@ def build_contract_html(fields: dict) -> str:
   body {{ font-family: 'Manrope', sans-serif; background: #555; display: flex; flex-direction: column; align-items: center; padding: 40px 0; gap: 24px; }}
 
   /* PAGE */
-  .page {{ width: 210mm; background: #fff; box-shadow: 0 0 20px rgba(0,0,0,.5); display: flex; flex-direction: column; position: relative; }}
+  .page {{ width: 210mm; height: 297mm; min-height: 297mm; background: #fff; box-shadow: 0 0 20px rgba(0,0,0,.5); display: flex; flex-direction: column; position: relative; overflow: hidden; }}
 
   /* HEADER */
   .header {{ background: #000; border-bottom: 2.5mm solid #FFD700; padding: 0 14mm; height: 24mm; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }}
@@ -116,26 +129,15 @@ def build_contract_html(fields: dict) -> str:
   .doc-ref {{ color: #fff; font-size: 9pt; font-weight: 600; margin-top: 2px; }}
 
   /* COUVERTURE */
-  .cover-body {{ padding: 12mm 14mm; flex-grow: 1; display: flex; flex-direction: column; gap: 8mm; }}
-  .cover-title {{ font-family: 'Playfair Display', serif; font-size: 22pt; color: #000; text-align: center; padding: 8mm 0 4mm; border-bottom: 1px solid #FFD700; }}
-  .cover-subtitle {{ font-size: 9pt; color: #777; text-align: center; margin-top: 2mm; text-transform: uppercase; letter-spacing: 1px; }}
+  .cover-body {{ padding: 12mm 14mm; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 0; }}
+  .cover-title {{ font-family: 'Playfair Display', serif; font-size: 24pt; color: #000; padding: 8mm 0 4mm; border-bottom: 2px solid #FFD700; }}
+  .cover-subtitle {{ font-size: 9.5pt; color: #777; margin-top: 4mm; text-transform: uppercase; letter-spacing: 1.5px; }}
 
-  /* PARTIES */
-  .parties {{ display: grid; grid-template-columns: 1fr auto 1fr; gap: 6mm; align-items: start; margin-top: 4mm; }}
-  .party-box {{ background: #f8f9fa; border-left: 3px solid #000; padding: 5mm 6mm; }}
-  .party-box.client {{ border-left-color: #FFD700; }}
-  .party-label {{ font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; color: #999; font-weight: 700; margin-bottom: 3mm; }}
-  .party-name {{ font-family: 'Playfair Display', serif; font-size: 13pt; color: #000; margin-bottom: 2mm; }}
-  .party-info {{ font-size: 8pt; color: #555; line-height: 1.5; }}
-  .party-info strong {{ color: #000; }}
-  .and-separator {{ display: flex; align-items: center; justify-content: center; }}
-  .and-circle {{ width: 10mm; height: 10mm; background: #000; color: #FFD700; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 9pt; flex-shrink: 0; }}
-
-  /* CLIENT LOGO */
-  .client-logo-wrap {{ text-align: center; padding: 4mm 0 2mm; }}
+  /* CLIENT LOGO sur la couverture */
+  .client-logo-cover {{ margin-top: 14mm; display: flex; align-items: center; justify-content: center; }}
 
   /* FOOTER COVER */
-  .cover-footer {{ margin-top: auto; background: #f8f9fa; border-top: 1px solid #eee; padding: 4mm 14mm; display: flex; justify-content: space-between; align-items: center; font-size: 8pt; color: #777; }}
+  .cover-footer {{ margin-top: auto; background: #f8f9fa; border-top: 1px solid #eee; padding: 4mm 14mm; display: flex; justify-content: space-between; align-items: center; font-size: 8pt; color: #777; flex-shrink: 0; }}
   .cover-footer a {{ color: #000; font-weight: 700; text-decoration: none; border-bottom: 1px solid #FFD700; }}
 
   /* PAGE DE CONTENU */
@@ -145,6 +147,17 @@ def build_contract_html(fields: dict) -> str:
   .content-body {{ padding: 8mm 14mm 6mm; flex-grow: 1; }}
   .content-footer {{ background: #f8f9fa; border-top: 1px solid #eee; padding: 3mm 14mm; display: flex; justify-content: space-between; font-size: 7.5pt; color: #999; flex-shrink: 0; }}
   .content-footer a {{ color: #000; font-weight: 700; text-decoration: none; border-bottom: 1px solid #FFD700; }}
+
+  /* PARTIES */
+  .parties {{ display: grid; grid-template-columns: 1fr auto 1fr; gap: 6mm; align-items: start; margin-bottom: 4mm; }}
+  .party-box {{ background: #f8f9fa; border-left: 3px solid #000; padding: 5mm 6mm; }}
+  .party-box.client {{ border-left-color: #FFD700; }}
+  .party-label {{ font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; color: #999; font-weight: 700; margin-bottom: 3mm; }}
+  .party-name {{ font-family: 'Playfair Display', serif; font-size: 13pt; color: #000; margin-bottom: 2mm; }}
+  .party-info {{ font-size: 8pt; color: #555; line-height: 1.5; }}
+  .party-info strong {{ color: #000; }}
+  .and-separator {{ display: flex; align-items: center; justify-content: center; }}
+  .and-circle {{ width: 10mm; height: 10mm; background: #000; color: #FFD700; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 9pt; flex-shrink: 0; }}
 
   /* ARTICLES */
   .toc {{ background: #f8f9fa; border-left: 3px solid #FFD700; padding: 5mm 6mm; margin-bottom: 6mm; }}
@@ -217,7 +230,23 @@ def build_contract_html(fields: dict) -> str:
       <div class="cover-subtitle">Recrutement &amp; Chasse de Têtes — Cadres Dirigeants</div>
     </div>
 
-    {"<div class='client-logo-wrap'>" + client_logo_tag + "</div>" if client_logo_tag else ""}
+    {('<div class="client-logo-cover">' + client_logo_tag + '</div>') if client_logo_tag else ''}
+  </div>
+
+  <div class="cover-footer">
+    <span>Entourage Recrutement · 36 rue du Faubourg Saint-Honoré, 75008 Paris</span>
+    <span><a href="{commercial['linkedin']}" target="_blank">{fields["commercial"]}</a> · {commercial["tel"]}</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ PAGE 2 : PARTIES + TABLE DES MATIÈRES ═══════════════════════════════════════ -->
+<div class="page">
+  <div class="content-header">
+    <div class="content-header-brand">ENTOURAGE RECRUTEMENT</div>
+    <div class="content-header-doc">Contrat de Prestations · {fields["client_nom"].upper()}</div>
+  </div>
+
+  <div class="content-body">
 
     <div class="parties">
       <div class="party-box">
@@ -242,31 +271,18 @@ def build_contract_html(fields: dict) -> str:
         <div class="party-info">
           SIRET : {fields["client_siret"]}<br>
           {fields["client_adresse"]}<br>
-          <strong>Représenté par : {fields["client_representant"]}</strong><br>
-          {fields["client_titre_rep"]}
+          {rep_line}
+          {titre_line}
         </div>
       </div>
     </div>
 
-    <div class="highlight">
-      📅 &nbsp;Fait à Paris, le {date_str} &nbsp;·&nbsp; Contrat à durée indéterminée
+    <div style="text-align:right; font-size:8pt; color:#888; margin: 3mm 0 5mm;">
+      Fait à Paris, le {date_str}
     </div>
-  </div>
 
-  <div class="cover-footer">
-    <span>Entourage Recrutement · 36 rue du Faubourg Saint-Honoré, 75008 Paris</span>
-    <span><a href="{commercial['linkedin']}" target="_blank">{fields["commercial"]}</a> · {commercial["tel"]}</span>
-  </div>
-</div>
+    <div style="border-top: 2px solid #FFD700; margin-bottom: 6mm;"></div>
 
-<!-- ═══════════════════════════════════════ PAGE 2 : PRÉAMBULE + ARTICLES 1–5 ═══════════════════════════════════════ -->
-<div class="page">
-  <div class="content-header">
-    <div class="content-header-brand">ENTOURAGE RECRUTEMENT</div>
-    <div class="content-header-doc">Contrat de Prestations · {fields["client_nom"].upper()}</div>
-  </div>
-
-  <div class="content-body">
     <div class="toc">
       <div class="toc-title">Table des matières</div>
       <div class="toc-grid">
@@ -276,14 +292,32 @@ def build_contract_html(fields: dict) -> str:
         <div class="toc-item"><strong>8.</strong> Exclusivité</div>
         <div class="toc-item"><strong>3.</strong> Obligations des parties</div>
         <div class="toc-item"><strong>9.</strong> Confidentialité</div>
-        <div class="toc-item"><strong>4.</strong> Durée & Résiliation</div>
+        <div class="toc-item"><strong>4.</strong> Durée &amp; Résiliation</div>
         <div class="toc-item"><strong>10.</strong> Responsabilité</div>
         <div class="toc-item"><strong>5.</strong> Conditions financières</div>
         <div class="toc-item"><strong>11.</strong> Divers</div>
-        <div class="toc-item"><strong>6.</strong> Facturation & Paiement</div>
+        <div class="toc-item"><strong>6.</strong> Facturation &amp; Paiement</div>
         <div class="toc-item"><strong>12.</strong> Loi applicable</div>
       </div>
     </div>
+
+  </div>
+
+  <div class="content-footer">
+    <span>Entourage Recrutement · SAS · RCS Paris 828 310 581</span>
+    <span>Page 2 / 4</span>
+    <span><a href="{commercial['linkedin']}">{fields["commercial"]}</a> · {commercial["tel"]}</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ PAGE 3 : ARTICLES 1–5 ═══════════════════════════════════════ -->
+<div class="page">
+  <div class="content-header">
+    <div class="content-header-brand">ENTOURAGE RECRUTEMENT</div>
+    <div class="content-header-doc">Contrat de Prestations · {fields["client_nom"].upper()}</div>
+  </div>
+
+  <div class="content-body">
 
     <div class="article">
       <div class="article-title"><div class="article-num">1</div> Préambule</div>
@@ -322,7 +356,7 @@ def build_contract_html(fields: dict) -> str:
     </div>
 
     <div class="article">
-      <div class="article-title"><div class="article-num">4</div> Durée & Résiliation</div>
+      <div class="article-title"><div class="article-num">4</div> Durée &amp; Résiliation</div>
       <div class="article-body">
         <p>Le présent Contrat est conclu pour une <strong>durée indéterminée</strong>.</p>
         <p>Chaque Partie pourra résilier le Contrat pour convenance en respectant un <strong>préavis écrit d'un (1) mois</strong>, sans indemnité réciproque.</p>
@@ -340,16 +374,17 @@ def build_contract_html(fields: dict) -> str:
         <p>Si le Client avait connaissance d'un candidat présenté par le Prestataire dans les <strong>six (6) mois</strong> précédant son introduction, il devra en informer immédiatement le Prestataire. Au-delà de cette période, le candidat sera considéré comme présenté par le Prestataire.</p>
       </div>
     </div>
+
   </div>
 
   <div class="content-footer">
     <span>Entourage Recrutement · SAS · RCS Paris 828 310 581</span>
-    <span>Page 2 / 3</span>
+    <span>Page 3 / 4</span>
     <span><a href="{commercial['linkedin']}">{fields["commercial"]}</a> · {commercial["tel"]}</span>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════ PAGE 3 : ARTICLES 6–12 + SIGNATURE ═══════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════ PAGE 4 : ARTICLES 6–12 + SIGNATURE ═══════════════════════════════════════ -->
 <div class="page">
   <div class="content-header">
     <div class="content-header-brand">ENTOURAGE RECRUTEMENT</div>
@@ -358,7 +393,7 @@ def build_contract_html(fields: dict) -> str:
 
   <div class="content-body">
     <div class="article">
-      <div class="article-title"><div class="article-num">6</div> Facturation & Conditions de Paiement</div>
+      <div class="article-title"><div class="article-num">6</div> Facturation &amp; Conditions de Paiement</div>
       <div class="article-body">
         <p>Le Prestataire émettra une facture dès qu'une offre d'embauche aura été <strong>acceptée</strong> par un candidat présenté.</p>
         <div class="highlight">Délai de paiement : <strong>{fields["paiement_jours"]} jours</strong> à compter de la date de facturation.</div>
@@ -407,7 +442,7 @@ def build_contract_html(fields: dict) -> str:
     </div>
 
     <div class="article">
-      <div class="article-title"><div class="article-num">12</div> Loi Applicable & Juridiction</div>
+      <div class="article-title"><div class="article-num">12</div> Loi Applicable &amp; Juridiction</div>
       <div class="article-body">
         <p>Le présent Contrat est régi par le <strong>droit français</strong>. En cas de litige, les Parties s'engagent à rechercher une solution amiable avant toute action judiciaire. À défaut d'accord, les <strong>tribunaux compétents seront ceux du Tribunal de Commerce de Paris</strong>.</p>
       </div>
@@ -419,8 +454,8 @@ def build_contract_html(fields: dict) -> str:
       <div class="signature-grid">
         <div class="sig-box">
           <div class="sig-label">Pour le Client</div>
-          <div class="sig-name">{fields["client_representant"]}</div>
-          <div class="sig-title">{fields["client_titre_rep"]} · {fields["client_nom"]}</div>
+          <div class="sig-name">{client_sig_name}</div>
+          <div class="sig-title">{client_sig_title_prefix}{fields["client_nom"]}</div>
           <div class="sig-date">Fait à ____________, le {date_str}</div>
           <div class="sig-area"></div>
           <div class="sig-lu">Lu et approuvé — Bon pour accord</div>
@@ -439,7 +474,7 @@ def build_contract_html(fields: dict) -> str:
 
   <div class="content-footer">
     <span>Entourage Recrutement · SAS · RCS Paris 828 310 581</span>
-    <span>Page 3 / 3</span>
+    <span>Page 4 / 4</span>
     <span><a href="{commercial['linkedin']}">{fields["commercial"]}</a> · {commercial["tel"]}</span>
   </div>
 </div>
@@ -511,8 +546,8 @@ with col1:
     client_siret = st.text_input("N° SIRET *", placeholder="Ex : 338 308 364 00011")
     client_adresse = st.text_input("Adresse du siège social *", placeholder="Ex : 11 rue de l'Atome, 67800 Bischheim")
 with col2:
-    client_representant = st.text_input("Représentant légal *", placeholder="Ex : Jean Dupont")
-    client_titre_rep = st.text_input("Titre du représentant *", placeholder="Ex : Directeur Général")
+    client_representant = st.text_input("Représentant légal (optionnel)", placeholder="Ex : Jean Dupont")
+    client_titre_rep = st.text_input("Titre du représentant (optionnel)", placeholder="Ex : Directeur Général")
     client_activite = st.text_input("Secteur / Activité *", placeholder="Ex : commerce de gros d'équipements industriels")
 
 st.markdown("##### Logo client (optionnel)")
@@ -560,8 +595,8 @@ with col2:
 
 st.divider()
 
-# Vérification champs obligatoires
-champs_requis = [client_nom, client_siret, client_adresse, client_representant, client_titre_rep, client_activite]
+# Vérification champs obligatoires (représentant et titre ne sont plus obligatoires)
+champs_requis = [client_nom, client_siret, client_adresse, client_activite]
 tous_remplis = all(c.strip() for c in champs_requis)
 
 if not tous_remplis:
@@ -610,4 +645,4 @@ if "contrat_html" in st.session_state:
     st.caption("💡 Cliquer sur 📄 Télécharger PDF → fenêtre d'impression → Enregistrer en PDF")
 
     st.subheader("Aperçu")
-    st.components.v1.html(st.session_state.contrat_html, height=1200, scrolling=True)
+    st.components.v1.html(st.session_state.contrat_html, height=1400, scrolling=True)
