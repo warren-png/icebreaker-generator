@@ -29,7 +29,7 @@ COMMERCIAUX = {
     "Helder Alturas": {
         "linkedin": "https://www.linkedin.com/in/helder-alturas-48010463/",
         "tel": "06 22 30 96 11",
-        "titre": "Consultant"
+        "titre": "Directeur Général"
     }
 }
 
@@ -75,9 +75,9 @@ def get_logo_entourage() -> str:
 def build_contract_html(fields: dict) -> str:
     logo_b64 = get_logo_entourage()
     logo_tag = (
-        f'<img src="data:image/png;base64,{logo_b64}" style="height:16mm;object-fit:contain;">'
+        f'<img src="data:image/png;base64,{logo_b64}" style="height:14mm;object-fit:contain;">'
         if logo_b64 else
-        '<span class="brand">ENTOURAGE RECRUTEMENT</span>'
+        '<span style="color:#FFD700;font-weight:800;font-size:11pt;letter-spacing:1px;">ENTOURAGE RECRUTEMENT</span>'
     )
 
     client_logo_tag = ""
@@ -107,7 +107,7 @@ def build_contract_html(fields: dict) -> str:
     )
 
     client_sig_name = fields.get("client_representant") or "________________________"
-    client_sig_title_prefix = f'{fields["client_titre_rep"]} · ' if fields.get("client_titre_rep") else ""
+    client_sig_title_prefix = f'{fields["client_titre_rep"]} &middot; ' if fields.get("client_titre_rep") else ""
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -119,64 +119,62 @@ def build_contract_html(fields: dict) -> str:
   * {{ box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
   body {{ font-family: 'Manrope', sans-serif; background: #555; display: flex; flex-direction: column; align-items: center; padding: 40px 0; gap: 24px; }}
 
-  /* PAGE */
-  .page {{ width: 210mm; height: 297mm; min-height: 297mm; background: #fff; box-shadow: 0 0 20px rgba(0,0,0,.5); display: flex; flex-direction: column; position: relative; overflow: hidden; }}
+  /* PAGE — min-height uniquement pour le preview ; pas d'overflow:hidden pour que les signatures s'affichent */
+  .page {{ width: 210mm; min-height: 297mm; background: #fff; box-shadow: 0 0 20px rgba(0,0,0,.5); display: flex; flex-direction: column; position: relative; }}
 
-  /* HEADER */
+  /* HEADER COUVERTURE */
   .header {{ background: #000; border-bottom: 2.5mm solid #FFD700; padding: 0 14mm; height: 24mm; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }}
   .header-right {{ text-align: right; }}
   .doc-label {{ color: #FFD700; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }}
   .doc-ref {{ color: #fff; font-size: 9pt; font-weight: 600; margin-top: 2px; }}
 
   /* COUVERTURE */
-  .cover-body {{ padding: 12mm 14mm; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 0; }}
+  .cover-body {{ padding: 12mm 14mm; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }}
   .cover-title {{ font-family: 'Playfair Display', serif; font-size: 24pt; color: #000; padding: 8mm 0 4mm; border-bottom: 2px solid #FFD700; }}
   .cover-subtitle {{ font-size: 9.5pt; color: #777; margin-top: 4mm; text-transform: uppercase; letter-spacing: 1.5px; }}
-
-  /* CLIENT LOGO sur la couverture */
   .client-logo-cover {{ margin-top: 14mm; display: flex; align-items: center; justify-content: center; }}
 
   /* FOOTER COVER */
   .cover-footer {{ margin-top: auto; background: #f8f9fa; border-top: 1px solid #eee; padding: 4mm 14mm; display: flex; justify-content: space-between; align-items: center; font-size: 8pt; color: #777; flex-shrink: 0; }}
   .cover-footer a {{ color: #000; font-weight: 700; text-decoration: none; border-bottom: 1px solid #FFD700; }}
 
-  /* PAGE DE CONTENU */
-  .content-header {{ background: #000; height: 10mm; display: flex; align-items: center; padding: 0 14mm; border-bottom: 1.5mm solid #FFD700; flex-shrink: 0; }}
-  .content-header-brand {{ color: #fff; font-size: 8pt; font-weight: 700; letter-spacing: 1px; flex: 1; }}
+  /* HEADER PAGES DE CONTENU (avec logo) */
+  .content-header {{ background: #000; height: 16mm; display: flex; align-items: center; padding: 0 14mm; border-bottom: 1.5mm solid #FFD700; flex-shrink: 0; justify-content: space-between; }}
   .content-header-doc {{ color: #FFD700; font-size: 7pt; text-align: right; }}
-  .content-body {{ padding: 8mm 14mm 6mm; flex-grow: 1; }}
+  .content-body {{ padding: 6mm 14mm 4mm; flex-grow: 1; }}
   .content-footer {{ background: #f8f9fa; border-top: 1px solid #eee; padding: 3mm 14mm; display: flex; justify-content: space-between; font-size: 7.5pt; color: #999; flex-shrink: 0; }}
   .content-footer a {{ color: #000; font-weight: 700; text-decoration: none; border-bottom: 1px solid #FFD700; }}
 
   /* PARTIES */
-  .parties {{ display: grid; grid-template-columns: 1fr auto 1fr; gap: 6mm; align-items: start; margin-bottom: 4mm; }}
-  .party-box {{ background: #f8f9fa; border-left: 3px solid #000; padding: 5mm 6mm; }}
+  .parties {{ display: grid; grid-template-columns: 1fr auto 1fr; gap: 5mm; align-items: start; margin-bottom: 3mm; }}
+  .party-box {{ background: #f8f9fa; border-left: 3px solid #000; padding: 4mm 5mm; }}
   .party-box.client {{ border-left-color: #FFD700; }}
-  .party-label {{ font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; color: #999; font-weight: 700; margin-bottom: 3mm; }}
-  .party-name {{ font-family: 'Playfair Display', serif; font-size: 13pt; color: #000; margin-bottom: 2mm; }}
-  .party-info {{ font-size: 8pt; color: #555; line-height: 1.5; }}
+  .party-label {{ font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; color: #999; font-weight: 700; margin-bottom: 2mm; }}
+  .party-name {{ font-family: 'Playfair Display', serif; font-size: 12pt; color: #000; margin-bottom: 2mm; }}
+  .party-info {{ font-size: 7.5pt; color: #555; line-height: 1.45; }}
   .party-info strong {{ color: #000; }}
   .and-separator {{ display: flex; align-items: center; justify-content: center; }}
   .and-circle {{ width: 10mm; height: 10mm; background: #000; color: #FFD700; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 9pt; flex-shrink: 0; }}
 
-  /* ARTICLES */
-  .toc {{ background: #f8f9fa; border-left: 3px solid #FFD700; padding: 5mm 6mm; margin-bottom: 6mm; }}
+  /* TABLE DES MATIÈRES — 1 colonne */
+  .toc {{ background: #f8f9fa; border-left: 3px solid #FFD700; padding: 5mm 6mm; margin-top: 3mm; }}
   .toc-title {{ font-weight: 800; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3mm; color: #000; }}
-  .toc-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 6mm; }}
-  .toc-item {{ font-size: 8pt; color: #555; }}
+  .toc-grid {{ display: grid; grid-template-columns: 1fr; gap: 2mm; }}
+  .toc-item {{ font-size: 9pt; color: #555; }}
   .toc-item strong {{ color: #000; }}
 
-  .article {{ margin-bottom: 6mm; }}
+  /* ARTICLES */
+  .article {{ margin-bottom: 4mm; }}
   .article-title {{
     font-family: 'Playfair Display', serif;
-    font-size: 12pt;
+    font-size: 11pt;
     color: #000;
     border-bottom: 1px solid #eee;
-    padding-bottom: 2mm;
-    margin-bottom: 3mm;
+    padding-bottom: 1.5mm;
+    margin-bottom: 2mm;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }}
   .article-num {{
     background: #000;
@@ -184,26 +182,26 @@ def build_contract_html(fields: dict) -> str:
     font-family: 'Manrope', sans-serif;
     font-size: 8pt;
     font-weight: 800;
-    width: 7mm; height: 7mm;
+    width: 6mm; height: 6mm;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }}
-  .article-body {{ font-size: 8.5pt; line-height: 1.55; color: #333; text-align: justify; }}
-  .article-body p {{ margin-bottom: 2mm; }}
-  .article-body ul {{ padding-left: 5mm; margin: 1mm 0 2mm; }}
-  .article-body li {{ margin-bottom: 1mm; }}
-  .highlight {{ background: #fffcf0; border-left: 2px solid #FFD700; padding: 2mm 4mm; margin: 2mm 0; font-weight: 600; color: #000; font-size: 8.5pt; }}
+  .article-body {{ font-size: 8pt; line-height: 1.45; color: #333; text-align: justify; }}
+  .article-body p {{ margin-bottom: 1.5mm; }}
+  .article-body ul {{ padding-left: 4mm; margin: 1mm 0 1.5mm; }}
+  .article-body li {{ margin-bottom: 0.8mm; }}
+  .highlight {{ background: #fffcf0; border-left: 2px solid #FFD700; padding: 1.5mm 4mm; margin: 1.5mm 0; font-weight: 600; color: #000; font-size: 8pt; }}
 
   /* SIGNATURE */
-  .signature-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; margin-top: 4mm; }}
-  .sig-box {{ border: 1px solid #ddd; border-radius: 4px; padding: 5mm; }}
-  .sig-label {{ font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.5px; color: #999; font-weight: 700; margin-bottom: 3mm; }}
-  .sig-name {{ font-weight: 800; font-size: 10pt; color: #000; }}
-  .sig-title {{ font-size: 8pt; color: #777; margin-bottom: 4mm; }}
-  .sig-date {{ font-size: 8pt; color: #555; margin-bottom: 2mm; }}
-  .sig-area {{ border-bottom: 1px solid #ccc; height: 15mm; margin-top: 2mm; }}
-  .sig-lu {{ font-size: 7pt; color: #aaa; margin-top: 1mm; font-style: italic; }}
+  .signature-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-top: 3mm; }}
+  .sig-box {{ border: 1px solid #ddd; border-radius: 4px; padding: 4mm; }}
+  .sig-label {{ font-size: 7pt; text-transform: uppercase; letter-spacing: 0.5px; color: #999; font-weight: 700; margin-bottom: 2mm; }}
+  .sig-name {{ font-weight: 800; font-size: 9.5pt; color: #000; }}
+  .sig-title {{ font-size: 7.5pt; color: #777; margin-bottom: 3mm; }}
+  .sig-date {{ font-size: 7.5pt; color: #555; margin-bottom: 2mm; }}
+  .sig-area {{ border-bottom: 1px solid #ccc; height: 12mm; margin-top: 2mm; }}
+  .sig-lu {{ font-size: 6.5pt; color: #aaa; margin-top: 1mm; font-style: italic; }}
 
   @media print {{
     body {{ background: none; padding: 0; gap: 0; }}
@@ -242,7 +240,7 @@ def build_contract_html(fields: dict) -> str:
 <!-- ═══════════════════════════════════════ PAGE 2 : PARTIES + TABLE DES MATIÈRES ═══════════════════════════════════════ -->
 <div class="page">
   <div class="content-header">
-    <div class="content-header-brand">ENTOURAGE RECRUTEMENT</div>
+    <div>{logo_tag}</div>
     <div class="content-header-doc">Contrat de Prestations · {fields["client_nom"].upper()}</div>
   </div>
 
@@ -253,8 +251,8 @@ def build_contract_html(fields: dict) -> str:
         <div class="party-label">Le Prestataire</div>
         <div class="party-name">Entourage Recrutement</div>
         <div class="party-info">
-          SAS au capital de 1 000 €<br>
-          RCS Paris — n° 828 310 581<br>
+          SAS au capital de 1 000 &euro;<br>
+          RCS Paris — n&deg; 828 310 581<br>
           36 rue du Faubourg Saint-Honoré, 75008 Paris<br>
           <strong>Représenté par : {fields["commercial"]}</strong><br>
           {commercial["titre"]}
@@ -277,27 +275,27 @@ def build_contract_html(fields: dict) -> str:
       </div>
     </div>
 
-    <div style="text-align:right; font-size:8pt; color:#888; margin: 3mm 0 5mm;">
+    <div style="text-align:right; font-size:7.5pt; color:#888; margin: 2mm 0 4mm;">
       Fait à Paris, le {date_str}
     </div>
 
-    <div style="border-top: 2px solid #FFD700; margin-bottom: 6mm;"></div>
+    <div style="border-top: 2px solid #FFD700; margin-bottom: 4mm;"></div>
 
     <div class="toc">
       <div class="toc-title">Table des matières</div>
       <div class="toc-grid">
         <div class="toc-item"><strong>1.</strong> Préambule</div>
-        <div class="toc-item"><strong>7.</strong> Garantie</div>
         <div class="toc-item"><strong>2.</strong> Objet</div>
-        <div class="toc-item"><strong>8.</strong> Exclusivité</div>
         <div class="toc-item"><strong>3.</strong> Obligations des parties</div>
-        <div class="toc-item"><strong>9.</strong> Confidentialité</div>
         <div class="toc-item"><strong>4.</strong> Durée &amp; Résiliation</div>
-        <div class="toc-item"><strong>10.</strong> Responsabilité</div>
         <div class="toc-item"><strong>5.</strong> Conditions financières</div>
-        <div class="toc-item"><strong>11.</strong> Divers</div>
         <div class="toc-item"><strong>6.</strong> Facturation &amp; Paiement</div>
-        <div class="toc-item"><strong>12.</strong> Loi applicable</div>
+        <div class="toc-item"><strong>7.</strong> Garantie</div>
+        <div class="toc-item"><strong>8.</strong> Exclusivité</div>
+        <div class="toc-item"><strong>9.</strong> Confidentialité</div>
+        <div class="toc-item"><strong>10.</strong> Responsabilité</div>
+        <div class="toc-item"><strong>11.</strong> Divers</div>
+        <div class="toc-item"><strong>12.</strong> Loi applicable &amp; Juridiction</div>
       </div>
     </div>
 
@@ -313,7 +311,7 @@ def build_contract_html(fields: dict) -> str:
 <!-- ═══════════════════════════════════════ PAGE 3 : ARTICLES 1–5 ═══════════════════════════════════════ -->
 <div class="page">
   <div class="content-header">
-    <div class="content-header-brand">ENTOURAGE RECRUTEMENT</div>
+    <div>{logo_tag}</div>
     <div class="content-header-doc">Contrat de Prestations · {fields["client_nom"].upper()}</div>
   </div>
 
@@ -331,7 +329,7 @@ def build_contract_html(fields: dict) -> str:
     <div class="article">
       <div class="article-title"><div class="article-num">2</div> Objet</div>
       <div class="article-body">
-        <p>Le présent Contrat définit les modalités selon lesquelles le Prestataire effectuera, pour le compte du Client, la <strong>recherche, la sélection et la présentation de candidats</strong> en vue d'une embauche en CDI (ci-après la « Prestation »).</p>
+        <p>Le présent Contrat définit les modalités selon lesquelles le Prestataire effectuera, pour le compte du Client, la <strong>recherche, la sélection et la présentation de candidats</strong> en vue d'une embauche en CDI (ci-après la &laquo;&nbsp;Prestation&nbsp;&raquo;).</p>
         <p>Il est expressément convenu que ce Contrat ne comprend pas la mise à disposition de personnel au sens du Code du travail.</p>
       </div>
     </div>
@@ -345,7 +343,7 @@ def build_contract_html(fields: dict) -> str:
           <li>Notifier sans délai le Prestataire dès qu'une offre d'embauche est formulée à un candidat présenté, en précisant la date d'entrée effective.</li>
           <li>Désigner un interlocuteur référent pour assurer la fluidité du processus.</li>
         </ul>
-        <p style="margin-top:3mm;"><strong>3.2 Obligations du Prestataire</strong></p>
+        <p style="margin-top:2mm;"><strong>3.2 Obligations du Prestataire</strong></p>
         <ul>
           <li>Réaliser la Prestation en conformité avec la législation en vigueur, sans discrimination d'aucune sorte.</li>
           <li>Conseiller et orienter le Client afin de lui proposer les profils les mieux adaptés à ses besoins.</li>
@@ -387,7 +385,7 @@ def build_contract_html(fields: dict) -> str:
 <!-- ═══════════════════════════════════════ PAGE 4 : ARTICLES 6–12 + SIGNATURE ═══════════════════════════════════════ -->
 <div class="page">
   <div class="content-header">
-    <div class="content-header-brand">ENTOURAGE RECRUTEMENT</div>
+    <div>{logo_tag}</div>
     <div class="content-header-doc">Contrat de Prestations · {fields["client_nom"].upper()}</div>
   </div>
 
@@ -397,7 +395,7 @@ def build_contract_html(fields: dict) -> str:
       <div class="article-body">
         <p>Le Prestataire émettra une facture dès qu'une offre d'embauche aura été <strong>acceptée</strong> par un candidat présenté.</p>
         <div class="highlight">Délai de paiement : <strong>{fields["paiement_jours"]} jours</strong> à compter de la date de facturation.</div>
-        <p>En cas de retard, le Prestataire pourra appliquer, conformément à l'article L 441-6 du Code de Commerce, des intérêts de retard équivalents à <strong>trois (3) fois le taux légal en vigueur</strong>, ainsi qu'une indemnité forfaitaire de recouvrement de 40 €.</p>
+        <p>En cas de retard, des intérêts équivalents à <strong>trois (3) fois le taux légal en vigueur</strong> seront applicables, ainsi qu'une indemnité forfaitaire de recouvrement de 40 &euro;.</p>
       </div>
     </div>
 
@@ -405,9 +403,8 @@ def build_contract_html(fields: dict) -> str:
       <div class="article-title"><div class="article-num">7</div> Garantie</div>
       <div class="article-body">
         <div class="highlight">Garantie de remplacement : <strong>{fields["garantie_mois"]} mois</strong> suivant la prise de poste effective du candidat.</div>
-        <p>Si, pendant cette période, le candidat venait à quitter son emploi pour quelque cause que ce soit, le Prestataire s'engage à effectuer une nouvelle recherche <strong>sans frais supplémentaires</strong>, sous réserve que l'intégralité des honoraires initiaux ait été réglée.</p>
-        <p>Cette garantie ne s'applique pas en cas de départ lié à : licenciement économique, restructuration, inadéquation entre le poste défini et la réalité des missions, ou faute imputable au Client.</p>
-        <p>Si le candidat ne démarre jamais son emploi après acceptation de l'offre, le Prestataire remboursera l'intégralité des honoraires perçus.</p>
+        <p>Si le candidat venait à quitter son emploi pendant cette période, le Prestataire s'engage à effectuer une nouvelle recherche <strong>sans frais supplémentaires</strong>, sous réserve que les honoraires aient été intégralement réglés.</p>
+        <p>Garantie non applicable en cas de licenciement économique, restructuration ou faute imputable au Client. En cas de non-démarrage du candidat, les honoraires perçus seront remboursés.</p>
       </div>
     </div>
 
@@ -421,36 +418,34 @@ def build_contract_html(fields: dict) -> str:
     <div class="article">
       <div class="article-title"><div class="article-num">9</div> Confidentialité</div>
       <div class="article-body">
-        <p>Les Parties s'engagent à traiter de manière <strong>strictement confidentielle</strong> toutes les informations, documents et données dont elles auront connaissance dans le cadre du présent Contrat, pendant toute sa durée et après sa cessation.</p>
-        <p>Cette obligation ne s'applique pas aux informations déjà du domaine public, connues antérieurement ou communiquées en vertu d'une décision judiciaire.</p>
+        <p>Les Parties s'engagent à traiter de manière <strong>strictement confidentielle</strong> toutes les informations et données dont elles auront connaissance dans le cadre du présent Contrat, pendant toute sa durée et après sa cessation.</p>
       </div>
     </div>
 
     <div class="article">
       <div class="article-title"><div class="article-num">10</div> Responsabilité</div>
       <div class="article-body">
-        <p>Le Prestataire exécute la Prestation sous une <strong>obligation de moyens</strong>. Le Client demeure seul décisionnaire quant à la sélection finale des candidats présentés.</p>
-        <p>La responsabilité du Prestataire, en cas de manquement, sera limitée au montant des honoraires prévus ou perçus dans le cadre du présent Contrat. En aucun cas, le Prestataire ne pourra être tenu responsable de dommages indirects.</p>
+        <p>Le Prestataire exécute la Prestation sous une <strong>obligation de moyens</strong>. Sa responsabilité en cas de manquement sera limitée au montant des honoraires du présent Contrat. Aucun dommage indirect ne pourra être imputé au Prestataire.</p>
       </div>
     </div>
 
     <div class="article">
       <div class="article-title"><div class="article-num">11</div> Divers</div>
       <div class="article-body">
-        <p>Le présent Contrat constitue l'intégralité de l'accord entre les Parties et prévaut sur toute condition générale antérieure. Il est conclu en considération de la personne des Parties et ne pourra être cédé sans accord écrit préalable. Toute modification devra faire l'objet d'un avenant signé par les deux Parties.</p>
+        <p>Le présent Contrat constitue l'intégralité de l'accord entre les Parties. Il ne pourra être cédé sans accord écrit préalable. Toute modification devra faire l'objet d'un avenant signé par les deux Parties.</p>
       </div>
     </div>
 
     <div class="article">
       <div class="article-title"><div class="article-num">12</div> Loi Applicable &amp; Juridiction</div>
       <div class="article-body">
-        <p>Le présent Contrat est régi par le <strong>droit français</strong>. En cas de litige, les Parties s'engagent à rechercher une solution amiable avant toute action judiciaire. À défaut d'accord, les <strong>tribunaux compétents seront ceux du Tribunal de Commerce de Paris</strong>.</p>
+        <p>Le présent Contrat est régi par le <strong>droit français</strong>. À défaut de solution amiable, les <strong>tribunaux du Tribunal de Commerce de Paris</strong> seront compétents.</p>
       </div>
     </div>
 
     <!-- SIGNATURES -->
-    <div style="margin-top:6mm; padding-top:4mm; border-top: 2px solid #FFD700;">
-      <div style="font-family:'Playfair Display',serif; font-size:12pt; color:#000; margin-bottom:4mm;">Signatures</div>
+    <div style="margin-top:5mm; padding-top:3mm; border-top: 2px solid #FFD700;">
+      <div style="font-family:'Playfair Display',serif; font-size:11pt; color:#000; margin-bottom:3mm;">Signatures</div>
       <div class="signature-grid">
         <div class="sig-box">
           <div class="sig-label">Pour le Client</div>
@@ -463,7 +458,7 @@ def build_contract_html(fields: dict) -> str:
         <div class="sig-box">
           <div class="sig-label">Pour Entourage Recrutement</div>
           <div class="sig-name">{fields["commercial"]}</div>
-          <div class="sig-title">{commercial["titre"]} · Entourage Recrutement</div>
+          <div class="sig-title">{commercial["titre"]} &middot; Entourage Recrutement</div>
           <div class="sig-date">Fait à Paris, le {date_str}</div>
           <div class="sig-area"></div>
           <div class="sig-lu">Lu et approuvé — Bon pour accord</div>
@@ -484,7 +479,7 @@ def build_contract_html(fields: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# BOUTON IMPRESSION PDF
+# BOUTON IMPRESSION PDF — fix encodage UTF-8 via TextDecoder
 # ---------------------------------------------------------------------------
 
 def get_print_button_html(html_content: str, label: str = "📄 Télécharger PDF") -> str:
@@ -493,7 +488,8 @@ def get_print_button_html(html_content: str, label: str = "📄 Télécharger PD
     <script>
     function printDoc() {{
         var w = window.open('', '_blank');
-        var html = atob('{b64}');
+        var bytes = Uint8Array.from(atob('{b64}'), function(c) {{ return c.charCodeAt(0); }});
+        var html = new TextDecoder('utf-8').decode(bytes);
         w.document.open();
         w.document.write(html);
         w.document.close();
@@ -645,4 +641,4 @@ if "contrat_html" in st.session_state:
     st.caption("💡 Cliquer sur 📄 Télécharger PDF → fenêtre d'impression → Enregistrer en PDF")
 
     st.subheader("Aperçu")
-    st.components.v1.html(st.session_state.contrat_html, height=1400, scrolling=True)
+    st.components.v1.html(st.session_state.contrat_html, height=1500, scrolling=True)
