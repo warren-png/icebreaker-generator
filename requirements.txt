@@ -20,3 +20,7 @@ reportlab==4.2.5
 # Lecture de fichiers pour le générateur de scorecard
 pdfplumber
 python-docx
+
+# Scorecard : resize logo + export PDF
+Pillow
+weasyprint

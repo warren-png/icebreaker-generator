@@ -15,14 +15,27 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# LOGO — chargé depuis la sidebar ou depuis le disque en fallback
+# COMMERCIAUX
 # ---------------------------------------------------------------------------
 
-def get_logo_base64() -> str | None:
-    # 1. Priorité : logo uploadé via la sidebar dans cette session
-    if "logo_b64" in st.session_state and st.session_state.logo_b64:
-        return st.session_state.logo_b64
-    # 2. Fallback : chercher le fichier sur le disque
+COMMERCIAUX = {
+    "Warren": {
+        "linkedin": "https://www.linkedin.com/in/warren-elbaz/",
+        "tel": "06 50 60 22 61"
+    },
+    "Helder": {
+        "linkedin": "https://www.linkedin.com/in/helder-alturas-48010463/",
+        "tel": "06 22 30 96 11"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# LOGO — resize via Pillow (cached), sidebar upload en override
+# ---------------------------------------------------------------------------
+
+@st.cache_resource
+def load_logo_base64_cached() -> str | None:
+    """Charge le logo depuis le disque, le redimensionne et le met en cache."""
     candidates = [
         Path(__file__).parent.parent / "logo_entourage.png",
         Path(__file__).parent / "logo_entourage.png",
@@ -30,11 +43,27 @@ def get_logo_base64() -> str | None:
     ]
     for path in candidates:
         if path.exists():
-            with open(path, "rb") as f:
-                data = base64.b64encode(f.read()).decode()
-                st.session_state.logo_b64 = data
-                return data
+            try:
+                from PIL import Image
+                img = Image.open(path)
+                img.thumbnail((600, 120), Image.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format="PNG", optimize=True)
+                return base64.b64encode(buf.getvalue()).decode()
+            except ImportError:
+                with open(path, "rb") as f:
+                    return base64.b64encode(f.read()).decode()
     return None
+
+
+def get_logo_base64() -> str | None:
+    """Retourne le logo en base64 (sidebar upload prioritaire, sinon disque)."""
+    if st.session_state.get("logo_b64"):
+        return st.session_state.logo_b64
+    cached = load_logo_base64_cached()
+    if cached:
+        st.session_state.logo_b64 = cached
+    return cached
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +100,38 @@ def extract_text(uploaded_file) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# INJECTION METADATA (logo + client + commercial) — APRÈS génération Claude
+# ---------------------------------------------------------------------------
+
+def inject_metadata(html: str, client_name: str, commercial: str) -> str:
+    """Injecte le logo, le nom client et le footer commercial dans le HTML généré."""
+    logo_b64 = get_logo_base64()
+
+    # Logo
+    if logo_b64:
+        logo_tag = (
+            f'<img src="data:image/png;base64,{logo_b64}" '
+            f'alt="Entourage Recrutement" style="height:18mm; object-fit:contain;">'
+        )
+    else:
+        logo_tag = '<span style="color:white;font-weight:800;font-size:13pt;letter-spacing:1px;">ENTOURAGE RECRUTEMENT</span>'
+    html = html.replace("{{LOGO}}", logo_tag)
+
+    # Nom client
+    html = html.replace("{{NOM_CLIENT}}", client_name.upper() if client_name else "")
+
+    # Footer commercial
+    info = COMMERCIAUX[commercial]
+    footer_html = (
+        f'<a href="{info["linkedin"]}" target="_blank">{commercial}</a>'
+        f' &nbsp;{info["tel"]}'
+    )
+    html = html.replace("{{FOOTER_COMMERCIAL}}", footer_html)
+
+    return html
+
+
+# ---------------------------------------------------------------------------
 # TEMPLATE HTML SCORECARD
 # ---------------------------------------------------------------------------
 
@@ -78,7 +139,7 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Brief de Mission - {{TITRE_POSTE}}</title>
+    <title>Brief de Mission</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
@@ -116,10 +177,11 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
             border-bottom: 2mm solid #FFD700;
             flex-shrink: 0;
         }
+        .brand { display: flex; align-items: center; }
         .brand img { height: 18mm; object-fit: contain; }
-        .brand-text { color: white; font-weight: 800; font-size: 13pt; letter-spacing: 1px; }
-        .doc-title { color: #fff; opacity: 0.9; font-size: 10pt; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; text-align: right; }
-        .doc-title span { display: block; font-size: 7pt; color: #FFD700; margin-top: 2px; }
+        .doc-title { color: #fff; font-size: 10pt; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; text-align: right; }
+        .doc-title .mandat { display: block; font-size: 7pt; color: #FFD700; margin-top: 3px; }
+        .doc-title .client { display: block; font-size: 8pt; color: #fff; opacity: 0.85; margin-top: 2px; letter-spacing: 0.5px; }
         .content { padding: 8mm 15mm; flex-grow: 1; display: flex; flex-direction: column; gap: 6mm; }
         .section-title {
             font-family: 'Playfair Display', serif;
@@ -190,13 +252,13 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
             font-size: 9pt;
             color: #555;
             margin-top: auto;
+            gap: 6px;
         }
         .footer a {
             color: #000;
             font-weight: 800;
             text-decoration: none;
             border-bottom: 2px solid #FFD700;
-            margin-right: 10px;
         }
     </style>
 </head>
@@ -208,7 +270,8 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
             </div>
             <div class="doc-title">
                 BRIEF DE MISSION
-                <span>MANDAT : {{TITRE_POSTE}}</span>
+                <span class="mandat">MANDAT : {{TITRE_POSTE}}</span>
+                <span class="client">{{NOM_CLIENT}}</span>
             </div>
         </div>
 
@@ -259,7 +322,7 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
         </div>
 
         <div class="footer">
-            <a href="https://www.linkedin.com/in/warren-elbaz/" target="_blank">Warren</a> 06 50 60 22 61
+            {{FOOTER_COMMERCIAL}}
         </div>
     </div>
 </body>
@@ -267,7 +330,7 @@ SCORECARD_TEMPLATE = """<!DOCTYPE html>
 
 
 # ---------------------------------------------------------------------------
-# GENERATION CLAUDE
+# GENERATION CLAUDE (sans logo — injecté après)
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """Tu es expert en recrutement de cadres dirigeants pour Entourage Recrutement, cabinet de chasse de têtes spécialisé en finance (DAF, CFO, M&A, contrôle de gestion).
@@ -277,6 +340,7 @@ Tu génères des Briefs de Mission (scorecards) professionnels à partir de retr
 Règles absolues :
 - Retourne UNIQUEMENT le code HTML complet, sans explication, sans balises markdown
 - Respecte scrupuleusement la structure du template fourni
+- Ne modifie JAMAIS les placeholders {{LOGO}}, {{NOM_CLIENT}}, {{FOOTER_COMMERCIAL}} — laisse-les exactement tels quels
 - Les pondérations de la scorecard doivent totaliser exactement 100%
 - Entre 4 et 6 critères dans la scorecard selon la complexité du poste
 - Utilise un langage professionnel, précis et orienté résultats
@@ -290,14 +354,6 @@ def generate_scorecard(
 ) -> str:
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-    logo_b64 = get_logo_base64()
-    if logo_b64:
-        logo_tag = f'<img src="data:image/png;base64,{logo_b64}" alt="Entourage Recrutement" style="height: 18mm;">'
-    else:
-        logo_tag = '<span class="brand-text">ENTOURAGE RECRUTEMENT</span>'
-
-    template = SCORECARD_TEMPLATE.replace("{{LOGO}}", logo_tag)
-
     if modification and previous_html:
         user_content = f"""Voici la scorecard HTML que tu as générée :
 
@@ -306,7 +362,9 @@ def generate_scorecard(
 L'utilisateur demande la modification suivante :
 {modification}
 
-Applique cette modification et retourne le HTML complet mis à jour. Retourne UNIQUEMENT le HTML, sans explication."""
+Applique cette modification et retourne le HTML complet mis à jour.
+IMPORTANT : Ne modifie pas les placeholders {{{{LOGO}}}}, {{{{NOM_CLIENT}}}}, {{{{FOOTER_COMMERCIAL}}}} s'ils sont présents.
+Retourne UNIQUEMENT le HTML, sans explication."""
     else:
         user_content = f"""Voici la retranscription d'un appel de qualification client :
 
@@ -315,11 +373,12 @@ Applique cette modification et retourne le HTML complet mis à jour. Retourne UN
 ---
 
 Remplis ce template HTML de scorecard avec les informations extraites de la retranscription.
+IMPORTANT : Laisse les placeholders {{{{LOGO}}}}, {{{{NOM_CLIENT}}}}, {{{{FOOTER_COMMERCIAL}}}} exactement tels quels dans le HTML.
 
 TEMPLATE À REMPLIR :
-{template}
+{SCORECARD_TEMPLATE}
 
-Retourne le HTML complet avec tous les placeholders {{{{...}}}} remplacés par les vraies informations."""
+Retourne le HTML complet avec tous les autres placeholders {{{{...}}}} remplacés par les vraies informations."""
 
     message = client.messages.create(
         model="claude-opus-4-6",
@@ -329,7 +388,6 @@ Retourne le HTML complet avec tous les placeholders {{{{...}}}} remplacés par l
     )
 
     html = message.content[0].text.strip()
-    # Nettoyer les balises markdown si présentes
     if html.startswith("```html"):
         html = html[7:]
     if html.startswith("```"):
@@ -340,39 +398,75 @@ Retourne le HTML complet avec tous les placeholders {{{{...}}}} remplacés par l
 
 
 # ---------------------------------------------------------------------------
-# UI
+# EXPORT PDF
 # ---------------------------------------------------------------------------
 
+def generate_pdf(html: str) -> bytes:
+    try:
+        from weasyprint import HTML
+        return HTML(string=html, base_url="https://cdnjs.cloudflare.com").write_pdf()
+    except ImportError:
+        st.error("weasyprint non installé : `pip install weasyprint`")
+        return b""
+    except Exception as e:
+        st.error(f"Erreur génération PDF : {e}")
+        return b""
+
+
 # ---------------------------------------------------------------------------
-# SIDEBAR — upload du logo
+# UI — SIDEBAR
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
     st.markdown("### 🖼 Logo Entourage")
     logo_file = st.file_uploader(
-        "Charger le logo",
+        "Charger le logo (si non détecté)",
         type=["png", "jpg", "jpeg"],
         label_visibility="collapsed",
         key="logo_uploader"
     )
     if logo_file:
-        st.session_state.logo_b64 = base64.b64encode(logo_file.read()).decode()
+        try:
+            from PIL import Image
+            img = Image.open(logo_file)
+            img.thumbnail((600, 120), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG", optimize=True)
+            st.session_state.logo_b64 = base64.b64encode(buf.getvalue()).decode()
+        except ImportError:
+            st.session_state.logo_b64 = base64.b64encode(logo_file.read()).decode()
         st.success("Logo chargé ✓")
 
-    if get_logo_base64():
-        logo_bytes = base64.b64decode(st.session_state.logo_b64)
+    logo = get_logo_base64()
+    if logo:
+        logo_bytes = base64.b64decode(logo)
         st.image(io.BytesIO(logo_bytes), use_container_width=True)
+    else:
+        st.caption("⚠️ Logo non trouvé. Uploadez-le ci-dessus.")
 
 # ---------------------------------------------------------------------------
-# PAGE PRINCIPALE
+# UI — PAGE PRINCIPALE
 # ---------------------------------------------------------------------------
 
 st.title("🎯 Générateur de Scorecard")
-st.caption("Upload une retranscription → génération automatique du Brief de Mission")
+st.caption("Remplis les informations, uploade la retranscription → Brief de Mission généré automatiquement")
 
 st.divider()
 
-# Upload
+# Informations client et commercial
+col1, col2 = st.columns([3, 1])
+with col1:
+    client_name = st.text_input(
+        "Nom du client *",
+        placeholder="Ex : TD Williamson, BNP Paribas...",
+        help="Apparaît dans l'en-tête du document"
+    )
+with col2:
+    commercial = st.radio("Commercial", list(COMMERCIAUX.keys()), horizontal=False)
+
+st.divider()
+
+# Upload retranscription
 uploaded_file = st.file_uploader(
     "Retranscription de l'appel de qualification",
     type=["pdf", "txt", "docx"],
@@ -386,45 +480,61 @@ if uploaded_file:
         char_count = len(transcription_text)
         st.success(f"✅ Fichier lu — {char_count:,} caractères extraits")
 
-        if st.button("🚀 Générer la Scorecard", type="primary"):
+        btn_disabled = not client_name.strip()
+        if btn_disabled:
+            st.warning("⚠️ Renseigne le nom du client avant de générer.")
+
+        if st.button("🚀 Générer la Scorecard", type="primary", disabled=btn_disabled):
             with st.spinner("Claude analyse la retranscription et génère le Brief de Mission..."):
                 try:
-                    html = generate_scorecard(transcription_text)
-                    st.session_state.scorecard_html = html
+                    raw_html = generate_scorecard(transcription_text)
+                    final_html = inject_metadata(raw_html, client_name, commercial)
+                    st.session_state.scorecard_html = final_html
                     st.session_state.scorecard_transcription = transcription_text
+                    st.session_state.scorecard_client = client_name
+                    st.session_state.scorecard_commercial = commercial
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erreur lors de la génération : {e}")
 
-# Affichage du résultat
+# ---------------------------------------------------------------------------
+# RÉSULTAT
+# ---------------------------------------------------------------------------
+
 if "scorecard_html" in st.session_state:
     st.divider()
 
+    # Boutons d'action
     col1, col2, col3 = st.columns([2, 2, 6])
     with col1:
+        with st.spinner("Préparation du PDF...") if False else st.empty():
+            pass
+        pdf_bytes = generate_pdf(st.session_state.scorecard_html)
+        client_slug = st.session_state.get("scorecard_client", "client").replace(" ", "_")
         st.download_button(
-            label="⬇️ Télécharger HTML",
-            data=st.session_state.scorecard_html,
-            file_name="brief_de_mission.html",
-            mime="text/html",
-            use_container_width=True
+            label="📄 Télécharger PDF",
+            data=pdf_bytes,
+            file_name=f"brief_{client_slug}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            disabled=len(pdf_bytes) == 0
         )
     with col2:
         if st.button("🗑️ Réinitialiser", use_container_width=True):
-            del st.session_state.scorecard_html
-            del st.session_state.scorecard_transcription
+            for k in ["scorecard_html", "scorecard_transcription", "scorecard_client", "scorecard_commercial"]:
+                st.session_state.pop(k, None)
             st.rerun()
 
-    st.caption("💡 Pour exporter en PDF : ouvrez le fichier HTML dans Chrome → Fichier → Imprimer → Enregistrer en PDF")
+    st.caption("💡 Le PDF intègre le logo, le nom du client et la signature du commercial.")
 
-    # Aperçu HTML
+    # Aperçu
     st.subheader("Aperçu")
     st.components.v1.html(st.session_state.scorecard_html, height=1250, scrolling=True)
 
-    # Zone de modifications
+    # Zone modifications
     st.divider()
     st.subheader("✏️ Demander des modifications")
-    st.caption("Une information manquante, une erreur, un ajout ? Décris-le ici.")
+    st.caption("Une information manquante ou incorrecte ? Décris la correction ici.")
 
     modification = st.text_area(
         "Modifications souhaitées",
@@ -433,7 +543,7 @@ if "scorecard_html" in st.session_state:
             "• \"Ajoute un critère sur l'expérience internationale à 15%\"\n"
             "• \"Le package est 90-100k fixe + 20% variable\"\n"
             "• \"Le processus a 3 étapes : Entourage, DRH, CEO\"\n"
-            "• \"Modifie le bloc Contexte : l'entreprise est en phase de croissance externe\""
+            "• \"Modifie le contexte : l'entreprise est en phase de croissance externe\""
         ),
         height=130,
         label_visibility="collapsed"
@@ -443,12 +553,17 @@ if "scorecard_html" in st.session_state:
         if modification.strip():
             with st.spinner("Application des modifications..."):
                 try:
-                    html = generate_scorecard(
+                    raw_html = generate_scorecard(
                         st.session_state.scorecard_transcription,
                         modification=modification,
                         previous_html=st.session_state.scorecard_html
                     )
-                    st.session_state.scorecard_html = html
+                    final_html = inject_metadata(
+                        raw_html,
+                        st.session_state.scorecard_client,
+                        st.session_state.scorecard_commercial
+                    )
+                    st.session_state.scorecard_html = final_html
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erreur : {e}")
