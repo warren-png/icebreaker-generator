@@ -1,7 +1,7 @@
 """
 ═══════════════════════════════════════════════════════════════════
 GOOGLE DRIVE UPLOADER - Upload automatique des CVs
-Utilise les credentials existants du job monitor
+Utilise les credentials Google Cloud avec support Streamlit secrets
 ═══════════════════════════════════════════════════════════════════
 """
 
@@ -11,7 +11,8 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 import os
 
-FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
+# ID du dossier partagé dans Google Drive (env var prioritaire, fallback hardcodé)
+FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID', "0AOjfTqrPTHWmUk9PVA")
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 CREDENTIALS_FILE = os.getenv('GOOGLE_CREDENTIALS_FILE')
@@ -20,24 +21,28 @@ CREDENTIALS_FILE = os.getenv('GOOGLE_CREDENTIALS_FILE')
 def get_drive_service():
     """
     Initialise le service Google Drive
-    Utilise les credentials du job monitor
+    Utilise Streamlit secrets si disponible, sinon fichier local
     """
-    if not CREDENTIALS_FILE:
-        raise EnvironmentError(
-            "Variable d'environnement GOOGLE_CREDENTIALS_FILE non définie. "
-            "Définissez-la dans votre fichier .env ou vos secrets Streamlit."
-        )
+    try:
+        # Essayer d'abord avec Streamlit secrets (pour Streamlit Cloud)
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
+            credentials = service_account.Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"],
+                scopes=SCOPES
+            )
+            service = build('drive', 'v3', credentials=credentials)
+            print("✅ Google Drive service initialisé via Streamlit secrets")
+            return service
+    except Exception as e:
+        print(f"⚠️ Pas de Streamlit secrets disponibles: {e}")
 
-    if not FOLDER_ID:
-        raise EnvironmentError(
-            "Variable d'environnement GOOGLE_DRIVE_FOLDER_ID non définie. "
-            "Définissez-la dans votre fichier .env ou vos secrets Streamlit."
-        )
-
-    if not os.path.exists(CREDENTIALS_FILE):
+    # Fallback : fichier local (pour développement local)
+    if not CREDENTIALS_FILE or not os.path.exists(CREDENTIALS_FILE):
         raise FileNotFoundError(
-            f"Fichier credentials Google Cloud introuvable: {CREDENTIALS_FILE}\n"
-            "Vérifiez le chemin indiqué dans GOOGLE_CREDENTIALS_FILE."
+            f"❌ Fichier credentials Google Cloud introuvable: {CREDENTIALS_FILE}\n"
+            "Et pas de secrets Streamlit configurés.\n"
+            "Place ton fichier google-credentials.json à la racine du projet."
         )
     
     credentials = service_account.Credentials.from_service_account_file(
@@ -46,17 +51,18 @@ def get_drive_service():
     )
     
     service = build('drive', 'v3', credentials=credentials)
+    print("✅ Google Drive service initialisé via fichier local")
     return service
 
 
-def upload_cv_to_drive(pdf_bytes, filename, folder_id=None):
+def upload_cv_to_drive(pdf_bytes, filename, folder_id):
     """
     Upload un CV (bytes) vers Google Drive
     
     Args:
         pdf_bytes: Bytes du PDF
         filename: Nom du fichier (ex: "CV_Controleur_Gestion_2025.pdf")
-        folder_id: ID du dossier Google Drive (optionnel)
+        folder_id: ID du dossier Google Drive
     
     Returns:
         Dict avec 'id', 'url', 'name'
@@ -68,12 +74,9 @@ def upload_cv_to_drive(pdf_bytes, filename, folder_id=None):
         # Métadonnées du fichier
         file_metadata = {
             'name': filename,
-            'mimeType': 'application/pdf'
+            'mimeType': 'application/pdf',
+            'parents': [folder_id]  # Upload dans le dossier partagé
         }
-        
-        # Si folder_id fourni, uploader dans ce dossier
-        if folder_id:
-            file_metadata['parents'] = [folder_id]
         
         # Upload
         media = MediaIoBaseUpload(
@@ -85,7 +88,8 @@ def upload_cv_to_drive(pdf_bytes, filename, folder_id=None):
         file = service.files().create(
             body=file_metadata,
             media_body=media,
-            fields='id, name, webViewLink'
+            fields='id, name, webViewLink',
+            supportsAllDrives=True
         ).execute()
         
         # Rendre le fichier accessible avec le lien (lecture seule)
@@ -94,7 +98,8 @@ def upload_cv_to_drive(pdf_bytes, filename, folder_id=None):
             body={
                 'type': 'anyone',
                 'role': 'reader'
-            }
+            },
+            supportsAllDrives=True
         ).execute()
         
         return {
@@ -106,43 +111,6 @@ def upload_cv_to_drive(pdf_bytes, filename, folder_id=None):
     except Exception as e:
         print(f"Erreur upload Google Drive: {e}")
         raise
-
-
-def create_cv_folder(folder_name="CVs Icebreaker"):
-    """
-    Crée un dossier dans Google Drive pour les CVs
-    
-    Returns:
-        folder_id
-    """
-    
-    try:
-        service = get_drive_service()
-        
-        # Vérifier si le dossier existe déjà
-        query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        results = service.files().list(q=query, fields='files(id, name)').execute()
-        folders = results.get('files', [])
-        
-        if folders:
-            return folders[0]['id']
-        
-        # Créer le dossier
-        file_metadata = {
-            'name': folder_name,
-            'mimeType': 'application/vnd.google-apps.folder'
-        }
-        
-        folder = service.files().create(
-            body=file_metadata,
-            fields='id'
-        ).execute()
-        
-        return folder['id']
-        
-    except Exception as e:
-        print(f"Erreur création dossier: {e}")
-        return None
 
 
 def generate_filename(job_title, prospect_name=None):
@@ -182,7 +150,7 @@ def generate_filename(job_title, prospect_name=None):
 # FONCTION PRINCIPALE
 # ========================================
 
-def upload_cv(pdf_bytes, job_title, prospect_name=None, folder_name="CVs Icebreaker"):
+def upload_cv(pdf_bytes, job_title, prospect_name=None):
     """
     Fonction all-in-one pour upload un CV
     
@@ -190,21 +158,17 @@ def upload_cv(pdf_bytes, job_title, prospect_name=None, folder_name="CVs Icebrea
         pdf_bytes: Bytes du PDF
         job_title: Titre du poste
         prospect_name: Nom prospect (optionnel)
-        folder_name: Nom du dossier Google Drive
     
     Returns:
         Dict avec 'id', 'url', 'name' ou None si erreur
     """
     
     try:
-        # Utiliser le dossier configuré par variable d'environnement
-        folder_id = FOLDER_ID
-
         # Générer nom de fichier
         filename = generate_filename(job_title, prospect_name)
         
-        # Upload
-        result = upload_cv_to_drive(pdf_bytes, filename, folder_id)
+        # Upload dans le dossier partagé
+        result = upload_cv_to_drive(pdf_bytes, filename, FOLDER_ID)
         
         print(f"✅ CV uploadé : {result['url']}")
         return result
