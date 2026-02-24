@@ -16,10 +16,6 @@ beautifulsoup4==4.12.3
 
 # PDF generation
 reportlab==4.2.5
-
-# Lecture de fichiers pour le générateur de scorecard
+Pillow==10.4.0
 pdfplumber
 python-docx
-
-# Scorecard : resize logo
-Pillow
