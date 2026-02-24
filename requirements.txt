@@ -3,7 +3,7 @@ anthropic==0.40.0
 apify-client==2.4.0
 requests==2.32.3
 
-# Google Sheets (VERSION MODERNE)
+# Google Sheets & Drive
 gspread==6.1.4
 google-auth==2.36.0
 google-api-python-client==2.154.0
