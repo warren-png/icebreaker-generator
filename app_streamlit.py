@@ -972,10 +972,17 @@ FORMAT DE RÉPONSE
             except anthropic.RateLimitError as e:
                 if attempt < max_retries - 1:
                     wait_time = base_delay * (2 ** attempt)  # 30s, 60s, 120s
-                    st.warning(f"⏳ Rate limit atteint. Attente {wait_time}s avant retry ({attempt + 1}/{max_retries})...")
+                    st.warning(f"⏳ Rate limit (429). Attente {wait_time}s avant retry ({attempt + 1}/{max_retries})...")
                     time.sleep(wait_time)
                 else:
-                    raise e  # Dernière tentative échouée, propager l'erreur
+                    raise e
+            except anthropic.APIStatusError as e:
+                if e.status_code == 529 and attempt < max_retries - 1:
+                    wait_time = base_delay * (2 ** attempt)  # 30s, 60s, 120s
+                    st.warning(f"⏳ Claude surchargé (529). Attente {wait_time}s avant retry ({attempt + 1}/{max_retries})...")
+                    time.sleep(wait_time)
+                else:
+                    raise e
         
         # Stats
         st.session_state.generation_stats['calls'] += 1
