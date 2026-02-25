@@ -117,7 +117,14 @@ FORMAT JSON UNIQUEMENT
             except anthropic.RateLimitError as e:
                 if attempt < max_retries - 1:
                     wait_time = base_delay * (2 ** attempt)
-                    print(f"⏳ Rate limit. Attente {wait_time}s ({attempt + 1}/{max_retries})...")
+                    print(f"⏳ Rate limit (429). Attente {wait_time}s ({attempt + 1}/{max_retries})...")
+                    time.sleep(wait_time)
+                else:
+                    raise e
+            except anthropic.APIStatusError as e:
+                if e.status_code == 529 and attempt < max_retries - 1:
+                    wait_time = base_delay * (2 ** attempt)
+                    print(f"⏳ Claude surchargé (529). Attente {wait_time}s ({attempt + 1}/{max_retries})...")
                     time.sleep(wait_time)
                 else:
                     raise e
