@@ -14,6 +14,7 @@ import anthropic
 import os
 import re
 import json
+import time
 from datetime import datetime, timedelta
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -416,30 +417,49 @@ Retourne UNIQUEMENT les 2 messages, séparés par une ligne :
 """
 
     try:
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
+        max_retries = 3
+        base_delay = 30
+        message = None
+
+        for attempt in range(max_retries):
+            try:
+                message = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=1500,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                break
+            except anthropic.RateLimitError as e:
+                if attempt < max_retries - 1:
+                    wait_time = base_delay * (2 ** attempt)
+                    time.sleep(wait_time)
+                else:
+                    raise e
+            except anthropic.APIStatusError as e:
+                if e.status_code == 529 and attempt < max_retries - 1:
+                    wait_time = base_delay * (2 ** attempt)
+                    time.sleep(wait_time)
+                else:
+                    raise e
+
         tracker.track(message.usage, 'generate_sequence_v28')
         result = message.content[0].text.strip()
-        
+
         # Parser les messages
         m1, m2 = parse_messages(result)
         m3 = MESSAGE_3_TEMPLATE.format(prenom=prenom)
-        
+
         log_event('generate_sequence_v28_success', {
             'm1_length': len(m1),
             'm2_length': len(m2)
         })
-        
+
         return {
             'message_1': m1,
             'message_2': m2,
             'message_3': m3
         }
-        
+
     except Exception as e:
         log_error('generate_sequence_v28_error', str(e), {})
         raise
