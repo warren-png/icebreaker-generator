@@ -285,21 +285,15 @@ TEMOIGNAGE_TEMPLATE = """<!DOCTYPE html>
         }
         .highlight-text::before {
             content: "\201C";
-            font-family: serif;
-            font-size: 28pt;
+            font-size: 13pt;
             color: #FFD700;
-            vertical-align: -10px;
-            margin-right: 4px;
-            line-height: 0;
+            margin-right: 2px;
         }
         .highlight-text::after {
             content: "\201D";
-            font-family: serif;
-            font-size: 28pt;
+            font-size: 13pt;
             color: #FFD700;
-            vertical-align: -18px;
-            margin-left: 4px;
-            line-height: 0;
+            margin-left: 2px;
         }
         /* --- FOOTER --- */
         .footer {
@@ -353,10 +347,6 @@ TEMOIGNAGE_TEMPLATE = """<!DOCTYPE html>
                         <li>
                             <i class="fa-solid fa-industry"></i>
                             <div><strong>Secteur :</strong><br>{{SECTEUR}}</div>
-                        </li>
-                        <li>
-                            <i class="fa-solid fa-location-dot"></i>
-                            <div><strong>Contexte :</strong><br>{{CONTEXTE}}</div>
                         </li>
                     </ul>
                 </div>
@@ -415,7 +405,6 @@ def inject_metadata(
     role_contact: str,
     poste_recrute: str,
     secteur: str,
-    contexte: str,
     commercial: str,
     client_logo_b64: str | None
 ) -> str:
@@ -441,7 +430,6 @@ def inject_metadata(
     html = html.replace("{{ROLE_CONTACT}}", role_contact)
     html = html.replace("{{POSTE_RECRUTE}}", poste_recrute)
     html = html.replace("{{SECTEUR}}", secteur)
-    html = html.replace("{{CONTEXTE}}", contexte)
 
     # Footer commercial
     info = COMMERCIAUX[commercial]
@@ -469,7 +457,7 @@ RÈGLES ABSOLUES :
 - NE COPIE JAMAIS les réponses mot pour mot — élève le registre, structure, synthétise
 - Adapte les questions en formulations élégantes et percutantes
 - Remplace tous les placeholders {{...}} listés ci-dessous par le contenu approprié
-- Ne modifie JAMAIS {{LOGO_ENTOURAGE}}, {{LOGO_CLIENT}}, {{NOM_CONTACT}}, {{ROLE_CONTACT}}, {{POSTE_RECRUTE}}, {{SECTEUR}}, {{CONTEXTE}}, {{FOOTER_COMMERCIAL}} — laisse-les tels quels
+- Ne modifie JAMAIS {{LOGO_ENTOURAGE}}, {{LOGO_CLIENT}}, {{NOM_CONTACT}}, {{ROLE_CONTACT}}, {{POSTE_RECRUTE}}, {{SECTEUR}}, {{FOOTER_COMMERCIAL}} — laisse-les tels quels
 - Langage professionnel, tonalité premium, style éditorial haut de gamme
 
 PLACEHOLDERS À REMPLIR :
@@ -543,15 +531,14 @@ L'utilisateur demande la modification suivante :
 {modification}
 
 Applique cette modification et retourne le HTML complet mis à jour.
-Ne modifie pas les placeholders statiques (LOGO_ENTOURAGE, LOGO_CLIENT, NOM_CONTACT, ROLE_CONTACT, POSTE_RECRUTE, SECTEUR, CONTEXTE, FOOTER_COMMERCIAL).
+Ne modifie pas les placeholders statiques (LOGO_ENTOURAGE, LOGO_CLIENT, NOM_CONTACT, ROLE_CONTACT, POSTE_RECRUTE, SECTEUR, FOOTER_COMMERCIAL).
 Retourne UNIQUEMENT le HTML, sans explication."""
     else:
         context_block = f"""INFORMATIONS DU CONTACT :
 - Nom : {metadata['nom_contact']}
 - Rôle : {metadata['role_contact']}
 - Poste recruté : {metadata['poste_recrute']}
-- Secteur : {metadata['secteur']}
-- Contexte : {metadata['contexte']}"""
+- Secteur : {metadata['secteur']}"""
 
         user_content = f"""Voici les informations du témoignage à générer.
 
@@ -563,7 +550,7 @@ QUESTIONS ET RÉPONSES BRUTES DU CLIENT :
 ---
 
 Remplis ce template HTML avec le contenu synthétisé et enrichi.
-IMPORTANT : Laisse les placeholders statiques {{{{LOGO_ENTOURAGE}}}}, {{{{LOGO_CLIENT}}}}, {{{{NOM_CONTACT}}}}, {{{{ROLE_CONTACT}}}}, {{{{POSTE_RECRUTE}}}}, {{{{SECTEUR}}}}, {{{{CONTEXTE}}}}, {{{{FOOTER_COMMERCIAL}}}} exactement tels quels.
+IMPORTANT : Laisse les placeholders statiques {{{{LOGO_ENTOURAGE}}}}, {{{{LOGO_CLIENT}}}}, {{{{NOM_CONTACT}}}}, {{{{ROLE_CONTACT}}}}, {{{{POSTE_RECRUTE}}}}, {{{{SECTEUR}}}}, {{{{FOOTER_COMMERCIAL}}}} exactement tels quels.
 
 TEMPLATE À REMPLIR :
 {TEMOIGNAGE_TEMPLATE}
@@ -704,7 +691,7 @@ st.divider()
 
 # ── SECTION 2 : MANDAT ───────────────────────────────────────────────────
 st.subheader("📋 Le Mandat")
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 with col1:
     poste_recrute = st.text_input(
         "Poste recruté *",
@@ -714,11 +701,6 @@ with col2:
     secteur = st.text_input(
         "Secteur d'activité *",
         placeholder="Ex : Banque & Assurance"
-    )
-with col3:
-    contexte = st.text_input(
-        "Contexte (2-3 mots) *",
-        placeholder="Ex : Croissance rapide, Scale-up"
     )
 
 st.divider()
@@ -756,7 +738,7 @@ qa_text = st.text_area(
 )
 
 # Vérification
-champs_requis = [nom_contact, role_contact, poste_recrute, secteur, contexte, qa_text]
+champs_requis = [nom_contact, role_contact, poste_recrute, secteur, qa_text]
 champs_ok = all(c.strip() for c in champs_requis)
 if not champs_ok:
     st.warning("⚠️ Complète tous les champs obligatoires (*) et colle les Q&R avant de générer.")
@@ -767,7 +749,6 @@ if st.button("🚀 Générer le Témoignage", type="primary", disabled=not champ
         "role_contact": role_contact.strip(),
         "poste_recrute": poste_recrute.strip(),
         "secteur": secteur.strip(),
-        "contexte": contexte.strip(),
     }
     with st.spinner("Claude rédige le témoignage client..."):
         try:
@@ -778,7 +759,6 @@ if st.button("🚀 Générer le Témoignage", type="primary", disabled=not champ
                 role_contact=role_contact.strip(),
                 poste_recrute=poste_recrute.strip(),
                 secteur=secteur.strip(),
-                contexte=contexte.strip(),
                 commercial=commercial,
                 client_logo_b64=client_logo_b64
             )
