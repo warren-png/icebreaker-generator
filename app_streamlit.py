@@ -48,11 +48,20 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 try:
     LEONAR_EMAIL = st.secrets["LEONAR_EMAIL"]
     LEONAR_PASSWORD = st.secrets["LEONAR_PASSWORD"]
-    LEONAR_CAMPAIGN_ID = st.secrets["LEONAR_CAMPAIGN_ID"]
 except KeyError:
     LEONAR_EMAIL = os.getenv("LEONAR_EMAIL")
     LEONAR_PASSWORD = os.getenv("LEONAR_PASSWORD")
-    LEONAR_CAMPAIGN_ID = os.getenv("LEONAR_CAMPAIGN_ID")
+
+# ========================================
+# CAMPAGNES LEONAR PAR FAMILLE DE MÉTIERS
+# ========================================
+LEONAR_CAMPAIGNS = {
+    "Direction & Finance Corporate":   "1772027389657x402208039671693300",
+    "Comptabilité & Consolidation":    "1772028018250x374779198043586560",
+    "SI Finance, ERP & BI":            "1772028125926x540533356936560640",
+    "Data, Data Science, IA & ML":     "1772028428747x328437197616447500",
+    "M&A, Stratégie & Transformation": "1772028477476x164734855331446800",
+}
 
 PROCESSED_FILE = "processed_prospects.txt"
 
@@ -110,73 +119,98 @@ def get_leonar_token():
         return None
 
 
-def get_new_prospects_leonar(token):
-    """Récupère les nouveaux prospects depuis Leonar (avec pagination)"""
+def get_new_prospects_leonar(token, campaign_id, family_name="", verbose=True):
+    """Récupère les nouveaux prospects depuis une campagne Leonar (avec pagination)"""
     try:
         all_prospects = []
         cursor = 0
         page = 1
-        
+
         # Paginer pour récupérer TOUS les prospects
         while True:
-            campaign_id_safe = url_quote(str(LEONAR_CAMPAIGN_ID), safe='')
+            campaign_id_safe = url_quote(str(campaign_id), safe='')
             url = f'https://dashboard.leonar.app/api/1.1/obj/matching?constraints=[{{"key":"campaign","constraint_type":"equals","value":"{campaign_id_safe}"}}]&cursor={cursor}&limit=100'
-            
+
             r = requests.get(
                 url,
                 headers={'Authorization': f'Bearer {token}'},
                 timeout=15
             )
-            
+
             if r.status_code != 200:
-                st.error(f"❌ Leonar API erreur: status {r.status_code}")
+                st.error(f"❌ Leonar API erreur ({family_name}): status {r.status_code}")
                 break
-            
+
             data = r.json()
             results = data.get('response', {}).get('results', [])
             remaining = data.get('response', {}).get('remaining', 0)
-            
+
             all_prospects.extend(results)
-            st.info(f"📊 Page {page}: {len(results)} prospects (total: {len(all_prospects)}, remaining: {remaining})")
-            
-            # S'il n'y a plus de résultats, arrêter
+            if verbose:
+                st.info(f"📊 [{family_name}] Page {page}: {len(results)} prospects (total: {len(all_prospects)}, remaining: {remaining})")
+
             if not results or remaining == 0:
                 break
-            
-            # Passer à la page suivante
+
             cursor += len(results)
             page += 1
-            
-            # Sécurité : max 10 pages (1000 prospects)
+
             if page > 10:
-                st.warning("⚠️ Limite de 1000 prospects atteinte")
+                if verbose:
+                    st.warning(f"⚠️ [{family_name}] Limite de 1000 prospects atteinte")
                 break
-        
-        st.info(f"📊 Debug: {len(all_prospects)} prospects TOTAL trouvés dans Leonar")
-        
+
         processed = load_processed()
-        st.info(f"📊 Debug: {len(processed)} prospects déjà traités dans le fichier")
-        
-        # Filtrer
+
+        # Filtrer les déjà traités + taguer avec la famille
         filtered = []
         for p in all_prospects:
             pid = p['_id']
             notes = p.get('notes', '')
-            
+
             if pid in processed:
-                continue  # Déjà traité (fichier local)
-            
+                continue
+
             if notes and len(notes) >= 100 and 'MESSAGE 1' in notes:
-                continue  # Déjà traité (notes Leonar)
-            
+                continue
+
+            p['_family'] = family_name  # Tag famille pour l'affichage
             filtered.append(p)
-        
-        st.success(f"✅ {len(filtered)} prospects à traiter après filtrage")
+
+        if verbose:
+            st.success(f"✅ [{family_name}] {len(filtered)} prospect(s) à traiter")
+        else:
+            # Affichage compact mais visible dans l'UI
+            st.caption(f"   └─ {len(all_prospects)} dans l'API → {len(filtered)} nouveaux après filtrage")
+
         return filtered
-        
+
     except Exception as e:
-        st.error(f"Erreur Leonar: {e}")
+        st.error(f"Erreur Leonar ({family_name}): {e}")
         return []
+
+
+def get_all_new_prospects(token):
+    """Scanne TOUTES les campagnes et retourne les nouveaux prospects (toutes familles confondues)"""
+    all_new = []
+
+    for family_name, campaign_id in LEONAR_CAMPAIGNS.items():
+        try:
+            prospects = get_new_prospects_leonar(token, campaign_id, family_name, verbose=False)
+            if prospects:
+                st.success(f"📂 **{family_name}** → {len(prospects)} nouveau(x)")
+            else:
+                st.info(f"📂 **{family_name}** → aucun nouveau")
+            all_new.extend(prospects)
+        except Exception as e:
+            st.warning(f"⚠️ Erreur campagne {family_name}: {e}")
+
+    if all_new:
+        st.success(f"✅ **Total : {len(all_new)} prospect(s) à traiter**")
+    else:
+        st.warning("⚠️ Aucun nouveau prospect trouvé dans les 5 campagnes")
+
+    return all_new
 
 
 def update_prospect_leonar(token, prospect_id, sequence_data):
@@ -1146,13 +1180,13 @@ with st.sidebar:
     else:
         st.warning("⚠️ SERPER_API_KEY (optionnel)")
     
-    if all([LEONAR_EMAIL, LEONAR_PASSWORD, LEONAR_CAMPAIGN_ID]):
+    if all([LEONAR_EMAIL, LEONAR_PASSWORD]):
         if get_leonar_token():
-            st.success("✅ Leonar connecté")
+            st.success(f"✅ Leonar connecté ({len(LEONAR_CAMPAIGNS)} campagnes)")
         else:
             st.error("❌ Erreur Leonar")
     else:
-        st.warning("⚠️ Config Leonar incomplète")
+        st.warning("⚠️ Config Leonar incomplète (email/password)")
     
     st.divider()
     st.header("📊 Stats session")
@@ -1182,10 +1216,10 @@ tab1, tab2, tab3 = st.tabs(["🚀 Génération Leonar", "🧪 Test Manuel", "�
 with tab1:
     st.header("Génération automatique depuis Leonar")
     
-    if not all([LEONAR_EMAIL, LEONAR_PASSWORD, LEONAR_CAMPAIGN_ID]):
-        st.error("Configuration Leonar manquante dans .env ou secrets")
+    if not all([LEONAR_EMAIL, LEONAR_PASSWORD]):
+        st.error("Configuration Leonar manquante dans .env ou secrets (email/password)")
         st.stop()
-    
+
     token = get_leonar_token()
     if not token:
         st.error("Impossible de se connecter à Leonar")
@@ -1235,20 +1269,20 @@ with tab1:
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         if st.button("🔄 Rafraîchir", type="secondary"):
-            with st.spinner("Chargement depuis Leonar..."):
-                st.session_state.leonar_prospects = get_new_prospects_leonar(token)
-    
+            with st.spinner("Scan des 5 campagnes Leonar..."):
+                st.session_state.leonar_prospects = get_all_new_prospects(token)
+
     with col2:
         if st.button("🗑️ Reset traités", type="secondary"):
             if os.path.exists(PROCESSED_FILE):
                 os.remove(PROCESSED_FILE)
                 st.success("✅ Liste des prospects traités effacée")
             with st.spinner("Rechargement..."):
-                st.session_state.leonar_prospects = get_new_prospects_leonar(token)
-    
+                st.session_state.leonar_prospects = get_all_new_prospects(token)
+
     with col3:
         if st.session_state.leonar_prospects:
-            st.success(f"✅ {len(st.session_state.leonar_prospects)} prospects à traiter")
+            st.success(f"✅ {len(st.session_state.leonar_prospects)} prospect(s) à traiter (toutes campagnes)")
         else:
             st.warning("⚠️ 0 prospect - Cliquez sur Rafraîchir")
     
@@ -1259,19 +1293,21 @@ with tab1:
                 name = p.get('user_full name', 'Inconnu')
                 company = p.get('linkedin_company', 'N/A')
                 has_linkedin = "✅" if p.get('linkedin_url') else "❌"
-                
+                family = p.get('_family', '')
+
                 # URL fiche : priorité Leonar (custom_text_1) > manuelle
                 leonar_url = p.get('custom_text_1', '').strip()
                 manual_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
-                
+
                 if leonar_url:
                     has_url = "📄 URL Leonar ✅"
                 elif manual_url:
-                    has_url = f"📄 URL manuelle"
+                    has_url = "📄 URL manuelle"
                 else:
                     has_url = "⚠️ Pas d'URL"
-                
-                st.write(f"{i+1}. **{name}** | {company} | LinkedIn: {has_linkedin} | {has_url}")
+
+                family_tag = f" | 🏷️ *{family}*" if family else ""
+                st.write(f"{i+1}. **{name}** | {company} | LinkedIn: {has_linkedin} | {has_url}{family_tag}")
         
         # Debug : voir les champs disponibles
         with st.expander("🔍 Debug: voir les champs Leonar", expanded=False):
@@ -1495,10 +1531,10 @@ with tab3:
     st.header("🎯 Génération avec CV anonymisé")
     st.caption("Séquence 2 messages : Message 1 (CV joint) + Message 2 (relance douce)")
     
-    if not all([LEONAR_EMAIL, LEONAR_PASSWORD, LEONAR_CAMPAIGN_ID]):
-        st.error("Configuration Leonar manquante")
+    if not all([LEONAR_EMAIL, LEONAR_PASSWORD]):
+        st.error("Configuration Leonar manquante (email/password)")
         st.stop()
-    
+
     token = get_leonar_token()
     if not token:
         st.error("Impossible de se connecter à Leonar")
@@ -1527,8 +1563,8 @@ with tab3:
         
         # Rafraîchir prospects
         if st.button("🔄 Charger prospects", type="secondary", key="refresh_cv"):
-            with st.spinner("Chargement..."):
-                st.session_state.leonar_prospects_cv = get_new_prospects_leonar(token)
+            with st.spinner("Scan des 5 campagnes..."):
+                st.session_state.leonar_prospects_cv = get_all_new_prospects(token)
         
         # Sélection prospect
         if 'leonar_prospects_cv' not in st.session_state:
@@ -1538,7 +1574,7 @@ with tab3:
             prospect_cv = st.selectbox(
                 "Sélectionner un prospect",
                 options=st.session_state.leonar_prospects_cv,
-                format_func=lambda x: f"{x.get('user_full name', 'Inconnu')} - {x.get('linkedin_company', 'N/A')}",
+                format_func=lambda x: f"{x.get('user_full name', 'Inconnu')} - {x.get('linkedin_company', 'N/A')} [{x.get('_family', '?')}]",
                 key="prospect_select_cv"
             )
         else:
