@@ -225,12 +225,31 @@ def enrich_phones_fullenrich(prospects, token):
 
     # Construire le payload Full Enrich
     fe_data = []
+    skipped_no_data = []
+
     for p in to_enrich:
         contact = {"custom": {"prospect_id": str(p['_id'])}}
 
-        linkedin_url = (p.get('linkedin_url') or '').strip()
-        full_name = (p.get('user_full name') or '').strip()
-        company = (p.get('linkedin_company') or '').strip()
+        # Chercher l'URL LinkedIn dans plusieurs champs possibles
+        linkedin_url = (
+            p.get('linkedin_url') or
+            p.get('linkedin_profile_url') or
+            p.get('linkedin') or
+            p.get('custom_text_3') or ''
+        ).strip()
+
+        # Chercher le nom dans plusieurs champs possibles
+        full_name = (
+            p.get('user_full name') or
+            p.get('full_name') or
+            p.get('name') or ''
+        ).strip()
+
+        company = (
+            p.get('linkedin_company') or
+            p.get('company') or
+            p.get('company_name') or ''
+        ).strip()
 
         if linkedin_url:
             contact["linkedin_url"] = linkedin_url
@@ -241,7 +260,31 @@ def enrich_phones_fullenrich(prospects, token):
         if company:
             contact["company_name"] = company
 
-        fe_data.append(contact)
+        # Full Enrich nécessite au minimum : linkedin_url OU (prénom + nom + entreprise)
+        has_linkedin = bool(linkedin_url)
+        has_name_company = bool(full_name and company)
+
+        if has_linkedin or has_name_company:
+            fe_data.append(contact)
+        else:
+            skipped_no_data.append(p.get('user_full name') or p.get('full_name') or p.get('_id', '?'))
+
+    if skipped_no_data:
+        st.warning(
+            f"⚠️ {len(skipped_no_data)} prospect(s) ignorés car ni URL LinkedIn ni nom+entreprise disponibles dans Leonar : "
+            f"{', '.join(str(x) for x in skipped_no_data[:5])}"
+            + (' ...' if len(skipped_no_data) > 5 else '')
+        )
+
+    if not fe_data:
+        st.error(
+            "❌ Aucun prospect ne peut être enrichi — données insuffisantes dans Leonar.\n\n"
+            "Full Enrich nécessite pour chaque prospect : **URL LinkedIn** OU **(Prénom + Nom + Entreprise)**.\n"
+            "Vérifiez le Debug Leonar ci-dessus pour voir les champs disponibles."
+        )
+        return
+
+    st.info(f"📤 {len(fe_data)} prospect(s) envoyés à Full Enrich")
 
     # Envoi en batches de 100 max
     enrichment_ids = []
