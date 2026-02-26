@@ -314,6 +314,7 @@ def enrich_phones_fullenrich(prospects, token):
                 },
                 json={
                     'name': f'Entourage {datetime.now().strftime("%Y-%m-%d %H:%M")} ({batch_num + 1}/{len(batches)})',
+                    'enrich_fields': ['phone'],
                     'data': batch
                 },
                 timeout=30
