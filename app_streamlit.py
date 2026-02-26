@@ -415,6 +415,15 @@ def enrich_phones_fullenrich(prospects, token):
                     json={'phone': phone},
                     timeout=10
                 )
+                # DEBUG temporaire — réponse Leonar complète
+                with st.expander(f"🔍 Debug Leonar PATCH ({r.status_code})", expanded=True):
+                    st.write(f"**URL :** `obj/matching/{pid}`")
+                    st.write(f"**Body envoyé :** `{{'phone': '{phone}'}}`")
+                    st.write(f"**Status :** `{r.status_code}`")
+                    try:
+                        st.json(r.json())
+                    except Exception:
+                        st.code(r.text)
                 if r.status_code in [200, 204]:
                     st.success(f"✅ **{name}** → `{phone}` — enregistré dans Leonar")
                 else:
