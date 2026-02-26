@@ -266,15 +266,15 @@ def enrich_phones_fullenrich(prospects, token):
         if linkedin_url:
             contact["linkedin_url"] = linkedin_url
         if first_name:
-            contact["first_name"] = first_name
+            contact["firstname"] = first_name
         if last_name:
-            contact["last_name"] = last_name
+            contact["lastname"] = last_name
         if domain:
             contact["domain"] = domain
         elif company:
             contact["company_name"] = company
 
-        # Spécifier qu'on veut uniquement le téléphone (valeur exacte API Full Enrich)
+        # Spécifier qu'on veut uniquement le téléphone (valeur exacte API Full Enrich v1)
         contact["enrich_fields"] = ["contact.phones"]
 
         # Full Enrich nécessite : linkedin_url OU (prénom + nom + domaine/entreprise)
@@ -310,14 +310,14 @@ def enrich_phones_fullenrich(prospects, token):
     for batch_num, batch in enumerate(batches):
         try:
             r = requests.post(
-                'https://app.fullenrich.com/api/v2/contact/enrich/bulk',
+                'https://app.fullenrich.com/api/v1/contact/enrich/bulk?silentFail=true',
                 headers={
                     'Authorization': f'Bearer {FULLENRICH_API_KEY}',
                     'Content-Type': 'application/json'
                 },
                 json={
                     'name': f'Entourage {datetime.now().strftime("%Y-%m-%d %H:%M")} ({batch_num + 1}/{len(batches)})',
-                    'data': batch
+                    'datas': batch
                 },
                 timeout=30
             )
@@ -351,7 +351,7 @@ def enrich_phones_fullenrich(prospects, token):
 
             try:
                 r = requests.get(
-                    f'https://app.fullenrich.com/api/v2/contact/enrich/bulk/{eid}',
+                    f'https://app.fullenrich.com/api/v1/contact/enrich/bulk/{eid}',
                     headers={'Authorization': f'Bearer {FULLENRICH_API_KEY}'},
                     timeout=15
                 )
