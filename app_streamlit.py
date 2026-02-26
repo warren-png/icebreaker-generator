@@ -250,7 +250,7 @@ def enrich_phones_fullenrich(prospects, token):
     for batch_num, batch in enumerate(batches):
         try:
             r = requests.post(
-                'https://api.fullenrich.com/contact/enrich/bulk',
+                'https://app.fullenrich.com/api/v1/contact/enrich/bulk',
                 headers={
                     'Authorization': f'Bearer {FULLENRICH_API_KEY}',
                     'Content-Type': 'application/json'
@@ -291,7 +291,7 @@ def enrich_phones_fullenrich(prospects, token):
 
             try:
                 r = requests.get(
-                    f'https://api.fullenrich.com/contact/enrich/bulk/{eid}',
+                    f'https://app.fullenrich.com/api/v1/contact/enrich/bulk/{eid}',
                     headers={'Authorization': f'Bearer {FULLENRICH_API_KEY}'},
                     timeout=15
                 )
