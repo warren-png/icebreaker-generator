@@ -274,6 +274,9 @@ def enrich_phones_fullenrich(prospects, token):
         elif company:
             contact["company_name"] = company
 
+        # Spécifier qu'on veut uniquement le téléphone (valeur exacte API Full Enrich)
+        contact["enrich_fields"] = ["contact.phones"]
+
         # Full Enrich nécessite : linkedin_url OU (prénom + nom + domaine/entreprise)
         has_linkedin = bool(linkedin_url)
         has_name_company = bool(first_name and last_name and (domain or company))
@@ -314,7 +317,6 @@ def enrich_phones_fullenrich(prospects, token):
                 },
                 json={
                     'name': f'Entourage {datetime.now().strftime("%Y-%m-%d %H:%M")} ({batch_num + 1}/{len(batches)})',
-                    'enrich_fields': ['phone'],
                     'data': batch
                 },
                 timeout=30
