@@ -230,7 +230,7 @@ def enrich_phones_fullenrich(prospects, token):
     for p in to_enrich:
         contact = {"custom": {"prospect_id": str(p['_id'])}}
 
-        # Chercher l'URL LinkedIn dans plusieurs champs possibles
+        # URL LinkedIn
         linkedin_url = (
             p.get('linkedin_url') or
             p.get('linkedin_profile_url') or
@@ -238,36 +238,50 @@ def enrich_phones_fullenrich(prospects, token):
             p.get('custom_text_3') or ''
         ).strip()
 
-        # Chercher le nom dans plusieurs champs possibles
-        full_name = (
-            p.get('user_full name') or
-            p.get('full_name') or
-            p.get('name') or ''
-        ).strip()
+        # Prénom / Nom (champs directs Leonar en priorité, sinon split du full_name)
+        first_name = (p.get('first_name') or '').strip()
+        last_name = (p.get('last_name') or '').strip()
+        if not first_name or not last_name:
+            full_name = (
+                p.get('user_full name') or
+                p.get('full_name') or
+                p.get('name') or ''
+            ).strip()
+            if full_name and not first_name:
+                parts = full_name.split(' ', 1)
+                first_name = parts[0]
+                last_name = parts[1] if len(parts) > 1 else last_name
 
+        # Entreprise
         company = (
             p.get('linkedin_company') or
             p.get('company') or
             p.get('company_name') or ''
         ).strip()
 
+        # Domaine extrait de l'email (ex: "nathalie@ortec.fr" → "ortec.fr")
+        email = (p.get('email') or '').strip()
+        domain = email.split('@')[1] if '@' in email else ''
+
         if linkedin_url:
             contact["linkedin_url"] = linkedin_url
-        if full_name:
-            parts = full_name.split(' ', 1)
-            contact["first_name"] = parts[0]
-            contact["last_name"] = parts[1] if len(parts) > 1 else ''
-        if company:
+        if first_name:
+            contact["first_name"] = first_name
+        if last_name:
+            contact["last_name"] = last_name
+        if domain:
+            contact["domain"] = domain
+        elif company:
             contact["company_name"] = company
 
-        # Full Enrich nécessite au minimum : linkedin_url OU (prénom + nom + entreprise)
+        # Full Enrich nécessite : linkedin_url OU (prénom + nom + domaine/entreprise)
         has_linkedin = bool(linkedin_url)
-        has_name_company = bool(full_name and company)
+        has_name_company = bool(first_name and last_name and (domain or company))
 
         if has_linkedin or has_name_company:
             fe_data.append(contact)
         else:
-            skipped_no_data.append(p.get('user_full name') or p.get('full_name') or p.get('_id', '?'))
+            skipped_no_data.append(p.get('user_full name') or p.get('full_name') or str(p.get('_id', '?')))
 
     if skipped_no_data:
         st.warning(
@@ -293,7 +307,7 @@ def enrich_phones_fullenrich(prospects, token):
     for batch_num, batch in enumerate(batches):
         try:
             r = requests.post(
-                'https://app.fullenrich.com/api/v1/contact/enrich/bulk',
+                'https://app.fullenrich.com/api/v2/contact/enrich/bulk',
                 headers={
                     'Authorization': f'Bearer {FULLENRICH_API_KEY}',
                     'Content-Type': 'application/json'
@@ -334,7 +348,7 @@ def enrich_phones_fullenrich(prospects, token):
 
             try:
                 r = requests.get(
-                    f'https://app.fullenrich.com/api/v1/contact/enrich/bulk/{eid}',
+                    f'https://app.fullenrich.com/api/v2/contact/enrich/bulk/{eid}',
                     headers={'Authorization': f'Bearer {FULLENRICH_API_KEY}'},
                     timeout=15
                 )
