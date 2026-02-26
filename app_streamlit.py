@@ -44,6 +44,7 @@ st.set_page_config(page_title="Icebreaker Generator V28.7", page_icon="🎯", la
 ANTHROPIC_API_KEY = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = st.secrets.get("APIFY_API_TOKEN") or os.getenv("APIFY_API_TOKEN")
 SERPER_API_KEY = st.secrets.get("SERPER_API_KEY") or os.getenv("SERPER_API_KEY")
+FULLENRICH_API_KEY = st.secrets.get("FULLENRICH_API_KEY") or os.getenv("FULLENRICH_API_KEY")
 
 LEONAR_EMAIL = st.secrets.get("LEONAR_EMAIL") or os.getenv("LEONAR_EMAIL")
 LEONAR_PASSWORD = st.secrets.get("LEONAR_PASSWORD") or os.getenv("LEONAR_PASSWORD")
@@ -207,6 +208,155 @@ def get_all_new_prospects(token):
         st.warning("⚠️ Aucun nouveau prospect trouvé dans les 5 campagnes")
 
     return all_new
+
+
+def enrich_phones_fullenrich(prospects, token):
+    """Enrichit les numéros de téléphone via Full Enrich API et les écrit dans Leonar"""
+
+    if not FULLENRICH_API_KEY:
+        st.error("❌ FULLENRICH_API_KEY manquante dans les secrets Streamlit")
+        return
+
+    # Séparer prospects avec/sans numéro
+    to_enrich = [p for p in prospects if not p.get('phone')]
+    already_have_phone = len(prospects) - len(to_enrich)
+
+    if not to_enrich:
+        st.success(f"⏭️ Tous les {len(prospects)} prospects ont déjà un numéro de téléphone")
+        return
+
+    st.info(f"📤 {len(to_enrich)} prospect(s) à enrichir · ⏭️ {already_have_phone} déjà avec numéro (skippés)")
+
+    # Construire le payload Full Enrich
+    fe_data = []
+    for p in to_enrich:
+        contact = {"custom": {"prospect_id": str(p['_id'])}}
+
+        linkedin_url = (p.get('linkedin_url') or '').strip()
+        full_name = (p.get('user_full name') or '').strip()
+        company = (p.get('linkedin_company') or '').strip()
+
+        if linkedin_url:
+            contact["linkedin_url"] = linkedin_url
+        if full_name:
+            parts = full_name.split(' ', 1)
+            contact["first_name"] = parts[0]
+            contact["last_name"] = parts[1] if len(parts) > 1 else ''
+        if company:
+            contact["company_name"] = company
+
+        fe_data.append(contact)
+
+    # Envoi en batches de 100 max
+    enrichment_ids = []
+    batches = [fe_data[i:i + 100] for i in range(0, len(fe_data), 100)]
+
+    for batch_num, batch in enumerate(batches):
+        try:
+            r = requests.post(
+                'https://api.fullenrich.com/contact/enrich/bulk',
+                headers={
+                    'Authorization': f'Bearer {FULLENRICH_API_KEY}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'name': f'Entourage {datetime.now().strftime("%Y-%m-%d %H:%M")} ({batch_num + 1}/{len(batches)})',
+                    'data': batch
+                },
+                timeout=30
+            )
+            if r.status_code == 200:
+                eid = r.json().get('enrichment_id')
+                enrichment_ids.append(eid)
+            else:
+                st.error(f"❌ Erreur envoi batch {batch_num + 1}: {r.status_code} — {r.text[:200]}")
+                return
+        except Exception as e:
+            st.error(f"❌ Erreur réseau Full Enrich: {e}")
+            return
+
+    # Polling jusqu'à FINISHED
+    results_by_id = {}  # prospect_id -> numéro ou None
+    progress_bar = st.progress(0)
+    status_ph = st.empty()
+
+    for idx, eid in enumerate(enrichment_ids):
+        max_wait = 150  # 2min30 max par batch
+        elapsed = 0
+        poll_interval = 10
+
+        while elapsed < max_wait:
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+            overall = (idx + min(elapsed / max_wait, 1.0)) / len(enrichment_ids)
+            progress_bar.progress(min(overall, 0.99))
+            status_ph.info(f"⏳ Enrichissement en cours… {elapsed}s écoulées (moyenne ~60s par batch)")
+
+            try:
+                r = requests.get(
+                    f'https://api.fullenrich.com/contact/enrich/bulk/{eid}',
+                    headers={'Authorization': f'Bearer {FULLENRICH_API_KEY}'},
+                    timeout=15
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    status = data.get('status', '')
+
+                    if status == 'FINISHED':
+                        for contact_result in data.get('data', []):
+                            pid = contact_result.get('custom', {}).get('prospect_id')
+                            phone_info = (contact_result.get('contact_info') or {}).get('most_probable_phone') or {}
+                            phone = phone_info.get('number')
+                            if pid:
+                                results_by_id[pid] = phone
+                        break
+                    elif status in ['CREDITS_INSUFFICIENT', 'CANCELED']:
+                        status_ph.error(f"❌ Enrichissement stoppé : {status}")
+                        break
+            except Exception as e:
+                status_ph.warning(f"⚠️ Erreur polling: {e}")
+
+    progress_bar.progress(1.0)
+    status_ph.empty()
+    progress_bar.empty()
+
+    # Afficher résultats et écrire dans Leonar
+    found = 0
+    not_found = 0
+
+    st.subheader("📋 Résultats détaillés")
+    for p in to_enrich:
+        pid = str(p['_id'])
+        phone = results_by_id.get(pid)
+        name = p.get('user_full name', 'Inconnu')
+
+        if phone:
+            try:
+                r = requests.patch(
+                    f'https://dashboard.leonar.app/api/1.1/obj/matching/{pid}',
+                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                    json={'phone': phone},
+                    timeout=10
+                )
+                if r.status_code in [200, 204]:
+                    st.success(f"✅ **{name}** → `{phone}` — enregistré dans Leonar")
+                else:
+                    st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur écriture Leonar ({r.status_code})")
+                found += 1
+            except Exception as e:
+                st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur: {e}")
+                found += 1
+        else:
+            st.warning(f"❌ **{name}** → Aucun numéro trouvé")
+            not_found += 1
+
+    # Résumé final
+    st.divider()
+    c1, c2, c3 = st.columns(3)
+    c1.metric("✅ Numéros trouvés", found)
+    c2.metric("⏭️ Déjà enrichis", already_have_phone)
+    c3.metric("❌ Non trouvés", not_found)
 
 
 def update_prospect_leonar(token, prospect_id, sequence_data):
@@ -1321,7 +1471,34 @@ with tab1:
                     value = p.get(key, '')
                     if value and str(value).strip():
                         st.write(f"- `{key}` = {str(value)[:100]}")
-        
+
+        # ── Enrichissement Full Enrich ──────────────────────────────────
+        st.divider()
+        col_enrich1, col_enrich2 = st.columns([2, 3])
+        with col_enrich1:
+            enrich_clicked = st.button(
+                "📞 Enrichir les numéros de téléphone",
+                type="secondary",
+                use_container_width=True,
+                help="Recherche les numéros manquants via Full Enrich API (~60s). Les prospects qui ont déjà un numéro sont skippés."
+            )
+        with col_enrich2:
+            prospects_sans_phone = [p for p in st.session_state.leonar_prospects if not p.get('phone')]
+            prospects_avec_phone = len(st.session_state.leonar_prospects) - len(prospects_sans_phone)
+            st.caption(
+                f"📊 {len(prospects_sans_phone)} sans numéro (à enrichir) · "
+                f"{prospects_avec_phone} déjà enrichis (skippés) · "
+                f"~10 crédits/numéro trouvé"
+            )
+
+        if enrich_clicked:
+            token_enrich = get_leonar_token()
+            if token_enrich:
+                enrich_phones_fullenrich(st.session_state.leonar_prospects, token_enrich)
+            else:
+                st.error("Impossible de se connecter à Leonar pour l'enrichissement")
+        st.divider()
+
         # Bouton génération
         if st.button("🚀 LANCER LA GÉNÉRATION", type="primary", use_container_width=True):
             
