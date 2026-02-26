@@ -415,19 +415,25 @@ def enrich_phones_fullenrich(prospects, token):
                     json={'phone': phone},
                     timeout=10
                 )
-                # DEBUG temporaire — réponse Leonar complète
-                with st.expander(f"🔍 Debug Leonar PATCH ({r.status_code})", expanded=True):
-                    st.write(f"**URL :** `obj/matching/{pid}`")
-                    st.write(f"**Body envoyé :** `{{'phone': '{phone}'}}`")
-                    st.write(f"**Status :** `{r.status_code}`")
-                    try:
-                        st.json(r.json())
-                    except Exception:
-                        st.code(r.text)
                 if r.status_code in [200, 204]:
+                    # Vérification : GET immédiat pour confirmer l'écriture
+                    try:
+                        r_check = requests.get(
+                            f'https://dashboard.leonar.app/api/1.1/obj/matching/{pid}',
+                            headers={'Authorization': f'Bearer {token}'},
+                            timeout=10
+                        )
+                        check_data = r_check.json() if r_check.status_code == 200 else {}
+                        phone_in_leonar = (check_data.get('response') or check_data).get('phone')
+                        with st.expander(f"🔍 Debug vérification Leonar (GET après PATCH)", expanded=True):
+                            st.write(f"**phone écrit :** `{phone}`")
+                            st.write(f"**phone lu en base :** `{phone_in_leonar}`")
+                            st.json(check_data)
+                    except Exception as e_check:
+                        st.warning(f"Erreur vérification: {e_check}")
                     st.success(f"✅ **{name}** → `{phone}` — enregistré dans Leonar")
                 else:
-                    st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur écriture Leonar ({r.status_code})")
+                    st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur écriture Leonar ({r.status_code}): {r.text}")
                 found += 1
             except Exception as e:
                 st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur: {e}")
