@@ -53,11 +53,7 @@ LEONAR_PASSWORD = st.secrets.get("LEONAR_PASSWORD") or os.getenv("LEONAR_PASSWOR
 # CAMPAGNES LEONAR PAR FAMILLE DE MÉTIERS
 # ========================================
 LEONAR_CAMPAIGNS = {
-    "Direction & Finance Corporate":   "1772027389657x402208039671693300",
-    "Comptabilité & Consolidation":    "1772028018250x374779198043586560",
-    "SI Finance, ERP & BI":            "1772028125926x540533356936560640",
-    "Data, Data Science, IA & ML":     "1772028428747x328437197616447500",
-    "M&A, Stratégie & Transformation": "1772028477476x164734855331446800",
+    "Campagne de prospection": "1768315853882x361689798987218940",
 }
 
 PROCESSED_FILE = "processed_prospects.txt"
