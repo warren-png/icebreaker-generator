@@ -364,19 +364,26 @@ def enrich_phones_fullenrich(prospects, token):
                         contacts_list = data.get('datas') or data.get('data') or []
                         for contact_result in contacts_list:
                             pid = contact_result.get('custom', {}).get('prospect_id')
-                            phone = None
                             # Clé confirmée : 'contact' (pas 'contact_info')
                             ci = contact_result.get('contact') or contact_result.get('contact_info') or {}
-                            # Structure 1 : most_probable_phone est une STRING directe
+
+                            # Collecter TOUS les numéros disponibles (sans doublons, ordre préservé)
+                            all_phones = []
+
+                            # Source 1 : most_probable_phone (string directe — le meilleur selon FE)
                             mpp = ci.get('most_probable_phone')
-                            if mpp and isinstance(mpp, str):
-                                phone = mpp
-                            # Structure 2 : phones[0].number (tableau)
-                            if not phone:
-                                phones_list = ci.get('phones') or []
-                                if phones_list and isinstance(phones_list, list):
-                                    first_p = phones_list[0]
-                                    phone = (first_p.get('number') or first_p.get('phone_number') or first_p.get('value'))
+                            if mpp and isinstance(mpp, str) and mpp.strip():
+                                all_phones.append(mpp.strip())
+
+                            # Source 2 : tableau phones[] — tous les numéros trouvés
+                            for p_obj in (ci.get('phones') or []):
+                                num = (p_obj.get('number') or p_obj.get('phone_number') or p_obj.get('value') or '').strip()
+                                if num and num not in all_phones:
+                                    all_phones.append(num)
+
+                            # Joindre avec ' / ' si plusieurs numéros
+                            phone = ' / '.join(all_phones) if all_phones else None
+
                             if pid:
                                 results_by_id[pid] = phone
                         break
