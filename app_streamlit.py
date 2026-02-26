@@ -360,10 +360,29 @@ def enrich_phones_fullenrich(prospects, token):
                     status = data.get('status', '')
 
                     if status == 'FINISHED':
-                        for contact_result in data.get('data', []):
+                        # DEBUG temporaire — à supprimer après validation
+                        with st.expander("🔍 Debug réponse Full Enrich (raw)", expanded=False):
+                            st.json(data)
+                        # Full Enrich peut retourner 'datas' ou 'data' selon les endpoints
+                        contacts_list = data.get('datas') or data.get('data') or []
+                        for contact_result in contacts_list:
                             pid = contact_result.get('custom', {}).get('prospect_id')
-                            phone_info = (contact_result.get('contact_info') or {}).get('most_probable_phone') or {}
-                            phone = phone_info.get('number')
+                            # Chercher le téléphone dans plusieurs structures possibles
+                            phone = None
+                            ci = contact_result.get('contact_info') or {}
+                            # Structure 1 : most_probable_phone.number
+                            mpp = ci.get('most_probable_phone') or {}
+                            if mpp.get('number'):
+                                phone = mpp['number']
+                            # Structure 2 : phones[].number (tableau)
+                            if not phone:
+                                phones_list = ci.get('phones') or []
+                                if phones_list and isinstance(phones_list, list):
+                                    first_p = phones_list[0]
+                                    phone = (first_p.get('number') or first_p.get('phone_number') or first_p.get('value'))
+                            # Structure 3 : phone direct sur contact_info
+                            if not phone:
+                                phone = ci.get('phone') or ci.get('phone_number')
                             if pid:
                                 results_by_id[pid] = phone
                         break
