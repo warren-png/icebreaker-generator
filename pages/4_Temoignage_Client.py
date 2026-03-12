@@ -452,60 +452,99 @@ import re
 import json
 
 
+def _is_question_line(line: str) -> bool:
+    """Détecte si une ligne est une question (termine par ? et assez courte)."""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    # Une question se termine par ? et fait moins de ~300 caractères
+    # (les réponses sont généralement plus longues)
+    return stripped.endswith('?') and len(stripped) < 300
+
+
 def parse_qa_blocks(qa_text: str) -> list[dict]:
     """
     Parse le texte brut Q&R en blocs [{question, reponse}, ...].
-    Accepte les formats : Q: / R: , Q. / R. , Question / Réponse, etc.
+    Gère 3 formats :
+      1. Préfixé : Q: / R: , Q. / R. , Question / Réponse
+      2. Sans préfixe : lignes terminant par ? = questions (ligne par ligne)
+      3. Fallback : découpage par paragraphes alternés
     """
-    # Pattern pour détecter les questions (Q:, Q., Question:, etc.)
-    q_pattern = re.compile(
+    text = qa_text.strip()
+
+    # ── FORMAT 1 : Préfixes Q:/R: ─────────────────────────────────────
+    q_prefix = re.compile(
         r'^(?:Q\s*[:.\-—]|Question\s*[:.\-—])',
         re.IGNORECASE | re.MULTILINE
     )
+    prefix_matches = list(q_prefix.finditer(text))
 
-    # Trouver toutes les positions de questions
-    matches = list(q_pattern.finditer(qa_text))
-
-    if not matches:
-        # Fallback : découper par lignes vides et alterner Q/R
-        paragraphs = [p.strip() for p in re.split(r'\n\s*\n', qa_text.strip()) if p.strip()]
+    if prefix_matches:
         blocks = []
-        for i in range(0, len(paragraphs) - 1, 2):
-            blocks.append({
-                "question": paragraphs[i],
-                "reponse": paragraphs[i + 1] if i + 1 < len(paragraphs) else ""
-            })
+        for i, match in enumerate(prefix_matches):
+            start = match.start()
+            end = prefix_matches[i + 1].start() if i + 1 < len(prefix_matches) else len(text)
+            chunk = text[start:end].strip()
+
+            r_match = re.search(
+                r'\n\s*(?:R\s*[:.\-—]|Réponse\s*[:.\-—]|Reponse\s*[:.\-—])',
+                chunk, re.IGNORECASE
+            )
+            if r_match:
+                q_line = chunk[:r_match.start()].strip()
+                r_line = chunk[r_match.start():].strip()
+                q_line = re.sub(r'^(?:Q\s*[:.\-—]|Question\s*[:.\-—])\s*', '', q_line, flags=re.IGNORECASE).strip()
+                r_line = re.sub(r'^(?:R\s*[:.\-—]|Réponse\s*[:.\-—]|Reponse\s*[:.\-—])\s*', '', r_line, flags=re.IGNORECASE).strip()
+            else:
+                lines = chunk.split('\n', 1)
+                q_line = re.sub(r'^(?:Q\s*[:.\-—]|Question\s*[:.\-—])\s*', '', lines[0], flags=re.IGNORECASE).strip()
+                r_line = lines[1].strip() if len(lines) > 1 else ""
+
+            blocks.append({"question": q_line, "reponse": r_line})
         return blocks[:3]
 
+    # ── FORMAT 2 : Ligne par ligne — les lignes terminant par ? sont des questions
+    lines = text.split('\n')
     blocks = []
-    for i, match in enumerate(matches):
-        # Texte entre cette question et la suivante (ou fin du texte)
-        start = match.start()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(qa_text)
-        chunk = qa_text[start:end].strip()
+    current_question = None
+    current_reponse_lines = []
 
-        # Séparer question et réponse dans le chunk
-        # Chercher le début de la réponse (R:, R., Réponse:, etc.)
-        r_match = re.search(
-            r'\n\s*(?:R\s*[:.\-—]|Réponse\s*[:.\-—]|Reponse\s*[:.\-—])',
-            chunk,
-            re.IGNORECASE
-        )
+    for line in lines:
+        stripped = line.strip()
 
-        if r_match:
-            q_line = chunk[:r_match.start()].strip()
-            r_line = chunk[r_match.start():].strip()
-            # Nettoyer les préfixes Q:/R:
-            q_line = re.sub(r'^(?:Q\s*[:.\-—]|Question\s*[:.\-—])\s*', '', q_line, flags=re.IGNORECASE).strip()
-            r_line = re.sub(r'^(?:R\s*[:.\-—]|Réponse\s*[:.\-—]|Reponse\s*[:.\-—])\s*', '', r_line, flags=re.IGNORECASE).strip()
-        else:
-            # Pas de R: trouvé, la première ligne est la question, le reste est la réponse
-            lines = chunk.split('\n', 1)
-            q_line = re.sub(r'^(?:Q\s*[:.\-—]|Question\s*[:.\-—])\s*', '', lines[0], flags=re.IGNORECASE).strip()
-            r_line = lines[1].strip() if len(lines) > 1 else ""
+        if _is_question_line(stripped):
+            # Sauver le bloc précédent
+            if current_question is not None:
+                blocks.append({
+                    "question": current_question,
+                    "reponse": " ".join(current_reponse_lines).strip()
+                })
+            current_question = stripped
+            current_reponse_lines = []
+        elif stripped:
+            # Ligne non vide = fait partie de la réponse en cours
+            if current_question is not None:
+                current_reponse_lines.append(stripped)
+            # sinon : texte avant la première question, on l'ignore
 
-        blocks.append({"question": q_line, "reponse": r_line})
+    # Sauver le dernier bloc
+    if current_question is not None:
+        blocks.append({
+            "question": current_question,
+            "reponse": " ".join(current_reponse_lines).strip()
+        })
 
+    if blocks:
+        return blocks[:3]
+
+    # ── FORMAT 3 : Fallback — alterner paragraphes Q/R ────────────────
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+    blocks = []
+    for i in range(0, len(paragraphs) - 1, 2):
+        blocks.append({
+            "question": paragraphs[i],
+            "reponse": paragraphs[i + 1] if i + 1 < len(paragraphs) else ""
+        })
     return blocks[:3]
 
 
