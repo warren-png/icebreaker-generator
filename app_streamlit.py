@@ -360,30 +360,29 @@ def enrich_phones_fullenrich(prospects, token):
                     status = data.get('status', '')
 
                     if status == 'FINISHED':
-                        # Full Enrich retourne 'datas' (confirmé via debug)
+                        # DEBUG temporaire — à supprimer après validation
+                        with st.expander("🔍 Debug réponse Full Enrich (raw)", expanded=False):
+                            st.json(data)
+                        # Full Enrich peut retourner 'datas' ou 'data' selon les endpoints
                         contacts_list = data.get('datas') or data.get('data') or []
                         for contact_result in contacts_list:
                             pid = contact_result.get('custom', {}).get('prospect_id')
-                            # Clé confirmée : 'contact' (pas 'contact_info')
-                            ci = contact_result.get('contact') or contact_result.get('contact_info') or {}
-
-                            # Collecter TOUS les numéros disponibles (sans doublons, ordre préservé)
-                            all_phones = []
-
-                            # Source 1 : most_probable_phone (string directe — le meilleur selon FE)
-                            mpp = ci.get('most_probable_phone')
-                            if mpp and isinstance(mpp, str) and mpp.strip():
-                                all_phones.append(mpp.strip())
-
-                            # Source 2 : tableau phones[] — tous les numéros trouvés
-                            for p_obj in (ci.get('phones') or []):
-                                num = (p_obj.get('number') or p_obj.get('phone_number') or p_obj.get('value') or '').strip()
-                                if num and num not in all_phones:
-                                    all_phones.append(num)
-
-                            # Joindre avec ' / ' si plusieurs numéros
-                            phone = ' / '.join(all_phones) if all_phones else None
-
+                            # Chercher le téléphone dans plusieurs structures possibles
+                            phone = None
+                            ci = contact_result.get('contact_info') or {}
+                            # Structure 1 : most_probable_phone.number
+                            mpp = ci.get('most_probable_phone') or {}
+                            if mpp.get('number'):
+                                phone = mpp['number']
+                            # Structure 2 : phones[].number (tableau)
+                            if not phone:
+                                phones_list = ci.get('phones') or []
+                                if phones_list and isinstance(phones_list, list):
+                                    first_p = phones_list[0]
+                                    phone = (first_p.get('number') or first_p.get('phone_number') or first_p.get('value'))
+                            # Structure 3 : phone direct sur contact_info
+                            if not phone:
+                                phone = ci.get('phone') or ci.get('phone_number')
                             if pid:
                                 results_by_id[pid] = phone
                         break
@@ -418,7 +417,7 @@ def enrich_phones_fullenrich(prospects, token):
                 if r.status_code in [200, 204]:
                     st.success(f"✅ **{name}** → `{phone}` — enregistré dans Leonar")
                 else:
-                    st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur écriture Leonar ({r.status_code}): {r.text}")
+                    st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur écriture Leonar ({r.status_code})")
                 found += 1
             except Exception as e:
                 st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur: {e}")

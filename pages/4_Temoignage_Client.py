@@ -445,122 +445,196 @@ def inject_metadata(
 
 
 # ---------------------------------------------------------------------------
-# SYSTEM PROMPT
+# PARSING Q&R
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """Tu es un rédacteur expert en communication corporate pour Entourage Recrutement, cabinet de chasse de têtes spécialisé en cadres dirigeants Finance.
+import re
+import json
 
-Tu génères des témoignages clients professionnels (études de cas) à partir de questions et réponses brutes fournies par le client.
 
-RÈGLES ABSOLUES :
-- Retourne UNIQUEMENT le code HTML complet, sans explication, sans balises markdown
-- NE COPIE JAMAIS les réponses mot pour mot — élève le registre, structure, synthétise
-- Adapte les questions en formulations élégantes et percutantes
-- Remplace tous les placeholders {{...}} listés ci-dessous par le contenu approprié
-- Ne modifie JAMAIS {{LOGO_ENTOURAGE}}, {{LOGO_CLIENT}}, {{NOM_CONTACT}}, {{ROLE_CONTACT}}, {{POSTE_RECRUTE}}, {{SECTEUR}}, {{FOOTER_COMMERCIAL}} — laisse-les tels quels
-- Langage professionnel, tonalité premium, style éditorial haut de gamme
+def parse_qa_blocks(qa_text: str) -> list[dict]:
+    """
+    Parse le texte brut Q&R en blocs [{question, reponse}, ...].
+    Accepte les formats : Q: / R: , Q. / R. , Question / Réponse, etc.
+    """
+    # Pattern pour détecter les questions (Q:, Q., Question:, etc.)
+    q_pattern = re.compile(
+        r'^(?:Q\s*[:.\-—]|Question\s*[:.\-—])',
+        re.IGNORECASE | re.MULTILINE
+    )
 
-PLACEHOLDERS À REMPLIR :
+    # Trouver toutes les positions de questions
+    matches = list(q_pattern.finditer(qa_text))
 
-{{HEADLINE_MAIN}}
-→ Texte court (4 à 7 mots) — première partie du titre accrocheur.
-Ex : "Un partenaire de confiance pour"
+    if not matches:
+        # Fallback : découper par lignes vides et alterner Q/R
+        paragraphs = [p.strip() for p in re.split(r'\n\s*\n', qa_text.strip()) if p.strip()]
+        blocks = []
+        for i in range(0, len(paragraphs) - 1, 2):
+            blocks.append({
+                "question": paragraphs[i],
+                "reponse": paragraphs[i + 1] if i + 1 < len(paragraphs) else ""
+            })
+        return blocks[:3]
 
-{{HEADLINE_HIGHLIGHT}}
-→ Texte court (2 à 4 mots) — partie surlignée en doré du titre.
-Ex : "recruter vite et bien"
+    blocks = []
+    for i, match in enumerate(matches):
+        # Texte entre cette question et la suivante (ou fin du texte)
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(qa_text)
+        chunk = qa_text[start:end].strip()
 
-{{QUESTION_1}}
-→ Reformulation élégante de la 1ère question (contexte, défi initial, pourquoi Entourage).
-Env. 10-15 mots. Ton journalistique.
+        # Séparer question et réponse dans le chunk
+        # Chercher le début de la réponse (R:, R., Réponse:, etc.)
+        r_match = re.search(
+            r'\n\s*(?:R\s*[:.\-—]|Réponse\s*[:.\-—]|Reponse\s*[:.\-—])',
+            chunk,
+            re.IGNORECASE
+        )
 
-{{REPONSE_1}}
-→ Synthèse rédigée de la réponse — 3 à 5 lignes max.
-Reprend l'essentiel en élevant le niveau de langue. Pas de copier-coller.
+        if r_match:
+            q_line = chunk[:r_match.start()].strip()
+            r_line = chunk[r_match.start():].strip()
+            # Nettoyer les préfixes Q:/R:
+            q_line = re.sub(r'^(?:Q\s*[:.\-—]|Question\s*[:.\-—])\s*', '', q_line, flags=re.IGNORECASE).strip()
+            r_line = re.sub(r'^(?:R\s*[:.\-—]|Réponse\s*[:.\-—]|Reponse\s*[:.\-—])\s*', '', r_line, flags=re.IGNORECASE).strip()
+        else:
+            # Pas de R: trouvé, la première ligne est la question, le reste est la réponse
+            lines = chunk.split('\n', 1)
+            q_line = re.sub(r'^(?:Q\s*[:.\-—]|Question\s*[:.\-—])\s*', '', lines[0], flags=re.IGNORECASE).strip()
+            r_line = lines[1].strip() if len(lines) > 1 else ""
 
-{{QUESTION_2}}
-→ Reformulation élégante de la 2ème question (déroulement de la mission, qualité du service).
-Env. 10-15 mots.
+        blocks.append({"question": q_line, "reponse": r_line})
 
-{{REPONSE_2}}
-→ Synthèse rédigée — 3 à 5 lignes max.
-
-{{CITATION}}
-→ La phrase la plus impactante du témoignage, reformulée si nécessaire pour qu'elle soit percutante.
-15 à 25 mots max. Doit sonner authentique et convaincant.
-
-{{QUESTION_3}}
-→ Reformulation élégante de la 3ème question (résultat, recommandation, satisfaction finale).
-Env. 10-15 mots.
-
-{{REPONSE_3}}
-→ Synthèse rédigée — 3 à 4 lignes max. Conclusion forte.
-
-{{POINT_CLE_1}}, {{POINT_CLE_2}}, {{POINT_CLE_3}}
-→ 3 points forts synthétiques extraits du témoignage.
-Format : substantif + qualificatif court. Ex : "Réactivité exemplaire", "Profils parfaitement ciblés", "Accompagnement sur-mesure"
-
-CONTRAINTE TAILLE — PRIORITÉ ABSOLUE :
-Le document DOIT tenir sur une seule page A4 (297mm). Sois concis :
-- Réponses : 3 lignes max chacune (police ~9pt)
-- Citation : 1 phrase courte et percutante
-- Titre : 2 lignes max
-
-Si les Q&R sont pauvres ou courtes, enrichis intelligemment dans l'esprit du témoignage.
-Si une information manque, déduis-la du contexte fourni."""
+    return blocks[:3]
 
 
 # ---------------------------------------------------------------------------
-# GÉNÉRATION CLAUDE
+# SYSTEM PROMPT — SEULEMENT POUR LES ÉLÉMENTS CRÉATIFS
 # ---------------------------------------------------------------------------
 
-def generate_temoignage(
-    qa_text: str,
-    metadata: dict,
-    modification: str = None,
-    previous_html: str = None
-) -> str:
+SYSTEM_PROMPT_CREATIVE = """Tu es un expert en communication corporate pour Entourage Recrutement.
+
+À partir des questions/réponses d'un témoignage client, tu dois générer UNIQUEMENT les éléments créatifs suivants en JSON.
+
+Retourne UNIQUEMENT un JSON valide (sans markdown, sans ```), avec ces clés :
+
+{
+  "headline_main": "Titre accrocheur de 4 à 7 mots (1ère partie)",
+  "headline_highlight": "2 à 4 mots (partie surlignée en doré)",
+  "citation": "Phrase la plus impactante extraite MOT POUR MOT des réponses du client (15-25 mots max). NE REFORMULE PAS.",
+  "point_cle_1": "Bénéfice concret court (ex: Réactivité exemplaire)",
+  "point_cle_2": "Bénéfice concret court (ex: Profils parfaitement ciblés)",
+  "point_cle_3": "Bénéfice concret court (ex: Accompagnement sur-mesure)"
+}
+
+RÈGLES :
+- La citation doit être extraite TELLE QUELLE des réponses, pas reformulée
+- Les points clés : substantif + qualificatif court
+- Le titre doit être accrocheur et professionnel"""
+
+
+# ---------------------------------------------------------------------------
+# GÉNÉRATION CLAUDE (éléments créatifs uniquement)
+# ---------------------------------------------------------------------------
+
+def generate_creative_elements(qa_text: str, metadata: dict) -> dict:
+    """Appelle Claude pour générer uniquement titre, citation et points clés."""
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-    if modification and previous_html:
-        user_content = f"""Voici le témoignage HTML que tu as généré :
-
-{previous_html}
-
-L'utilisateur demande la modification suivante :
-{modification}
-
-Applique cette modification et retourne le HTML complet mis à jour.
-Ne modifie pas les placeholders statiques (LOGO_ENTOURAGE, LOGO_CLIENT, NOM_CONTACT, ROLE_CONTACT, POSTE_RECRUTE, SECTEUR, FOOTER_COMMERCIAL).
-Retourne UNIQUEMENT le HTML, sans explication."""
-    else:
-        context_block = f"""INFORMATIONS DU CONTACT :
-- Nom : {metadata['nom_contact']}
-- Rôle : {metadata['role_contact']}
+    user_content = f"""Témoignage client pour :
 - Poste recruté : {metadata['poste_recrute']}
-- Secteur : {metadata['secteur']}"""
+- Secteur : {metadata['secteur']}
 
-        user_content = f"""Voici les informations du témoignage à générer.
-
-{context_block}
-
-QUESTIONS ET RÉPONSES BRUTES DU CLIENT :
+Questions et réponses du client :
 ---
 {qa_text}
 ---
 
-Remplis ce template HTML avec le contenu synthétisé et enrichi.
-IMPORTANT : Laisse les placeholders statiques {{{{LOGO_ENTOURAGE}}}}, {{{{LOGO_CLIENT}}}}, {{{{NOM_CONTACT}}}}, {{{{ROLE_CONTACT}}}}, {{{{POSTE_RECRUTE}}}}, {{{{SECTEUR}}}}, {{{{FOOTER_COMMERCIAL}}}} exactement tels quels.
+Génère le JSON avec les éléments créatifs."""
 
-TEMPLATE À REMPLIR :
-{TEMOIGNAGE_TEMPLATE}
+    message = client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=1000,
+        system=SYSTEM_PROMPT_CREATIVE,
+        messages=[{"role": "user", "content": user_content}]
+    )
 
-Retourne le HTML complet avec tous les placeholders {{{{QUESTION_X}}}}, {{{{REPONSE_X}}}}, {{{{CITATION}}}}, {{{{HEADLINE_MAIN}}}}, {{{{HEADLINE_HIGHLIGHT}}}}, {{{{POINT_CLE_X}}}} remplacés par le contenu généré."""
+    text = message.content[0].text.strip()
+    if "```" in text:
+        parts = text.split("```")
+        for part in parts:
+            part = part.strip()
+            if part.startswith("json"):
+                part = part[4:].strip()
+            try:
+                return json.loads(part)
+            except Exception:
+                continue
+    return json.loads(text)
+
+
+def build_temoignage_html(qa_text: str, metadata: dict) -> str:
+    """Construit le HTML en injectant les Q&R directement + éléments créatifs de Claude."""
+    # 1. Parser les Q&R
+    blocks = parse_qa_blocks(qa_text)
+
+    # 2. Obtenir les éléments créatifs de Claude
+    creative = generate_creative_elements(qa_text, metadata)
+
+    # 3. Remplir le template
+    html = TEMOIGNAGE_TEMPLATE
+
+    # Q&R injectées DIRECTEMENT (jamais passées par Claude)
+    for i in range(3):
+        if i < len(blocks):
+            html = html.replace(f"{{{{QUESTION_{i+1}}}}}", blocks[i]["question"])
+            html = html.replace(f"{{{{REPONSE_{i+1}}}}}", blocks[i]["reponse"])
+        else:
+            html = html.replace(f"{{{{QUESTION_{i+1}}}}}", "")
+            html = html.replace(f"{{{{REPONSE_{i+1}}}}}", "")
+
+    # Éléments créatifs
+    html = html.replace("{{HEADLINE_MAIN}}", creative.get("headline_main", ""))
+    html = html.replace("{{HEADLINE_HIGHLIGHT}}", creative.get("headline_highlight", ""))
+    html = html.replace("{{CITATION}}", creative.get("citation", ""))
+    html = html.replace("{{POINT_CLE_1}}", creative.get("point_cle_1", ""))
+    html = html.replace("{{POINT_CLE_2}}", creative.get("point_cle_2", ""))
+    html = html.replace("{{POINT_CLE_3}}", creative.get("point_cle_3", ""))
+
+    return html
+
+
+# ---------------------------------------------------------------------------
+# MODIFICATION VIA CLAUDE
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_MODIFICATION = """Tu es un assistant qui modifie un témoignage client HTML existant.
+
+RÈGLES ABSOLUES :
+- Applique UNIQUEMENT la modification demandée par l'utilisateur
+- Ne modifie RIEN d'autre dans le HTML
+- Ne modifie JAMAIS les placeholders statiques (LOGO_ENTOURAGE, LOGO_CLIENT, NOM_CONTACT, ROLE_CONTACT, POSTE_RECRUTE, SECTEUR, FOOTER_COMMERCIAL) — laisse-les tels quels
+- Retourne UNIQUEMENT le HTML complet modifié, sans explication, sans balises markdown"""
+
+
+def apply_modification(previous_html: str, modification: str) -> str:
+    """Applique une modification au HTML existant via Claude."""
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    user_content = f"""Voici le témoignage HTML actuel :
+
+{previous_html}
+
+Modification demandée :
+{modification}
+
+Applique UNIQUEMENT cette modification et retourne le HTML complet mis à jour."""
 
     message = client.messages.create(
         model="claude-sonnet-4-5",
         max_tokens=8096,
-        system=SYSTEM_PROMPT,
+        system=SYSTEM_PROMPT_MODIFICATION,
         messages=[{"role": "user", "content": user_content}]
     )
 
@@ -718,9 +792,8 @@ st.divider()
 # ── SECTION 4 : Q&R ──────────────────────────────────────────────────────
 st.subheader("💬 Questions & Réponses du client")
 st.caption(
-    "Colle l'intégralité des échanges mail. "
-    "Claude va restructurer, synthétiser et élever le niveau rédactionnel — "
-    "sans copier les réponses mot pour mot."
+    "Colle l'intégralité des échanges mail (questions & réponses). "
+    "Claude conservera le contenu tel quel et créera la mise en page professionnelle."
 )
 
 qa_text = st.text_area(
@@ -752,7 +825,7 @@ if st.button("🚀 Générer le Témoignage", type="primary", disabled=not champ
     }
     with st.spinner("Claude rédige le témoignage client..."):
         try:
-            raw_html = generate_temoignage(qa_text, metadata)
+            raw_html = build_temoignage_html(qa_text, metadata)
             final_html = inject_metadata(
                 raw_html,
                 nom_contact=nom_contact.strip(),
@@ -762,6 +835,7 @@ if st.button("🚀 Générer le Témoignage", type="primary", disabled=not champ
                 commercial=commercial,
                 client_logo_b64=client_logo_b64
             )
+            st.session_state.temoignage_raw_html = raw_html
             st.session_state.temoignage_html = final_html
             st.session_state.temoignage_qa = qa_text
             st.session_state.temoignage_metadata = metadata
@@ -788,7 +862,7 @@ if "temoignage_html" in st.session_state:
     with col2:
         if st.button("🗑️ Réinitialiser", use_container_width=True):
             for k in [
-                "temoignage_html", "temoignage_qa",
+                "temoignage_html", "temoignage_raw_html", "temoignage_qa",
                 "temoignage_metadata", "temoignage_commercial", "temoignage_logo"
             ]:
                 st.session_state.pop(k, None)
@@ -824,18 +898,19 @@ if "temoignage_html" in st.session_state:
         if modification.strip():
             with st.spinner("Application des modifications..."):
                 try:
-                    raw_html = generate_temoignage(
-                        st.session_state.temoignage_qa,
-                        st.session_state.temoignage_metadata,
-                        modification=modification,
-                        previous_html=st.session_state.temoignage_html
+                    # Utiliser le raw_html si disponible, sinon le html final
+                    prev_html = st.session_state.get(
+                        "temoignage_raw_html",
+                        st.session_state.temoignage_html
                     )
+                    raw_html = apply_modification(prev_html, modification)
                     final_html = inject_metadata(
                         raw_html,
                         **st.session_state.temoignage_metadata,
                         commercial=st.session_state.temoignage_commercial,
                         client_logo_b64=st.session_state.temoignage_logo
                     )
+                    st.session_state.temoignage_raw_html = raw_html
                     st.session_state.temoignage_html = final_html
                     st.rerun()
                 except Exception as e:
