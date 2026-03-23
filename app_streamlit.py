@@ -46,15 +46,13 @@ APIFY_API_TOKEN = st.secrets.get("APIFY_API_TOKEN") or os.getenv("APIFY_API_TOKE
 SERPER_API_KEY = st.secrets.get("SERPER_API_KEY") or os.getenv("SERPER_API_KEY")
 FULLENRICH_API_KEY = st.secrets.get("FULLENRICH_API_KEY") or os.getenv("FULLENRICH_API_KEY")
 
-LEONAR_EMAIL = st.secrets.get("LEONAR_EMAIL") or os.getenv("LEONAR_EMAIL")
-LEONAR_PASSWORD = st.secrets.get("LEONAR_PASSWORD") or os.getenv("LEONAR_PASSWORD")
+LEONAR_API_KEY = st.secrets.get("LEONAR_API_KEY") or os.getenv("LEONAR_API_KEY")
 
 # ========================================
-# CAMPAGNES LEONAR PAR FAMILLE DE MÉTIERS
+# PROJET LEONAR V2
 # ========================================
-LEONAR_CAMPAIGNS = {
-    "Campagne de prospection": "1768315853882x361689798987218940",
-}
+LEONAR_PROJECT_ID = "ccda80de-c273-4def-aac5-0cfb72b4a1f8"
+LEONAR_BASE_URL = "https://app.leonar.app/api/v1"
 
 PROCESSED_FILE = "processed_prospects.txt"
 
@@ -98,112 +96,81 @@ if 'generation_stats' not in st.session_state:
 # LEONAR API
 # ========================================
 
-def get_leonar_token():
-    """Obtient un token d'authentification Leonar"""
+def get_leonar_headers():
+    """Retourne les headers d'authentification Leonar V2"""
+    return {
+        'Authorization': f'Bearer {LEONAR_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+
+def get_new_prospects_leonar(verbose=True):
+    """Récupère les prospects depuis le projet Leonar V2 (avec pagination)"""
     try:
-        r = requests.post(
-            'https://dashboard.leonar.app/api/1.1/wf/auth',
-            json={"email": LEONAR_EMAIL, "password": LEONAR_PASSWORD},
-            timeout=10
-        )
-        return r.json()['response']['token'] if r.status_code == 200 else None
-    except Exception as e:
-        print(f"Erreur authentification Leonar: {e}")
-        return None
+        all_entries = []
+        offset = 0
+        limit = 100
 
-
-def get_new_prospects_leonar(token, campaign_id, family_name="", verbose=True):
-    """Récupère les nouveaux prospects depuis une campagne Leonar (avec pagination)"""
-    try:
-        all_prospects = []
-        cursor = 0
-        page = 1
-
-        # Paginer pour récupérer TOUS les prospects
         while True:
-            campaign_id_safe = url_quote(str(campaign_id), safe='')
-            url = f'https://dashboard.leonar.app/api/1.1/obj/matching?constraints=[{{"key":"campaign","constraint_type":"equals","value":"{campaign_id_safe}"}}]&cursor={cursor}&limit=100'
-
             r = requests.get(
-                url,
-                headers={'Authorization': f'Bearer {token}'},
+                f"{LEONAR_BASE_URL}/projects/{LEONAR_PROJECT_ID}/entries",
+                headers=get_leonar_headers(),
+                params={'limit': limit, 'offset': offset},
                 timeout=15
             )
 
             if r.status_code != 200:
-                st.error(f"❌ Leonar API erreur ({family_name}): status {r.status_code}")
+                st.error(f"❌ Leonar V2 API erreur: status {r.status_code} — {r.text[:100]}")
                 break
 
             data = r.json()
-            results = data.get('response', {}).get('results', [])
-            remaining = data.get('response', {}).get('remaining', 0)
+            entries = data.get('data', [])
+            meta = data.get('meta', {})
 
-            all_prospects.extend(results)
+            all_entries.extend(entries)
+
             if verbose:
-                st.info(f"📊 [{family_name}] Page {page}: {len(results)} prospects (total: {len(all_prospects)}, remaining: {remaining})")
+                st.info(f"📊 Page offset={offset}: {len(entries)} entrées (total: {len(all_entries)})")
 
-            if not results or remaining == 0:
+            if not meta.get('has_more', False) or not entries:
                 break
 
-            cursor += len(results)
-            page += 1
-
-            if page > 10:
+            offset += limit
+            if offset > 1000:
                 if verbose:
-                    st.warning(f"⚠️ [{family_name}] Limite de 1000 prospects atteinte")
+                    st.warning("⚠️ Limite de 1000 prospects atteinte")
                 break
 
         processed = load_processed()
 
-        # Filtrer les déjà traités + taguer avec la famille
+        # Filtrer les déjà traités
         filtered = []
-        for p in all_prospects:
-            pid = p['_id']
-            notes = p.get('notes', '')
-
-            if pid in processed:
-                continue
-
-            if notes and len(notes) >= 100 and 'MESSAGE 1' in notes:
-                continue
-
-            p['_family'] = family_name  # Tag famille pour l'affichage
-            filtered.append(p)
+        for entry in all_entries:
+            contact = entry.get('contact', {})
+            contact_id = contact.get('id', '')
+            if contact_id and contact_id not in processed:
+                filtered.append(entry)
 
         if verbose:
-            st.success(f"✅ [{family_name}] {len(filtered)} prospect(s) à traiter")
+            st.success(f"✅ {len(filtered)} prospect(s) à traiter ({len(all_entries)} au total)")
         else:
-            # Affichage compact mais visible dans l'UI
-            st.caption(f"   └─ {len(all_prospects)} dans l'API → {len(filtered)} nouveaux après filtrage")
+            st.caption(f"   └─ {len(all_entries)} dans le projet → {len(filtered)} nouveaux après filtrage")
 
         return filtered
 
     except Exception as e:
-        st.error(f"Erreur Leonar ({family_name}): {e}")
+        st.error(f"Erreur Leonar V2: {e}")
         return []
 
 
-def get_all_new_prospects(token):
-    """Scanne TOUTES les campagnes et retourne les nouveaux prospects (toutes familles confondues)"""
-    all_new = []
-
-    for family_name, campaign_id in LEONAR_CAMPAIGNS.items():
-        try:
-            prospects = get_new_prospects_leonar(token, campaign_id, family_name, verbose=False)
-            if prospects:
-                st.success(f"📂 **{family_name}** → {len(prospects)} nouveau(x)")
-            else:
-                st.info(f"📂 **{family_name}** → aucun nouveau")
-            all_new.extend(prospects)
-        except Exception as e:
-            st.warning(f"⚠️ Erreur campagne {family_name}: {e}")
-
-    if all_new:
-        st.success(f"✅ **Total : {len(all_new)} prospect(s) à traiter**")
+def get_all_new_prospects():
+    """Récupère tous les nouveaux prospects du projet Leonar V2"""
+    prospects = get_new_prospects_leonar(verbose=False)
+    if prospects:
+        st.success(f"✅ **{len(prospects)} prospect(s) à traiter**")
     else:
-        st.warning("⚠️ Aucun nouveau prospect trouvé dans les 5 campagnes")
-
-    return all_new
+        st.warning("⚠️ Aucun nouveau prospect trouvé dans le projet")
+    return prospects
 
 
 def enrich_phones_fullenrich(prospects, token):
@@ -434,52 +401,16 @@ def enrich_phones_fullenrich(prospects, token):
     c3.metric("❌ Non trouvés", not_found)
 
 
-def update_prospect_leonar(token, prospect_id, sequence_data):
-    """Met à jour le prospect dans Leonar avec la séquence générée"""
-    try:
-        # Backup dans les notes (lisible)
-        formatted_notes = f"""═══════════════════════════════════════════════════════════════
-OBJETS SUGGÉRÉS
-═══════════════════════════════════════════════════════════════
-
-{sequence_data.get('subject_lines', '')}
-
-═══════════════════════════════════════════════════════════════
-MESSAGE 1 (ICEBREAKER - J+0)
-═══════════════════════════════════════════════════════════════
-
-{sequence_data.get('message_1', '')}
-
-═══════════════════════════════════════════════════════════════
-MESSAGE 2 (LA PROPOSITION - J+5)
-═══════════════════════════════════════════════════════════════
-
-{sequence_data.get('message_2', '')}
-
-═══════════════════════════════════════════════════════════════
-MESSAGE 3 (BREAK-UP - J+12)
-═══════════════════════════════════════════════════════════════
-
-{sequence_data.get('message_3', '')}
-
-═══════════════════════════════════════════════════════════════"""
-
-        # Envoi : notes (backup) + custom_variables (séquence auto)
-        requests.patch(
-            f'https://dashboard.leonar.app/api/1.1/obj/matching/{prospect_id}',
-            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-            json={
-                "notes": formatted_notes,
-                "custom_variable_1": sequence_data.get('message_1', ''),
-                "custom_variable_2": sequence_data.get('message_2', ''),
-                "custom_variable_3": sequence_data.get('message_3', '')
-            },
-            timeout=10
-        )
-        return True
-    except Exception as e:
-        print(f"Erreur mise à jour prospect Leonar: {e}")
-        return False
+def update_prospect_leonar(token_unused, prospect_id, sequence_data):
+    """Inscrit le prospect dans la séquence Leonar V2 avec les messages générés"""
+    from sequence_generator_v28 import enroll_leonar_v2
+    return enroll_leonar_v2(
+        contact_id=prospect_id,
+        message_1=sequence_data.get('message_1', ''),
+        message_2=sequence_data.get('message_2', ''),
+        subject_1=sequence_data.get('subject_1', ''),
+        subject_2=sequence_data.get('subject_2', '')
+    )
 
 
 def load_processed():
@@ -1361,24 +1292,37 @@ Titre: {prospect_data.get('headline') or prospect_data.get('linkedin_headline', 
 Entreprise: {prospect_data.get('company') or prospect_data.get('linkedin_company', 'N/A')}"""
 
 
-def extract_prospect_data(leonar_prospect):
-    """Extrait les données du prospect Leonar"""
-    full_name = leonar_prospect.get('user_full name', '')
-    first_name = ''
-    
-    if full_name and ' ' in str(full_name):
-        first_name = str(full_name).split()[0]
-    
+def extract_prospect_data(leonar_entry):
+    """Extrait les données du prospect depuis un entry Leonar V2"""
+    # Format V2 : entry avec contact imbriqué
+    contact = leonar_entry.get('contact', leonar_entry)
+    contact_id = contact.get('id', leonar_entry.get('_id', ''))
+
+    first_name = contact.get('first_name', '')
+    last_name = contact.get('last_name', '')
+    full_name = f"{first_name} {last_name}".strip()
+    if not full_name:
+        full_name = contact.get('name', contact.get('user_full name', ''))
+    if not first_name and full_name and ' ' in full_name:
+        first_name = full_name.split()[0]
+
+    company = contact.get('company', contact.get('linkedin_company', ''))
+    linkedin_url = contact.get('linkedin_url', '')
+    headline = contact.get('headline', contact.get('linkedin_headline', ''))
+
     return {
-        '_id': leonar_prospect.get('_id', ''),
+        '_id': contact_id,
+        'contact_id': contact_id,
         'full_name': full_name,
         'user_full name': full_name,
         'first_name': first_name,
-        'company': leonar_prospect.get('linkedin_company', ''),
-        'linkedin_company': leonar_prospect.get('linkedin_company', ''),
-        'linkedin_url': leonar_prospect.get('linkedin_url', ''),
-        'headline': leonar_prospect.get('linkedin_headline', ''),
-        'linkedin_headline': leonar_prospect.get('linkedin_headline', '')
+        'last_name': last_name,
+        'company': company,
+        'linkedin_company': company,
+        'linkedin_url': linkedin_url,
+        'headline': headline,
+        'linkedin_headline': headline,
+        'custom_text_1': contact.get('custom_text_1', leonar_entry.get('custom_text_1', ''))
     }
 
 
@@ -1408,13 +1352,10 @@ with st.sidebar:
     else:
         st.warning("⚠️ SERPER_API_KEY (optionnel)")
     
-    if all([LEONAR_EMAIL, LEONAR_PASSWORD]):
-        if get_leonar_token():
-            st.success(f"✅ Leonar connecté ({len(LEONAR_CAMPAIGNS)} campagnes)")
-        else:
-            st.error("❌ Erreur Leonar")
+    if LEONAR_API_KEY:
+        st.success("✅ Leonar V2 connecté")
     else:
-        st.warning("⚠️ Config Leonar incomplète (email/password)")
+        st.warning("⚠️ LEONAR_API_KEY manquante")
     
     st.divider()
     st.header("📊 Stats session")
@@ -1444,14 +1385,11 @@ tab1, tab2, tab3 = st.tabs(["🚀 Génération Leonar", "🧪 Test Manuel", "�
 with tab1:
     st.header("Génération automatique depuis Leonar")
     
-    if not all([LEONAR_EMAIL, LEONAR_PASSWORD]):
-        st.error("Configuration Leonar manquante dans .env ou secrets (email/password)")
+    if not LEONAR_API_KEY:
+        st.error("❌ LEONAR_API_KEY manquante dans les secrets Streamlit")
         st.stop()
 
-    token = get_leonar_token()
-    if not token:
-        st.error("Impossible de se connecter à Leonar")
-        st.stop()
+    token = None  # Plus utilisé en V2 — auth via API key
     
     # Zone URLs fiches de poste - AGRANDIE
     st.subheader("📄 URLs des fiches de poste (optionnel)")
@@ -1497,8 +1435,8 @@ with tab1:
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         if st.button("🔄 Rafraîchir", type="secondary"):
-            with st.spinner("Scan des 5 campagnes Leonar..."):
-                st.session_state.leonar_prospects = get_all_new_prospects(token)
+            with st.spinner("Chargement du projet Leonar V2..."):
+                st.session_state.leonar_prospects = get_all_new_prospects()
 
     with col2:
         if st.button("🗑️ Reset traités", type="secondary"):
@@ -1506,7 +1444,7 @@ with tab1:
                 os.remove(PROCESSED_FILE)
                 st.success("✅ Liste des prospects traités effacée")
             with st.spinner("Rechargement..."):
-                st.session_state.leonar_prospects = get_all_new_prospects(token)
+                st.session_state.leonar_prospects = get_all_new_prospects()
 
     with col3:
         if st.session_state.leonar_prospects:
@@ -1567,11 +1505,7 @@ with tab1:
             )
 
         if enrich_clicked:
-            token_enrich = get_leonar_token()
-            if token_enrich:
-                enrich_phones_fullenrich(st.session_state.leonar_prospects, token_enrich)
-            else:
-                st.error("Impossible de se connecter à Leonar pour l'enrichissement")
+            enrich_phones_fullenrich(st.session_state.leonar_prospects, LEONAR_API_KEY)
         st.divider()
 
         # Bouton génération
@@ -1767,17 +1701,17 @@ with tab2:
         if sequence:
             st.divider()
             
-            st.subheader("📧 Objets")
-            st.code(sequence['subject_lines'])
-            
+            st.subheader("📧 Objet email 1")
+            st.code(sequence.get('subject_1', ''))
+
+            st.subheader("📧 Objet email 2")
+            st.code(sequence.get('subject_2', ''))
+
             st.subheader("✉️ Message 1")
             st.info(sequence['message_1'])
-            
+
             st.subheader("✉️ Message 2")
             st.info(sequence['message_2'])
-            
-            st.subheader("✉️ Message 3")
-            st.info(sequence['message_3'])
 
 # ========================================
 # TAB 3 : GÉNÉRATION AVEC CV
@@ -1786,14 +1720,11 @@ with tab3:
     st.header("🎯 Génération avec CV anonymisé")
     st.caption("Séquence 2 messages : Message 1 (CV joint) + Message 2 (relance douce)")
     
-    if not all([LEONAR_EMAIL, LEONAR_PASSWORD]):
-        st.error("Configuration Leonar manquante (email/password)")
+    if not LEONAR_API_KEY:
+        st.error("❌ LEONAR_API_KEY manquante dans les secrets Streamlit")
         st.stop()
 
-    token = get_leonar_token()
-    if not token:
-        st.error("Impossible de se connecter à Leonar")
-        st.stop()
+    token = None  # Plus utilisé en V2
     
     # ========================================
     # CONFIGURATION
@@ -1818,8 +1749,8 @@ with tab3:
         
         # Rafraîchir prospects
         if st.button("🔄 Charger prospects", type="secondary", key="refresh_cv"):
-            with st.spinner("Scan des 5 campagnes..."):
-                st.session_state.leonar_prospects_cv = get_all_new_prospects(token)
+            with st.spinner("Chargement du projet Leonar V2..."):
+                st.session_state.leonar_prospects_cv = get_all_new_prospects()
         
         # Sélection prospect
         if 'leonar_prospects_cv' not in st.session_state:

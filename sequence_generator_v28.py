@@ -15,10 +15,18 @@ import os
 import re
 import json
 import time
+import requests
 from datetime import datetime, timedelta
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
+
+# ========================================
+# LEONAR V2
+# ========================================
+LEONAR_API_KEY = os.getenv("LEONAR_API_KEY")
+LEONAR_SEQUENCE_ID = "835a18cb-9433-4649-8846-4517912f66e5"
+LEONAR_BASE_URL = "https://app.leonar.app/api/v1"
 
 if not ANTHROPIC_API_KEY:
     raise ValueError("❌ ANTHROPIC_API_KEY non trouvée")
@@ -267,53 +275,83 @@ Localisation: {profile_data.get('location', 'N/A')}
 
 
 # ========================================
-# MESSAGE 3 - TEMPLATE FIXE
+# LEONAR V2 - ENROLLMENT
 # ========================================
 
-MESSAGE_3_TEMPLATE = """Bonjour {prenom},
+def enroll_leonar_v2(contact_id, message_1, message_2, subject_1, subject_2):
+    """Inscrit un contact dans la séquence Leonar V2 avec les messages générés"""
+    if not LEONAR_API_KEY:
+        log_error('enroll_leonar_v2', 'LEONAR_API_KEY manquante')
+        return False
 
-Je comprends que vous n'ayez pas eu le temps de revenir vers moi — je sais à quel point vos fonctions sont sollicitées.
+    try:
+        r = requests.post(
+            f"{LEONAR_BASE_URL}/sequences/{LEONAR_SEQUENCE_ID}/enroll",
+            headers={
+                'Authorization': f'Bearer {LEONAR_API_KEY}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                "contacts": [{
+                    "contact_id": contact_id,
+                    "custom_variables": {
+                        "custom_variable_1": message_1,
+                        "custom_variable_2": message_2,
+                        "custom_variable_3": subject_1,
+                        "custom_variable_4": subject_2
+                    }
+                }]
+            },
+            timeout=15
+        )
 
-Avant de clore le dossier de mon côté, une dernière question : Est-ce que le timing n'est simplement pas bon pour l'instant, ou bien travaillez-vous déjà avec d'autres cabinets/recruteurs sur ce poste ?
+        if r.status_code in [200, 201]:
+            data = r.json().get('data', {})
+            enrolled = data.get('enrolled', 0)
+            skipped = data.get('skipped_already_enrolled', 0)
+            log_event('enroll_leonar_v2_success', {
+                'contact_id': contact_id,
+                'enrolled': enrolled,
+                'skipped_already_enrolled': skipped
+            })
+            return True
+        else:
+            log_error('enroll_leonar_v2_error', f"Status {r.status_code}", {'response': r.text[:200]})
+            return False
 
-Si c'est une question de timing, je serai ravi de reprendre contact dans quelques semaines.
-
-Si vous préférez gérer ce recrutement autrement, aucun souci — je vous souhaite de trouver la perle rare rapidement.
-
-Merci en tous cas pour votre attention,
-
-Bonne continuation,"""
+    except Exception as e:
+        log_error('enroll_leonar_v2_exception', str(e), {'contact_id': contact_id})
+        return False
 
 
 # ========================================
 # GÉNÉRATION SÉQUENCE - 1 APPEL CLAUDE
 # ========================================
 
-def generate_sequence_v28(prospect_data, posts_data, job_posting_data, profile_data=None):
+def generate_sequence_v28(prospect_data, posts_data, web_data=None, job_posting_data=None):
     """
-    Génère M1 + M2 en UN SEUL appel Claude
-    M3 = template fixe
+    Génère 2 objets email + M1 + M2 en UN SEUL appel Claude — Leonar V2
     """
-    
+
     log_event('generate_sequence_v28_start', {
         'prospect': prospect_data.get('full_name', 'unknown'),
         'has_posts': bool(posts_data),
         'has_job_posting': bool(job_posting_data)
     })
-    
+
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
+
     # Extraire données
     prenom = get_firstname(prospect_data)
     titre_poste = get_job_title(job_posting_data)
-    
+
     # Formater pour le prompt
     posts_formatted = format_posts_for_prompt(posts_data)
-    profile_formatted = format_profile_for_prompt(profile_data or prospect_data)
+    profile_formatted = format_profile_for_prompt(prospect_data)
     fiche_formatted = job_posting_data.get('description', 'Fiche de poste non disponible') if job_posting_data else 'Fiche de poste non disponible'
-    
+
     prompt = f"""Tu es chasseur de têtes Finance chez Entourage Recrutement.
-Tu dois générer 2 messages de prospection pour ce prospect.
+Tu dois générer 2 objets d'email et 2 messages de prospection pour ce prospect.
 
 ═══════════════════════════════════════════════════════════════════
 DONNÉES PROSPECT
@@ -331,6 +369,13 @@ FICHE DE POSTE : {titre_poste}
 {fiche_formatted[:2500]}
 
 ═══════════════════════════════════════════════════════════════════
+OBJETS D'EMAIL (2)
+═══════════════════════════════════════════════════════════════════
+Génère 2 objets courts (5-7 mots max), spécifiques au poste, qui donnent envie d'ouvrir.
+À éviter : "Opportunité", "Offre", "Candidature", "Recrutement Finance", tout ce qui sonne générique.
+Exemples : "Votre recrutement de {titre_poste}", "2 profils {titre_poste} identifiés", "Une question sur votre recherche"
+
+═══════════════════════════════════════════════════════════════════
 GÉNÈRE LES 2 MESSAGES SUIVANTS
 ═══════════════════════════════════════════════════════════════════
 
@@ -339,7 +384,7 @@ GÉNÈRE LES 2 MESSAGES SUIVANTS
 Bonjour {prenom},
 
 [HOOK - CHOISIS UNE OPTION :]
-Option A (si un post LinkedIn est pertinent et récent) : 
+Option A (si un post LinkedIn est pertinent et récent) :
   Référence personnalisée au post (mentionne le sujet PRÉCIS, pas de généralités)
   Puis transition vers le poste.
 Option B (si pas de post pertinent) :
@@ -376,7 +421,7 @@ Utilise d'AUTRES compétences/exigences de la fiche que M1.
 
 J'ai identifié 2 profils qui pourraient retenir votre attention :
 
-- L'un [PROFIL 1 : spécialiste avec les compétences EXACTES de la fiche. 
+- L'un [PROFIL 1 : spécialiste avec les compétences EXACTES de la fiche.
   Respecte l'expérience demandée. Mentionne le secteur si exigé.]
 
 - L'autre [PROFIL 2 : parcours DIFFÉRENT mais compétences pertinentes.
@@ -409,7 +454,11 @@ INTERDICTIONS ABSOLUES
 ═══════════════════════════════════════════════════════════════════
 FORMAT DE RÉPONSE
 ═══════════════════════════════════════════════════════════════════
-Retourne UNIQUEMENT les 2 messages, séparés par une ligne :
+Retourne UNIQUEMENT dans ce format :
+---SUBJECT_1---
+[objet email 1]
+---SUBJECT_2---
+[objet email 2]
 ---MESSAGE_1---
 [contenu message 1]
 ---MESSAGE_2---
@@ -445,19 +494,23 @@ Retourne UNIQUEMENT les 2 messages, séparés par une ligne :
         tracker.track(message.usage, 'generate_sequence_v28')
         result = message.content[0].text.strip()
 
-        # Parser les messages
-        m1, m2 = parse_messages(result)
-        m3 = MESSAGE_3_TEMPLATE.format(prenom=prenom)
+        # Parser sujets + messages
+        subject_1, subject_2, m1, m2 = parse_messages(result)
 
         log_event('generate_sequence_v28_success', {
             'm1_length': len(m1),
-            'm2_length': len(m2)
+            'm2_length': len(m2),
+            'subject_1': subject_1,
+            'subject_2': subject_2
         })
 
         return {
             'message_1': m1,
             'message_2': m2,
-            'message_3': m3
+            'subject_1': subject_1,
+            'subject_2': subject_2,
+            # Compatibilité affichage
+            'subject_lines': f"Objet 1 : {subject_1}\nObjet 2 : {subject_2}"
         }
 
     except Exception as e:
@@ -466,21 +519,47 @@ Retourne UNIQUEMENT les 2 messages, séparés par une ligne :
 
 
 def parse_messages(response):
-    """Parse la réponse Claude pour extraire M1 et M2"""
-    
-    # Chercher les délimiteurs
-    if '---MESSAGE_1---' in response and '---MESSAGE_2---' in response:
-        parts = response.split('---MESSAGE_2---')
+    """Parse la réponse Claude pour extraire subject_1, subject_2, M1, M2"""
+
+    subject_1 = ""
+    subject_2 = ""
+    m1 = ""
+    m2 = ""
+
+    # Parser les sujets
+    if '---SUBJECT_1---' in response and '---SUBJECT_2---' in response:
+        after_s1 = response.split('---SUBJECT_1---', 1)[1]
+        s1_parts = after_s1.split('---SUBJECT_2---', 1)
+        subject_1 = s1_parts[0].strip()
+        after_s2 = s1_parts[1] if len(s1_parts) > 1 else ""
+
+        if '---MESSAGE_1---' in after_s2:
+            m_parts = after_s2.split('---MESSAGE_1---', 1)
+            subject_2 = m_parts[0].strip()
+            after_m1 = m_parts[1] if len(m_parts) > 1 else ""
+            if '---MESSAGE_2---' in after_m1:
+                final_parts = after_m1.split('---MESSAGE_2---', 1)
+                m1 = final_parts[0].strip()
+                m2 = final_parts[1].strip() if len(final_parts) > 1 else ""
+            else:
+                m1 = after_m1.strip()
+        else:
+            subject_2 = after_s2.strip()
+
+    # Fallback : pas de sujets mais messages présents
+    if not m1 and '---MESSAGE_1---' in response and '---MESSAGE_2---' in response:
+        parts = response.split('---MESSAGE_2---', 1)
         m1 = parts[0].replace('---MESSAGE_1---', '').strip()
         m2 = parts[1].strip() if len(parts) > 1 else ""
-    else:
-        # Fallback : couper au milieu
+
+    # Dernier fallback : couper au milieu
+    if not m1:
         lines = response.split('\n\n')
         mid = len(lines) // 2
         m1 = '\n\n'.join(lines[:mid])
         m2 = '\n\n'.join(lines[mid:])
-    
-    return m1, m2
+
+    return subject_1, subject_2, m1, m2
 
 
 # ========================================
