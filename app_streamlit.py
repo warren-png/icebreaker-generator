@@ -401,16 +401,43 @@ def enrich_phones_fullenrich(prospects, token):
     c3.metric("❌ Non trouvés", not_found)
 
 
+def save_sequence_as_note_v2(contact_id, sequence_data):
+    """Sauvegarde la séquence générée en note dans Leonar V2 (backup lisible)"""
+    if not LEONAR_API_KEY or not contact_id:
+        return False
+    try:
+        note_content = (
+            f"=== SÉQUENCE GÉNÉRÉE LE {datetime.now().strftime('%d/%m/%Y %H:%M')} ===\n\n"
+            f"📧 OBJET M1: {sequence_data.get('subject_1', '')}\n"
+            f"📧 OBJET M2: {sequence_data.get('subject_2', '')}\n\n"
+            f"--- MESSAGE 1 ---\n{sequence_data.get('message_1', '')}\n\n"
+            f"--- MESSAGE 2 ---\n{sequence_data.get('message_2', '')}"
+        )
+        r = requests.post(
+            f"{LEONAR_BASE_URL}/contacts/{contact_id}/notes",
+            headers=get_leonar_headers(),
+            json={"content": note_content},
+            timeout=10
+        )
+        return r.status_code in [200, 201]
+    except Exception as e:
+        print(f"Erreur sauvegarde note Leonar: {e}")
+        return False
+
+
 def update_prospect_leonar(token_unused, prospect_id, sequence_data):
-    """Inscrit le prospect dans la séquence Leonar V2 avec les messages générés"""
+    """Inscrit le prospect dans la séquence Leonar V2 et sauvegarde en note"""
     from sequence_generator_v28 import enroll_leonar_v2
-    return enroll_leonar_v2(
+    enrolled = enroll_leonar_v2(
         contact_id=prospect_id,
         message_1=sequence_data.get('message_1', ''),
         message_2=sequence_data.get('message_2', ''),
         subject_1=sequence_data.get('subject_1', ''),
         subject_2=sequence_data.get('subject_2', '')
     )
+    if enrolled:
+        save_sequence_as_note_v2(prospect_id, sequence_data)
+    return enrolled
 
 
 def load_processed():
@@ -1456,13 +1483,14 @@ with tab1:
     if st.session_state.leonar_prospects:
         with st.expander(f"👥 Voir les {len(st.session_state.leonar_prospects)} prospects", expanded=True):
             for i, p in enumerate(st.session_state.leonar_prospects):
-                name = p.get('user_full name', 'Inconnu')
-                company = p.get('linkedin_company', 'N/A')
-                has_linkedin = "✅" if p.get('linkedin_url') else "❌"
+                p_info = extract_prospect_data(p)
+                name = p_info.get('full_name', 'Inconnu')
+                company = p_info.get('company', 'N/A')
+                has_linkedin = "✅" if p_info.get('linkedin_url') else "❌"
                 family = p.get('_family', '')
 
                 # URL fiche : priorité Leonar (custom_text_1) > manuelle
-                leonar_url = p.get('custom_text_1', '').strip()
+                leonar_url = p_info.get('custom_text_1', '').strip()
                 manual_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
 
                 if leonar_url:
@@ -1538,17 +1566,17 @@ with tab1:
             # Traiter chaque prospect
             for i, prospect in enumerate(st.session_state.leonar_prospects):
                 progress.progress((i + 1) / len(st.session_state.leonar_prospects))
-                
-                name = prospect.get('user_full name', 'Inconnu')
-                company = prospect.get('linkedin_company', '')
-                status.write(f"⚙️ Traitement de **{name}**...")
-                
+
+                name = 'Inconnu'
                 try:
-                    # Extraire données prospect
+                    # Extraire données prospect EN PREMIER (V2 : données imbriquées dans 'contact')
                     p_data = extract_prospect_data(prospect)
-                    
+                    name = p_data.get('full_name', 'Inconnu')
+                    company = p_data.get('company', '')
+                    status.write(f"⚙️ Traitement de **{name}**...")
+
                     # URL fiche de poste : priorité Leonar (custom_text_1) > manuelle
-                    leonar_url = prospect.get('custom_text_1', '').strip()
+                    leonar_url = p_data.get('custom_text_1', '').strip()
                     manual_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
                     
                     if leonar_url:
@@ -1607,10 +1635,17 @@ with tab1:
                         sequence = generate_sequence_v28(p_data, posts, web_results, job_data)
                     
                     if sequence:
-                        # Update Leonar
-                        if update_prospect_leonar(token, prospect['_id'], sequence):
-                            save_processed(prospect['_id'])
+                        # Update Leonar (V2 : utiliser p_data['_id'] = contact UUID)
+                        if update_prospect_leonar(token, p_data['_id'], sequence):
+                            save_processed(p_data['_id'])
                             st.toast(f"✅ {name}")
+                            with st.expander(f"📋 Messages générés — {name}", expanded=False):
+                                st.caption(f"📧 **Objet M1 :** {sequence.get('subject_1', '')}")
+                                st.caption(f"📧 **Objet M2 :** {sequence.get('subject_2', '')}")
+                                st.markdown("**Message 1 :**")
+                                st.info(sequence.get('message_1', ''))
+                                st.markdown("**Message 2 :**")
+                                st.info(sequence.get('message_2', ''))
                         else:
                             st.warning(f"⚠️ Erreur export Leonar pour {name}")
                     else:
