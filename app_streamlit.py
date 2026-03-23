@@ -433,7 +433,8 @@ def update_prospect_leonar(token_unused, prospect_id, sequence_data):
         message_1=sequence_data.get('message_1', ''),
         message_2=sequence_data.get('message_2', ''),
         subject_1=sequence_data.get('subject_1', ''),
-        subject_2=sequence_data.get('subject_2', '')
+        subject_2=sequence_data.get('subject_2', ''),
+        api_key=LEONAR_API_KEY  # Passer depuis app_streamlit qui lit st.secrets
     )
     if enrolled:
         save_sequence_as_note_v2(prospect_id, sequence_data)

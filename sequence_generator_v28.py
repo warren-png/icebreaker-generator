@@ -278,9 +278,10 @@ Localisation: {profile_data.get('location', 'N/A')}
 # LEONAR V2 - ENROLLMENT
 # ========================================
 
-def enroll_leonar_v2(contact_id, message_1, message_2, subject_1, subject_2):
+def enroll_leonar_v2(contact_id, message_1, message_2, subject_1, subject_2, api_key=None):
     """Inscrit un contact dans la séquence Leonar V2 avec les messages générés"""
-    if not LEONAR_API_KEY:
+    key = api_key or LEONAR_API_KEY
+    if not key:
         log_error('enroll_leonar_v2', 'LEONAR_API_KEY manquante')
         return False
 
@@ -288,7 +289,7 @@ def enroll_leonar_v2(contact_id, message_1, message_2, subject_1, subject_2):
         r = requests.post(
             f"{LEONAR_BASE_URL}/sequences/{LEONAR_SEQUENCE_ID}/enroll",
             headers={
-                'Authorization': f'Bearer {LEONAR_API_KEY}',
+                'Authorization': f'Bearer {key}',
                 'Content-Type': 'application/json'
             },
             json={
