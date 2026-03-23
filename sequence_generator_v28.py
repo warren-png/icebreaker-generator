@@ -296,10 +296,10 @@ def enroll_leonar_v2(contact_id, message_1, message_2, subject_1, subject_2, api
                 "contacts": [{
                     "contact_id": contact_id,
                     "custom_variables": {
-                        "custom_variable_1": message_1,
-                        "custom_variable_2": message_2,
-                        "custom_variable_3": subject_1,
-                        "custom_variable_4": subject_2
+                        "custom_variable_1": message_1[:490],
+                        "custom_variable_2": message_2[:490],
+                        "custom_variable_3": subject_1[:490],
+                        "custom_variable_4": subject_2[:490]
                     }
                 }]
             },
