@@ -428,17 +428,19 @@ def save_sequence_as_note_v2(contact_id, sequence_data):
 def update_prospect_leonar(token_unused, prospect_id, sequence_data):
     """Inscrit le prospect dans la séquence Leonar V2 et sauvegarde en note"""
     from sequence_generator_v28 import enroll_leonar_v2
-    enrolled = enroll_leonar_v2(
+    success, err = enroll_leonar_v2(
         contact_id=prospect_id,
         message_1=sequence_data.get('message_1', ''),
         message_2=sequence_data.get('message_2', ''),
         subject_1=sequence_data.get('subject_1', ''),
         subject_2=sequence_data.get('subject_2', ''),
-        api_key=LEONAR_API_KEY  # Passer depuis app_streamlit qui lit st.secrets
+        api_key=LEONAR_API_KEY
     )
-    if enrolled:
-        save_sequence_as_note_v2(prospect_id, sequence_data)
-    return enrolled
+    if not success:
+        st.error(f"❌ Leonar API error (contact_id={prospect_id}): {err}")
+        return False
+    save_sequence_as_note_v2(prospect_id, sequence_data)
+    return True
 
 
 def load_processed():

@@ -315,14 +315,16 @@ def enroll_leonar_v2(contact_id, message_1, message_2, subject_1, subject_2, api
                 'enrolled': enrolled,
                 'skipped_already_enrolled': skipped
             })
-            return True
+            return True, None
         else:
-            log_error('enroll_leonar_v2_error', f"Status {r.status_code}", {'response': r.text[:200]})
-            return False
+            err = f"HTTP {r.status_code} — {r.text[:300]}"
+            log_error('enroll_leonar_v2_error', err, {'contact_id': contact_id})
+            return False, err
 
     except Exception as e:
-        log_error('enroll_leonar_v2_exception', str(e), {'contact_id': contact_id})
-        return False
+        err = str(e)
+        log_error('enroll_leonar_v2_exception', err, {'contact_id': contact_id})
+        return False, err
 
 
 # ========================================
