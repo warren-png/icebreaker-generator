@@ -1071,25 +1071,25 @@ GÉNÈRE LES 2 MESSAGES
 
 Bonjour {prenom},
 
-[HOOK - CHOISIS UNE OPTION - PRIORITÉ AUX INFOS RÉCENTES :]
-Option A (si un post LinkedIn OU une actualité web est pertinente) : 
-  Référence personnalisée (sujet PRÉCIS, événement, publication, nomination...)
-  Puis transition vers le poste.
-Option B (si aucune info récente pertinente) :
-  "Je vous contacte concernant votre recherche de {titre_poste}."
+[OUVERTURE]
+Toujours : "Je vous contacte suite à la lecture de votre descriptif de {titre_poste}."
+JAMAIS mentionner le nom de l'entreprise — le prospect y travaille déjà.
 
 [PAIN POINT #1]
-Identifie LA difficulté principale de ce recrutement avec le VOCABULAIRE EXACT de la fiche.
-Mentionne les compétences RARES demandées (réassurance, consolidation IFRS, provisions techniques, etc.)
-PAS de généralités ("rigueur", "agilité", "dynamisme").
+Identifie LA vraie difficulté de ce recrutement — celle que vit concrètement le manager au quotidien.
+RÈGLES ABSOLUES sur le pain point :
+- Reformule avec tes propres mots. NE REPRENDS JAMAIS le vocabulaire exact de la fiche.
+- Traduis le problème réel derrière les compétences listées.
+- Vocabulaire professionnel uniquement. Jamais de termes familiers.
+- Jamais le mot "candidats" — registre recruteur, pas adapté.
+- Pas de généralités : "rigueur", "agilité", "dynamisme" sont interdits.
+Exemples de reformulation correcte (fiche → message) :
+- Fiche dit "maîtrise BFC Magnitude + consolidation IFRS" → Message : "La consolidation IFRS exige déjà un niveau d'expertise pointu — y ajouter la maîtrise de l'outil groupe crée une double exigence que le marché peine à satisfaire."
+- Fiche dit "vision business partner + costing produit" → Message : "Le vrai défi : trouver quelqu'un qui sait autant parler chiffres avec des opérationnels terrain que challenger une direction sur ses choix industriels. Ce n'est pas le même registre, et peu de profils passent naturellement de l'un à l'autre."
 
-[QUESTION FINALE CONTEXTUALISÉE]
-Formule une question courte qui reprend 2-3 compétences critiques identifiées dans le pain point.
-Structure : "Qu'est-ce qui manque le plus dans les profils rencontrés aujourd'hui : [compétence A], [compétence B], ou les deux ?"
-Exemples :
-- "Qu'est-ce qui manque le plus : le niveau de modélisation, l'expérience d'exécution end-to-end, ou les deux ?"
-- "Qu'est-ce qui manque le plus : la maîtrise des flux de réassurance, l'expérience en consolidation IFRS, ou les deux ?"
-La question DOIT être spécifique au poste, JAMAIS générique.
+[QUESTION FINALE — FIXE]
+Termine TOUJOURS le message 1 par cette question exacte, sans la modifier :
+"Est-ce que cela ferait sens que je vous communique les derniers chiffres de rémunération et les critères de choix des candidats du secteur ?"
 
 Bien à vous,
 
@@ -1123,15 +1123,19 @@ Le pain point doit tenir en 2-3 phrases, pas un paragraphe entier.
 ═══════════════════════════════════════════════════════════════════
 INTERDICTIONS ABSOLUES
 ═══════════════════════════════════════════════════════════════════
+❌ Mentionner le nom de l'entreprise dans M1 — le prospect y travaille déjà
+❌ Reprendre mot pour mot le vocabulaire de la fiche — toujours reformuler
+❌ Le mot "candidats" dans M1 — registre recruteur, pas adapté
+❌ Termes familiers : "glisser", "déraper", "coincer" — vocabulaire professionnel uniquement
 ❌ "Je travaille sur...", "Je travaille actuellement..."
 ❌ "Nous recherchons...", "Nous accompagnons...", "Nous recrutons..."
-❌ JAMAIS adopter une posture où TU recrutes — c'est le PROSPECT qui recrute, tu le contactes en tant que prestataire
+❌ JAMAIS adopter une posture où TU recrutes — c'est le PROSPECT qui recrute
 ❌ "rigueur", "agilité", "dynamisme", "dynamique", "croissance"
+❌ Question finale de type "Qu'est-ce qui manque le plus dans les profils rencontrés..."
 ❌ Inventer des compétences/certifications NON dans la fiche
 ❌ Répéter le MÊME pain point entre M1 et M2
 ❌ Utiliser des informations datant de plus de 6 mois
 ❌ Profils incohérents avec la fiche
-❌ Utiliser une question finale générique type "Quels sont les principaux écarts..."
 
 ═══════════════════════════════════════════════════════════════════
 FORMAT DE RÉPONSE
