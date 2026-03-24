@@ -278,6 +278,15 @@ Localisation: {profile_data.get('location', 'N/A')}
 # LEONAR V2 - ENROLLMENT
 # ========================================
 
+def _truncate(text, max_chars):
+    """Tronque proprement sur une fin de mot sans couper au milieu"""
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    last_space = truncated.rfind(' ')
+    return truncated[:last_space] + '...' if last_space > 0 else truncated + '...'
+
+
 def enroll_leonar_v2(contact_id, message_1, message_2, subject_1, subject_2, api_key=None):
     """Inscrit un contact dans la séquence Leonar V2 avec les messages générés"""
     key = api_key or LEONAR_API_KEY
@@ -296,10 +305,10 @@ def enroll_leonar_v2(contact_id, message_1, message_2, subject_1, subject_2, api
                 "contacts": [{
                     "contact_id": contact_id,
                     "custom_variables": {
-                        "custom_variable_1": message_1.replace('\n', '<br>'),
-                        "custom_variable_2": message_2.replace('\n', '<br>'),
-                        "custom_variable_3": subject_1,
-                        "custom_variable_4": subject_2
+                        "custom_variable_1": message_1.replace('\n', '<br>')[:1900],
+                        "custom_variable_2": message_2.replace('\n', '<br>')[:1900],
+                        "custom_variable_3": subject_1[:200],
+                        "custom_variable_4": subject_2[:200]
                     }
                 }]
             },
