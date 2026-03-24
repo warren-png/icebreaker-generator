@@ -1138,8 +1138,22 @@ INTERDICTIONS ABSOLUES
 ❌ Profils incohérents avec la fiche
 
 ═══════════════════════════════════════════════════════════════════
+OBJETS D'EMAIL
+═══════════════════════════════════════════════════════════════════
+Génère 2 objets d'email courts (5-7 mots max).
+OBJET M1 : reformule le pain point du message 1 en quelques mots percutants.
+OBJET M2 : fait référence aux 2 profils présentés, court et direct.
+INTERDICTIONS objets : "recrutement", "candidats", "opportunité", "offre" — jamais ces mots.
+Exemples M1 : "Expertise costing et vision industrielle", "Consolidation IFRS et maîtrise outil groupe"
+Exemples M2 : "Deux profils à votre attention", "Deux profils identifiés pour vous"
+
+═══════════════════════════════════════════════════════════════════
 FORMAT DE RÉPONSE
 ═══════════════════════════════════════════════════════════════════
+---SUBJECT_1---
+[objet email message 1]
+---SUBJECT_2---
+[objet email message 2]
 ---MESSAGE_1---
 [contenu message 1]
 ---MESSAGE_2---
@@ -1180,15 +1194,14 @@ FORMAT DE RÉPONSE
         st.session_state.generation_stats['cost'] += (message.usage.input_tokens * 0.003 + message.usage.output_tokens * 0.015) / 1000
         
         result = message.content[0].text.strip()
-        m1, m2 = parse_messages(result)
-        m3 = generate_message_3(prenom)
-        subject_lines = generate_subject_lines(titre_poste)
-        
+        subject_1, subject_2, m1, m2 = parse_messages(result)
+
         return {
-            'subject_lines': subject_lines,
+            'subject_1': subject_1,
+            'subject_2': subject_2,
+            'subject_lines': f"Objet M1 : {subject_1}\nObjet M2 : {subject_2}",
             'message_1': m1,
             'message_2': m2,
-            'message_3': m3
         }
         
     except Exception as e:
@@ -1197,8 +1210,25 @@ FORMAT DE RÉPONSE
 
 
 def parse_messages(response):
-    """Parse la réponse Claude"""
-    if '---MESSAGE_1---' in response and '---MESSAGE_2---' in response:
+    """Parse la réponse Claude — extrait subject_1, subject_2, m1, m2"""
+    subject_1, subject_2, m1, m2 = "", "", "", ""
+
+    if '---SUBJECT_1---' in response:
+        parts = response.split('---SUBJECT_1---')
+        rest = parts[1] if len(parts) > 1 else ""
+        if '---SUBJECT_2---' in rest:
+            s1_raw, rest = rest.split('---SUBJECT_2---', 1)
+            subject_1 = s1_raw.strip()
+        if '---MESSAGE_1---' in rest:
+            s2_raw, rest = rest.split('---MESSAGE_1---', 1)
+            subject_2 = s2_raw.strip()
+        if '---MESSAGE_2---' in rest:
+            m1_raw, m2_raw = rest.split('---MESSAGE_2---', 1)
+            m1 = m1_raw.strip()
+            m2 = m2_raw.strip()
+        else:
+            m1 = rest.strip()
+    elif '---MESSAGE_1---' in response and '---MESSAGE_2---' in response:
         parts = response.split('---MESSAGE_2---')
         m1 = parts[0].replace('---MESSAGE_1---', '').strip()
         m2 = parts[1].strip() if len(parts) > 1 else ""
@@ -1207,7 +1237,8 @@ def parse_messages(response):
         mid = len(lines) // 2
         m1 = '\n\n'.join(lines[:mid])
         m2 = '\n\n'.join(lines[mid:])
-    return m1, m2
+
+    return subject_1, subject_2, m1, m2
 
 
 def generate_message_3(prenom):
