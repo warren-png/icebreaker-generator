@@ -1128,20 +1128,19 @@ Autre angle sur une AUTRE difficulté, autres compétences de la fiche.
 
 J'ai identifié 2 profils qui pourraient retenir votre attention :
 
-- L'un [PROFIL 1 : 2-3 éléments concrets et spécifiques — secteur, années d'expérience,
-  compétence clé exacte de la fiche, élément distinctif. Doit donner envie d'en savoir plus.]
+- L'un [PROFIL 1 : décris le profil avec 2-3 éléments concrets — secteur d'origine,
+  années d'expérience, ce qu'il sait faire concrètement. INTERDICTION de reprendre
+  les termes exacts de la fiche. Interprète les compétences : traduis ce que la personne
+  fait vraiment, pas ce que la fiche demande.]
 
-- L'autre [PROFIL 2 : parcours différent mais complémentaire — 2-3 éléments concrets,
-  angle différent du profil 1, toujours ancré dans les exigences réelles de la fiche.
-  PAS "Big 4" ou "reconversion" par défaut — seulement si cohérent avec la fiche.]
+- L'autre [PROFIL 2 : même règle — parcours différent, angle complémentaire,
+  toujours 2-3 éléments concrets et interprétés. PAS "Big 4" par défaut.]
 
-Exemples de bons profils :
-- "L'un issu de la consolidation groupe dans l'industrie pharmaceutique, 8 ans d'expérience
-  sur les normes IFRS 3 et pilotage des impacts M&A, habitué à coordonner avec le juridique
-  sur les acquisitions."
-- "L'autre venant du conseil en transaction services, spécialisé dans les intégrations
-  post-acquisition et la communication financière aux auditeurs externes, avec une première
-  expérience en consolidation opérationnelle."
+RÈGLE ABSOLUE sur les profils :
+NE JAMAIS reprendre les termes exacts de la fiche (ex: si la fiche dit "comptes 42/43/44/45"
+→ ne pas écrire "comptes 42/43/44/45" — écrire plutôt "gestion de la paie et des charges sociales").
+Si la fiche dit "ERP comptable + Excel avancé" → écrire "à l'aise sur les outils de gestion et l'analyse de données financières".
+Traduis toujours la compétence en ce qu'elle signifie concrètement pour le manager.
 
 Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ?
 
@@ -1157,7 +1156,9 @@ Le pain point doit tenir en 2-3 phrases, pas un paragraphe entier.
 INTERDICTIONS ABSOLUES
 ═══════════════════════════════════════════════════════════════════
 ❌ Mentionner le nom de l'entreprise dans M1 — le prospect y travaille déjà
-❌ Reprendre mot pour mot le vocabulaire de la fiche — toujours reformuler
+❌ Reprendre mot pour mot le vocabulaire de la fiche — dans les pain points ET dans les profils
+❌ Citer des numéros de comptes comptables, des noms d'outils ou des acronymes directement issus de la fiche
+❌ "double casquette" — terme familier
 ❌ Le mot "candidats" dans M1 — registre recruteur, pas adapté
 ❌ Termes familiers : "glisser", "déraper", "coincer" — vocabulaire professionnel uniquement
 ❌ "Je travaille sur...", "Je travaille actuellement..."
