@@ -1087,13 +1087,15 @@ GÉNÈRE LES 2 MESSAGES
 Bonjour {prenom},
 
 [OUVERTURE — DEUX OPTIONS]
-Option A (si un post LinkedIn OU une actualité web récente est pertinente) :
-  Commence par une référence précise au post/actualité, puis enchaîne naturellement :
-  "...ce qui m'a amené à consulter votre descriptif de {titre_poste}."
-  Exemple : "J'ai lu votre post sur [sujet précis], ce qui m'a amené à consulter votre descriptif de {titre_poste}."
-Option B (si aucune info récente pertinente) :
+Option A (UNIQUEMENT si un post LinkedIn ou une actualité web traite directement d'un sujet LIÉ au poste) :
+  Le lien doit être ÉVIDENT et NATUREL — pas forcé.
+  Exemples de liens valides : post sur la consolidation IFRS → poste consolidation / post sur la data science → poste data scientist / post sur le contrôle de gestion → poste RAF.
+  Exemples de liens INVALIDES (→ utiliser Option B) : post sur une levée de fonds / création d'entreprise / salon non lié au poste / sujet RH générique / vie personnelle.
+  Si le lien est valide : "J'ai lu votre [post/article] sur [sujet précis], ce qui m'a amené à consulter votre descriptif de {titre_poste}."
+Option B (par défaut si aucun lien direct et évident avec le poste) :
   "Je vous contacte suite à la lecture de votre descriptif de {titre_poste}."
 JAMAIS mentionner le nom de l'entreprise — le prospect y travaille déjà.
+EN CAS DE DOUTE sur la pertinence du lien → toujours choisir Option B.
 
 [PAIN POINT #1]
 Identifie LA vraie difficulté de ce recrutement — celle que vit concrètement le manager au quotidien.
@@ -1664,8 +1666,11 @@ with tab1:
                     
                     if is_manual_url and manual_description:
                         # Utiliser la description manuelle
+                        # Extraire le titre depuis la première ligne non vide de la description
+                        first_line = next((l.strip() for l in manual_description.split('\n') if l.strip()), 'Poste')
+                        extracted_title = first_line[:80] if len(first_line) <= 80 else 'Poste'
                         job_data = {
-                            'title': 'Poste',
+                            'title': extracted_title,
                             'description': manual_description,
                             'source': 'Manuel (copier-coller)',
                             'url': job_url
