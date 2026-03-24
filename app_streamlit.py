@@ -104,6 +104,21 @@ def get_leonar_headers():
     }
 
 
+def get_contact_full(contact_id):
+    """Récupère le contact complet depuis Leonar V2 pour obtenir linkedin_url et autres champs manquants"""
+    try:
+        r = requests.get(
+            f"{LEONAR_BASE_URL}/contacts/{contact_id}",
+            headers=get_leonar_headers(),
+            timeout=10
+        )
+        if r.status_code == 200:
+            return r.json().get('data', {})
+        return {}
+    except Exception:
+        return {}
+
+
 def get_new_prospects_leonar(verbose=True):
     """Récupère les prospects depuis le projet Leonar V2 (avec pagination)"""
     try:
@@ -1111,9 +1126,20 @@ Autre angle sur une AUTRE difficulté, autres compétences de la fiche.
 
 J'ai identifié 2 profils qui pourraient retenir votre attention :
 
-- L'un [PROFIL 1 : spécialiste avec compétences EXACTES de la fiche, expérience cohérente]
+- L'un [PROFIL 1 : 2-3 éléments concrets et spécifiques — secteur, années d'expérience,
+  compétence clé exacte de la fiche, élément distinctif. Doit donner envie d'en savoir plus.]
 
-- L'autre [PROFIL 2 : parcours DIFFÉRENT mais pertinent, PAS "Big 4" par défaut]
+- L'autre [PROFIL 2 : parcours différent mais complémentaire — 2-3 éléments concrets,
+  angle différent du profil 1, toujours ancré dans les exigences réelles de la fiche.
+  PAS "Big 4" ou "reconversion" par défaut — seulement si cohérent avec la fiche.]
+
+Exemples de bons profils :
+- "L'un issu de la consolidation groupe dans l'industrie pharmaceutique, 8 ans d'expérience
+  sur les normes IFRS 3 et pilotage des impacts M&A, habitué à coordonner avec le juridique
+  sur les acquisitions."
+- "L'autre venant du conseil en transaction services, spécialisé dans les intégrations
+  post-acquisition et la communication financière aux auditeurs externes, avec une première
+  expérience en consolidation opérationnelle."
 
 Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ?
 
@@ -1174,7 +1200,7 @@ FORMAT DE RÉPONSE
             try:
                 message = client.messages.create(
                     model="claude-sonnet-4-20250514",
-                    max_tokens=1500,
+                    max_tokens=2500,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 break  # Succès, sortir de la boucle
@@ -1660,11 +1686,20 @@ with tab1:
                         continue
                     
                     # 2. Scraper LinkedIn posts
+                    # Si linkedin_url absent du entry, récupérer le contact complet
+                    if not p_data.get('linkedin_url'):
+                        full_contact = get_contact_full(p_data['_id'])
+                        if full_contact.get('linkedin_url'):
+                            p_data['linkedin_url'] = full_contact['linkedin_url']
+                            st.caption(f"   🔗 LinkedIn URL récupérée via contact complet")
+
                     posts = []
                     if p_data.get('linkedin_url'):
-                        with st.spinner(f"🔍 Scraping LinkedIn..."):
+                        with st.spinner(f"🔍 Scraping LinkedIn posts..."):
                             posts = scrape_linkedin_posts(apify_client, p_data['linkedin_url'])
                             st.caption(f"   ✅ {len(posts)} posts LinkedIn (<6 mois)")
+                    else:
+                        st.caption(f"   ⚠️ Pas d'URL LinkedIn — hook désactivé")
                     
                     # 3. Recherche web
                     web_results = []
