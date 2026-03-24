@@ -1071,8 +1071,13 @@ GÉNÈRE LES 2 MESSAGES
 
 Bonjour {prenom},
 
-[OUVERTURE]
-Toujours : "Je vous contacte suite à la lecture de votre descriptif de {titre_poste}."
+[OUVERTURE — DEUX OPTIONS]
+Option A (si un post LinkedIn OU une actualité web récente est pertinente) :
+  Commence par une référence précise au post/actualité, puis enchaîne naturellement :
+  "...ce qui m'a amené à consulter votre descriptif de {titre_poste}."
+  Exemple : "J'ai lu votre post sur [sujet précis], ce qui m'a amené à consulter votre descriptif de {titre_poste}."
+Option B (si aucune info récente pertinente) :
+  "Je vous contacte suite à la lecture de votre descriptif de {titre_poste}."
 JAMAIS mentionner le nom de l'entreprise — le prospect y travaille déjà.
 
 [PAIN POINT #1]
