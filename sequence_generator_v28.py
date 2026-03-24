@@ -402,17 +402,9 @@ Exemples de reformulation correcte (fiche → message) :
 - Fiche dit "maîtrise BFC Magnitude + consolidation IFRS" → Message : "La consolidation IFRS exige déjà un niveau d'expertise pointu — y ajouter la maîtrise de l'outil groupe crée une double exigence que le marché peine à satisfaire."
 - Fiche dit "vision business partner + costing produit" → Message : "Le vrai défi : trouver quelqu'un qui sait autant parler chiffres avec des opérationnels terrain que challenger une direction sur ses choix industriels. Ce n'est pas le même registre, et peu de profils passent naturellement de l'un à l'autre."
 
-[QUESTION FINALE — CONSÉQUENCE]
-Pose une question sur la CONSÉQUENCE BUSINESS de cette difficulté, pas sur les compétences manquantes.
-La question doit être :
-- Fermée ou semi-fermée (facile et rapide à répondre)
-- Ancrée dans l'impact opérationnel réel du poste vacant
-- Professionnelle — pas de termes familiers
-Exemples corrects :
-- "Commencez-vous à ressentir cet impact sur votre organisation ?"
-- "Est-ce que vous commencez à ressentir cet impact sur le pilotage de vos coûts ?"
-- "Quand ce type de poste reste vacant, ce sont les échéances de clôture qui subissent les premières tensions. Commencez-vous à ressentir cet impact ?"
-JAMAIS : "Qu'est-ce qui manque le plus dans les profils rencontrés..." — trop recruteur, le manager ne répondra pas.
+[QUESTION FINALE — FIXE]
+Termine TOUJOURS le message 1 par cette question exacte, sans la modifier :
+"Est-ce que cela ferait sens que je vous communique les derniers chiffres de rémunération et les critères de choix des candidats du secteur ?"
 
 Bien à vous,
 
