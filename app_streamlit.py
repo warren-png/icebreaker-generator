@@ -1689,16 +1689,14 @@ with tab1:
                     # Si linkedin_url absent du entry, récupérer le contact complet
                     if not p_data.get('linkedin_url'):
                         full_contact = get_contact_full(p_data['_id'])
-                        st.caption(f"   🔍 Champs contact complet : {list(full_contact.keys())}")
                         linkedin_field = (
+                            full_contact.get('linkedin_profile') or
                             full_contact.get('linkedin_url') or
-                            full_contact.get('linkedin_profile_url') or
-                            full_contact.get('linkedin') or
-                            full_contact.get('linkedin_handle') or ''
+                            full_contact.get('linkedin_identifier') or ''
                         )
                         if linkedin_field:
                             p_data['linkedin_url'] = linkedin_field
-                            st.caption(f"   🔗 LinkedIn URL récupérée : {linkedin_field[:50]}")
+                            st.caption(f"   🔗 LinkedIn récupéré")
 
                     posts = []
                     if p_data.get('linkedin_url'):
