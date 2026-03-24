@@ -1100,14 +1100,12 @@ EN CAS DE DOUTE sur la pertinence du lien → toujours choisir Option B.
 [PAIN POINT #1]
 Identifie LA vraie difficulté de ce recrutement — celle que vit concrètement le manager au quotidien.
 RÈGLES ABSOLUES sur le pain point :
-- Reformule avec tes propres mots. NE REPRENDS JAMAIS le vocabulaire exact de la fiche.
-- Traduis le problème réel derrière les compétences listées.
+- Pose-toi cette question : "Quelle est la vraie difficulté que vit ce manager au quotidien avec ce poste vacant ?"
+- Exprime cette difficulté avec tes propres mots, comme si tu l'expliquais à quelqu'un qui n'a pas lu la fiche.
+- Ne reprends jamais les termes techniques ou le jargon de la fiche — traduis ce qu'ils signifient en pratique.
 - Vocabulaire professionnel uniquement. Jamais de termes familiers.
 - Jamais le mot "candidats" — registre recruteur, pas adapté.
 - Pas de généralités : "rigueur", "agilité", "dynamisme" sont interdits.
-Exemples de reformulation correcte (fiche → message) :
-- Fiche dit "maîtrise BFC Magnitude + consolidation IFRS" → Message : "La consolidation IFRS exige déjà un niveau d'expertise pointu — y ajouter la maîtrise de l'outil groupe crée une double exigence que le marché peine à satisfaire."
-- Fiche dit "vision business partner + costing produit" → Message : "Le vrai défi : trouver quelqu'un qui sait autant parler chiffres avec des opérationnels terrain que challenger une direction sur ses choix industriels. Ce n'est pas le même registre, et peu de profils passent naturellement de l'un à l'autre."
 
 [QUESTION FINALE — FIXE]
 Termine TOUJOURS le message 1 par cette question exacte, sans la modifier :
@@ -1137,10 +1135,11 @@ J'ai identifié 2 profils qui pourraient retenir votre attention :
   toujours 2-3 éléments concrets et interprétés. PAS "Big 4" par défaut.]
 
 RÈGLE ABSOLUE sur les profils :
-NE JAMAIS reprendre les termes exacts de la fiche (ex: si la fiche dit "comptes 42/43/44/45"
-→ ne pas écrire "comptes 42/43/44/45" — écrire plutôt "gestion de la paie et des charges sociales").
-Si la fiche dit "ERP comptable + Excel avancé" → écrire "à l'aise sur les outils de gestion et l'analyse de données financières".
-Traduis toujours la compétence en ce qu'elle signifie concrètement pour le manager.
+Pour chaque compétence ou exigence de la fiche, pose-toi cette question :
+"Qu'est-ce que ça signifie concrètement pour quelqu'un qui fait ce travail au quotidien ?"
+Exprime la réponse à cette question — pas la compétence telle qu'elle est écrite dans la fiche.
+Le manager sait ce qu'il a écrit dans sa fiche. Il veut comprendre ce que le profil sait FAIRE,
+pas voir sa propre fiche lui être renvoyée.
 
 Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ?
 
