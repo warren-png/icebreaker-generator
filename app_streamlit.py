@@ -1090,12 +1090,13 @@ Bonjour {prenom},
 Option A (UNIQUEMENT si un post LinkedIn ou une actualité web traite directement d'un sujet LIÉ au poste) :
   Le lien doit être ÉVIDENT et NATUREL — pas forcé.
   Exemples de liens valides : post sur la consolidation IFRS → poste consolidation / post sur la data science → poste data scientist / post sur le contrôle de gestion → poste RAF.
-  Exemples de liens INVALIDES (→ utiliser Option B) : post sur une levée de fonds / création d'entreprise / salon non lié au poste / sujet RH générique / vie personnelle.
+  Exemples de liens INVALIDES (→ utiliser Option B) : post sur une levée de fonds / création d'entreprise / salon non lié au poste / sujet RH générique / vie personnelle / annonce d'ouverture de poste ou de recrutement en cours.
   Si le lien est valide : "J'ai lu votre [post/article] sur [sujet précis], ce qui m'a amené à consulter votre descriptif de {titre_poste}."
 Option B (par défaut si aucun lien direct et évident avec le poste) :
   "Je vous contacte suite à la lecture de votre descriptif de {titre_poste}."
 JAMAIS mentionner le nom de l'entreprise — le prospect y travaille déjà.
 EN CAS DE DOUTE sur la pertinence du lien → toujours choisir Option B.
+Si {titre_poste} est vide ou générique ("Poste"), déduis le titre exact depuis la fiche avant de rédiger.
 
 [PAIN POINT #1]
 Identifie LA vraie difficulté de ce recrutement — celle que vit concrètement le manager au quotidien.
@@ -1175,10 +1176,10 @@ OBJETS D'EMAIL
 ═══════════════════════════════════════════════════════════════════
 Génère 2 objets d'email courts (5-7 mots max).
 OBJET M1 : reformule le pain point du message 1 en quelques mots percutants.
-OBJET M2 : fait référence aux 2 profils présentés, court et direct.
+OBJET M2 : mentionne le titre du poste ET un élément distinctif des profils présentés. Doit être spécifique à cette recherche, jamais générique.
 INTERDICTIONS objets : "recrutement", "candidats", "opportunité", "offre" — jamais ces mots.
 Exemples M1 : "Expertise costing et vision industrielle", "Consolidation IFRS et maîtrise outil groupe"
-Exemples M2 : "Deux profils à votre attention", "Deux profils identifiés pour vous"
+Exemples M2 : "Deux profils Data Scientist — consumer data et retail", "Deux profils RAF — multi-sites et secteur santé", "Deux profils Consolidation — groupe industriel et transaction services"
 
 ═══════════════════════════════════════════════════════════════════
 FORMAT DE RÉPONSE
