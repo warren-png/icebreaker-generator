@@ -156,14 +156,16 @@ def get_new_prospects_leonar(verbose=True):
                     st.warning("⚠️ Limite de 1000 prospects atteinte")
                 break
 
-        processed = load_processed()
-
-        # Filtrer les déjà traités
+        # Filtrer les déjà inscrits dans la séquence (source de vérité = Leonar)
         filtered = []
         for entry in all_entries:
             contact = entry.get('contact', {})
             contact_id = contact.get('id', '')
-            if contact_id and contact_id not in processed:
+            active = contact.get('active_enrollments', [])
+            already_enrolled = any(
+                e.get('sequence_id') == LEONAR_SEQUENCE_ID for e in active
+            ) if isinstance(active, list) else bool(active)
+            if contact_id and not already_enrolled:
                 filtered.append(entry)
 
         if verbose:
