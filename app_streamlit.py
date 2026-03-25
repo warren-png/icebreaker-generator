@@ -166,7 +166,6 @@ def get_new_prospects_leonar(verbose=True):
                 params={'limit': 100, 'offset': 0},
                 timeout=10
             )
-            st.caption(f"🔍 Debug enrollments: HTTP {r.status_code} — {r.text[:300]}")
             if r.status_code == 200:
                 data = r.json()
                 enrollments = data.get('data', [])
@@ -174,9 +173,8 @@ def get_new_prospects_leonar(verbose=True):
                     cid = e.get('contact_id') or e.get('contact', {}).get('id', '')
                     if cid:
                         enrolled_ids.add(cid)
-                st.caption(f"🔍 {len(enrolled_ids)} inscrits trouvés")
-        except Exception as ex:
-            st.caption(f"🔍 Erreur enrollments: {ex}")
+        except Exception:
+            pass
 
         # Filtrer les déjà inscrits
         filtered = []
