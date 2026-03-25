@@ -159,28 +159,23 @@ def get_new_prospects_leonar(verbose=True):
         # Récupérer les contacts déjà inscrits dans la séquence
         enrolled_ids = set()
         try:
-            offset = 0
-            while True:
-                r = requests.get(
-                    f"{LEONAR_BASE_URL}/sequences/{LEONAR_SEQUENCE_ID}/enrollments",
-                    headers={'Authorization': f'Bearer {LEONAR_API_KEY}'},
-                    params={'limit': 100, 'offset': offset},
-                    timeout=10
-                )
-                if r.status_code == 200:
-                    data = r.json()
-                    enrollments = data.get('data', [])
-                    for e in enrollments:
-                        cid = e.get('contact_id') or e.get('contact', {}).get('id', '')
-                        if cid:
-                            enrolled_ids.add(cid)
-                    if not data.get('meta', {}).get('has_more', False):
-                        break
-                    offset += 100
-                else:
-                    break
-        except Exception:
-            pass
+            r = requests.get(
+                f"{LEONAR_BASE_URL}/sequences/{LEONAR_SEQUENCE_ID}/enrollments",
+                headers={'Authorization': f'Bearer {LEONAR_API_KEY}'},
+                params={'limit': 100, 'offset': 0},
+                timeout=10
+            )
+            st.caption(f"🔍 Debug enrollments: HTTP {r.status_code} — {r.text[:300]}")
+            if r.status_code == 200:
+                data = r.json()
+                enrollments = data.get('data', [])
+                for e in enrollments:
+                    cid = e.get('contact_id') or e.get('contact', {}).get('id', '')
+                    if cid:
+                        enrolled_ids.add(cid)
+                st.caption(f"🔍 {len(enrolled_ids)} inscrits trouvés")
+        except Exception as ex:
+            st.caption(f"🔍 Erreur enrollments: {ex}")
 
         # Filtrer les déjà inscrits
         filtered = []
