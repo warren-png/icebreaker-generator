@@ -156,16 +156,38 @@ def get_new_prospects_leonar(verbose=True):
                     st.warning("⚠️ Limite de 1000 prospects atteinte")
                 break
 
-        # Filtrer les déjà inscrits dans la séquence (source de vérité = Leonar)
+        # Récupérer les contacts déjà inscrits dans la séquence
+        enrolled_ids = set()
+        try:
+            offset = 0
+            while True:
+                r = requests.get(
+                    f"{LEONAR_BASE_URL}/sequences/{LEONAR_SEQUENCE_ID}/enrollments",
+                    headers={'Authorization': f'Bearer {LEONAR_API_KEY}'},
+                    params={'limit': 100, 'offset': offset},
+                    timeout=10
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    enrollments = data.get('data', [])
+                    for e in enrollments:
+                        cid = e.get('contact_id') or e.get('contact', {}).get('id', '')
+                        if cid:
+                            enrolled_ids.add(cid)
+                    if not data.get('meta', {}).get('has_more', False):
+                        break
+                    offset += 100
+                else:
+                    break
+        except Exception:
+            pass
+
+        # Filtrer les déjà inscrits
         filtered = []
         for entry in all_entries:
             contact = entry.get('contact', {})
             contact_id = contact.get('id', '')
-            active = contact.get('active_enrollments', [])
-            already_enrolled = any(
-                e.get('sequence_id') == LEONAR_SEQUENCE_ID for e in active
-            ) if isinstance(active, list) else bool(active)
-            if contact_id and not already_enrolled:
+            if contact_id and contact_id not in enrolled_ids:
                 filtered.append(entry)
 
         if verbose:
