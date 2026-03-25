@@ -52,6 +52,7 @@ LEONAR_API_KEY = st.secrets.get("LEONAR_API_KEY") or os.getenv("LEONAR_API_KEY")
 # PROJET LEONAR V2
 # ========================================
 LEONAR_PROJECT_ID = "ccda80de-c273-4def-aac5-0cfb72b4a1f8"
+LEONAR_SEQUENCE_ID = "835a18cb-9433-4649-8846-4517912f66e5"
 LEONAR_BASE_URL = "https://app.leonar.app/api/v1"
 
 PROCESSED_FILE = "processed_prospects.txt"
