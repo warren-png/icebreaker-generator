@@ -1424,7 +1424,11 @@ def extract_prospect_data(leonar_entry):
         first_name = full_name.split()[0]
 
     company = contact.get('company', contact.get('linkedin_company', ''))
-    linkedin_url = contact.get('linkedin_url', '')
+    linkedin_url = (
+        contact.get('linkedin_profile') or
+        contact.get('linkedin_url') or
+        contact.get('linkedin_profile_url') or ''
+    )
     headline = contact.get('headline', contact.get('linkedin_headline', ''))
 
     return {
