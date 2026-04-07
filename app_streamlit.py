@@ -157,22 +157,29 @@ def get_new_prospects_leonar(verbose=True):
                     st.warning("⚠️ Limite de 1000 prospects atteinte")
                 break
 
-        # Récupérer les contacts déjà inscrits dans la séquence
+        # Récupérer les contacts déjà inscrits dans la séquence (avec pagination)
         enrolled_ids = set()
         try:
-            r = requests.get(
-                f"{LEONAR_BASE_URL}/sequences/{LEONAR_SEQUENCE_ID}/enrollments",
-                headers={'Authorization': f'Bearer {LEONAR_API_KEY}'},
-                params={'limit': 100, 'offset': 0},
-                timeout=10
-            )
-            if r.status_code == 200:
+            enroll_offset = 0
+            enroll_limit = 100
+            while True:
+                r = requests.get(
+                    f"{LEONAR_BASE_URL}/sequences/{LEONAR_SEQUENCE_ID}/enrollments",
+                    headers={'Authorization': f'Bearer {LEONAR_API_KEY}'},
+                    params={'limit': enroll_limit, 'offset': enroll_offset},
+                    timeout=10
+                )
+                if r.status_code != 200:
+                    break
                 data = r.json()
                 enrollments = data.get('data', [])
                 for e in enrollments:
                     cid = e.get('contact_id') or e.get('contact', {}).get('id', '')
                     if cid:
                         enrolled_ids.add(cid)
+                if not data.get('meta', {}).get('has_more', False) or not enrollments:
+                    break
+                enroll_offset += enroll_limit
         except Exception:
             pass
 
@@ -1558,6 +1565,7 @@ with tab1:
         if st.button("🔄 Rafraîchir", type="secondary"):
             with st.spinner("Chargement du projet Leonar V2..."):
                 st.session_state.leonar_prospects = get_all_new_prospects()
+                st.session_state.leonar_loaded = True
 
     with col2:
         if st.button("🗑️ Reset traités", type="secondary"):
@@ -1566,12 +1574,15 @@ with tab1:
                 st.success("✅ Liste des prospects traités effacée")
             with st.spinner("Rechargement..."):
                 st.session_state.leonar_prospects = get_all_new_prospects()
+                st.session_state.leonar_loaded = True
 
     with col3:
         if st.session_state.leonar_prospects:
             st.success(f"✅ {len(st.session_state.leonar_prospects)} prospect(s) à traiter (toutes campagnes)")
+        elif st.session_state.get('leonar_loaded'):
+            st.warning("⚠️ 0 prospect trouvé dans Leonar")
         else:
-            st.warning("⚠️ 0 prospect - Cliquez sur Rafraîchir")
+            st.info("ℹ️ Cliquez sur **🔄 Rafraîchir** pour charger les prospects depuis Leonar")
     
     # Liste des prospects
     if st.session_state.leonar_prospects:
