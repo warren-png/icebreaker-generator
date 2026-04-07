@@ -183,12 +183,16 @@ def get_new_prospects_leonar(verbose=True):
         except Exception:
             pass
 
-        # Filtrer les déjà inscrits
+        # Filtrer les déjà inscrits (Leonar) + déjà traités localement
+        processed_ids = load_processed()
         filtered = []
         for entry in all_entries:
             contact = entry.get('contact', {})
             contact_id = contact.get('id', '')
-            if contact_id and contact_id not in enrolled_ids:
+            entry_id = entry.get('_id', '')
+            already_enrolled = contact_id and contact_id in enrolled_ids
+            already_processed = entry_id and entry_id in processed_ids
+            if not already_enrolled and not already_processed:
                 filtered.append(entry)
 
         if verbose:
