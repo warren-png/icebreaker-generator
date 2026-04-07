@@ -189,9 +189,13 @@ def get_new_prospects_leonar(verbose=True):
         for entry in all_entries:
             contact = entry.get('contact', {})
             contact_id = contact.get('id', '')
-            entry_id = entry.get('_id', '')
+            entry_id = entry.get('id', '')  # Leonar V2 utilise 'id' (pas '_id')
             already_enrolled = contact_id and contact_id in enrolled_ids
-            already_processed = entry_id and entry_id in processed_ids
+            # processed_prospects.txt peut stocker contact.id OU entry.id selon le contexte
+            already_processed = (
+                (contact_id and contact_id in processed_ids) or
+                (entry_id and entry_id in processed_ids)
+            )
             if not already_enrolled and not already_processed:
                 filtered.append(entry)
 
@@ -1590,6 +1594,9 @@ with tab1:
     
     # Liste des prospects
     if st.session_state.leonar_prospects:
+        if 'skip_selection' not in st.session_state:
+            st.session_state.skip_selection = set()
+
         with st.expander(f"👥 Voir les {len(st.session_state.leonar_prospects)} prospects", expanded=True):
             for i, p in enumerate(st.session_state.leonar_prospects):
                 p_info = extract_prospect_data(p)
@@ -1597,6 +1604,7 @@ with tab1:
                 company = p_info.get('company', 'N/A')
                 has_linkedin = "✅" if p_info.get('linkedin_url') else "❌"
                 family = p.get('_family', '')
+                contact_id = p.get('contact', {}).get('id', '') or p.get('id', '')
 
                 # URL fiche : priorité Leonar (custom_text_1) > manuelle
                 leonar_url = p_info.get('custom_text_1', '').strip()
@@ -1610,13 +1618,40 @@ with tab1:
                     has_url = "⚠️ Pas d'URL"
 
                 family_tag = f" | 🏷️ *{family}*" if family else ""
-                st.write(f"{i+1}. **{name}** | {company} | LinkedIn: {has_linkedin} | {has_url}{family_tag}")
+                col_check, col_text = st.columns([0.05, 0.95])
+                with col_check:
+                    checked = st.checkbox("", key=f"skip_{contact_id}", label_visibility="collapsed")
+                    if checked:
+                        st.session_state.skip_selection.add(contact_id)
+                    else:
+                        st.session_state.skip_selection.discard(contact_id)
+                with col_text:
+                    st.write(f"{i+1}. **{name}** | {company} | LinkedIn: {has_linkedin} | {has_url}{family_tag}")
+
+        if st.session_state.skip_selection:
+            if st.button(f"🚫 Marquer {len(st.session_state.skip_selection)} prospect(s) comme déjà traités", type="secondary"):
+                for cid in st.session_state.skip_selection:
+                    save_processed(cid)
+                st.session_state.skip_selection = set()
+                with st.spinner("Rechargement..."):
+                    st.session_state.leonar_prospects = get_all_new_prospects()
+                    st.session_state.leonar_loaded = True
+                st.rerun()
         
         # Debug : voir les champs disponibles
         with st.expander("🔍 Debug: voir les champs Leonar", expanded=False):
             if st.session_state.leonar_prospects:
                 p = st.session_state.leonar_prospects[0]
-                st.write("**Champs disponibles sur le 1er prospect :**")
+                st.write("**IDs du 1er prospect (pour diagnostic filtrage) :**")
+                st.write(f"- `entry._id` = `{p.get('_id', 'N/A')}`")
+                st.write(f"- `contact.id` = `{p.get('contact', {}).get('id', 'N/A')}`")
+                processed_ids = load_processed()
+                st.write(f"- Dans processed_prospects.txt : {len(processed_ids)} IDs")
+                if processed_ids:
+                    sample = list(processed_ids)[:3]
+                    st.write(f"- Exemples : {sample}")
+                st.write("---")
+                st.write("**Tous les champs :**")
                 for key in sorted(p.keys()):
                     value = p.get(key, '')
                     if value and str(value).strip():
