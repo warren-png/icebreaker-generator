@@ -51,7 +51,7 @@ LEONAR_API_KEY = st.secrets.get("LEONAR_API_KEY") or os.getenv("LEONAR_API_KEY")
 # ========================================
 # PROJET LEONAR V2
 # ========================================
-LEONAR_PROJECT_ID = "ccda80de-c273-4def-aac5-0cfb72b4a1f8"
+LEONAR_PROJECT_ID = "61f7ae44-ce3e-4444-b6aa-836573c628c6"
 LEONAR_SEQUENCE_ID = "835a18cb-9433-4649-8846-4517912f66e5"
 LEONAR_BASE_URL = "https://app.leonar.app/api/v1"
 
@@ -186,6 +186,8 @@ def get_new_prospects_leonar(verbose=True):
         # Filtrer les déjà inscrits (Leonar) + déjà traités localement
         processed_ids = load_processed()
         filtered = []
+        skipped_enrolled = 0
+        skipped_processed = 0
         for entry in all_entries:
             contact = entry.get('contact', {})
             contact_id = contact.get('id', '')
@@ -196,13 +198,24 @@ def get_new_prospects_leonar(verbose=True):
                 (contact_id and contact_id in processed_ids) or
                 (entry_id and entry_id in processed_ids)
             )
-            if not already_enrolled and not already_processed:
+            if already_enrolled:
+                skipped_enrolled += 1
+            elif already_processed:
+                skipped_processed += 1
+            else:
                 filtered.append(entry)
 
         if verbose:
             st.success(f"✅ {len(filtered)} prospect(s) à traiter ({len(all_entries)} au total)")
+            if skipped_enrolled > 0:
+                st.caption(f"   └─ {skipped_enrolled} ignorés : déjà inscrits dans la séquence Leonar")
+            if skipped_processed > 0:
+                st.caption(f"   └─ {skipped_processed} ignorés : déjà traités (processed_prospects.txt)")
+            if len(all_entries) == 0:
+                st.warning("⚠️ Aucune entrée retournée par l'API — vérifier PROJECT_ID ou API key")
         else:
-            st.caption(f"   └─ {len(all_entries)} dans le projet → {len(filtered)} nouveaux après filtrage")
+            st.caption(f"   └─ {len(all_entries)} dans le projet → {len(filtered)} nouveaux "
+                       f"({skipped_enrolled} déjà inscrits séquence, {skipped_processed} déjà traités localement)")
 
         return filtered
 
