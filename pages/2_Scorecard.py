@@ -403,13 +403,10 @@ Retourne le HTML complet avec tous les autres placeholders {{{{...}}}} remplacé
         messages=[{"role": "user", "content": user_content}]
     )
 
+    import re as _re
     html = message.content[0].text.strip()
-    if html.startswith("```html"):
-        html = html[7:]
-    if html.startswith("```"):
-        html = html[3:]
-    if html.endswith("```"):
-        html = html[:-3]
+    html = _re.sub(r"^```[^\n]*\n", "", html)
+    html = _re.sub(r"\n```\s*$", "", html.strip())
     return html.strip()
 
 
@@ -527,6 +524,7 @@ if uploaded_file:
                     raw_html = generate_scorecard(transcription_text)
                     final_html = inject_metadata(raw_html, client_name, commercial)
                     st.session_state.scorecard_html = final_html
+                    st.session_state.scorecard_raw_html = raw_html
                     st.session_state.scorecard_transcription = transcription_text
                     st.session_state.scorecard_client = client_name
                     st.session_state.scorecard_commercial = commercial
@@ -582,17 +580,28 @@ if "scorecard_html" in st.session_state:
         if modification.strip():
             with st.spinner("Application des modifications..."):
                 try:
+                    # Sauvegarde de sécurité avant toute modification
+                    backup_raw = st.session_state.scorecard_raw_html
+                    backup_html = st.session_state.scorecard_html
+
                     raw_html = generate_scorecard(
                         st.session_state.scorecard_transcription,
                         modification=modification,
-                        previous_html=st.session_state.scorecard_html
+                        previous_html=backup_raw
                     )
+
+                    # Validation : HTML non vide et structure minimale présente
+                    if not raw_html or len(raw_html) < 200 or "</html>" not in raw_html.lower():
+                        st.error("❌ La réponse de Claude est incomplète. Le document original est conservé.")
+                        st.stop()
+
                     final_html = inject_metadata(
                         raw_html,
                         st.session_state.scorecard_client,
                         st.session_state.scorecard_commercial
                     )
                     st.session_state.scorecard_html = final_html
+                    st.session_state.scorecard_raw_html = raw_html
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erreur : {e}")
