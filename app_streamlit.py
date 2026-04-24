@@ -1140,35 +1140,51 @@ FICHE DE POSTE : {titre_poste}
 GÉNÈRE LES 2 MESSAGES
 ═══════════════════════════════════════════════════════════════════
 
-**MESSAGE 1 (Icebreaker)** - Structure EXACTE :
+**MESSAGE 1 (Icebreaker VALUE-FIRST V29)** - Structure EXACTE :
 
 Bonjour {prenom},
 
-[OUVERTURE — DEUX OPTIONS]
-Option A (UNIQUEMENT si un post LinkedIn ou une actualité web traite directement d'un sujet LIÉ au poste) :
+[HOOK — 2 OPTIONS PAR ORDRE DE PRIORITÉ]
+
+Option A — Post LinkedIn récent LIÉ au domaine du poste (PRIORITAIRE si disponible) :
   Le lien doit être ÉVIDENT et NATUREL — pas forcé.
-  Exemples de liens valides : post sur la consolidation IFRS → poste consolidation / post sur la data science → poste data scientist / post sur le contrôle de gestion → poste RAF.
-  Exemples de liens INVALIDES (→ utiliser Option B) : post sur une levée de fonds / création d'entreprise / salon non lié au poste / sujet RH générique / vie personnelle / annonce d'ouverture de poste ou de recrutement en cours.
-  Si le lien est valide : "J'ai lu votre [post/article] sur [sujet précis], ce qui m'a amené à consulter votre descriptif de {titre_poste}."
-Option B (par défaut si aucun lien direct et évident avec le poste) :
-  "Je vous contacte suite à la lecture de votre descriptif de {titre_poste}."
-JAMAIS mentionner le nom de l'entreprise — le prospect y travaille déjà.
-EN CAS DE DOUTE sur la pertinence du lien → toujours choisir Option B.
-Si {titre_poste} est vide ou générique ("Poste"), déduis le titre exact depuis la fiche avant de rédiger.
+  Valides : post sur consolidation IFRS → poste consolidation / post sur data science → poste data / post sur contrôle de gestion → poste RAF-DAF / post sur transformation digitale finance → poste finance.
+  Invalides (→ Option B) : post de recherche d'emploi (#OpenToWork) / recommandation d'un candidat / vie personnelle / salon non lié / sujet RH générique / annonce de recrutement en cours / post vieux de plus de 6 mois.
+  Formulation : "J'ai lu votre [post/article] sur [sujet précis], ce qui m'a amené à consulter votre descriptif de {titre_poste}."
 
-[PAIN POINT #1]
-Identifie LA vraie difficulté de ce recrutement — celle que vit concrètement le manager au quotidien.
-RÈGLES ABSOLUES sur le pain point :
-- Pose-toi cette question : "Quelle est la vraie difficulté que vit ce manager au quotidien avec ce poste vacant ?"
-- Exprime cette difficulté avec tes propres mots, comme si tu l'expliquais à quelqu'un qui n'a pas lu la fiche.
-- Ne reprends jamais les termes techniques ou le jargon de la fiche — traduis ce qu'ils signifient en pratique.
-- Vocabulaire professionnel uniquement. Jamais de termes familiers.
-- Jamais le mot "candidats" — registre recruteur, pas adapté.
-- Pas de généralités : "rigueur", "agilité", "dynamisme" sont interdits.
+Option B — Observation marché spécifique au rôle ET secteur (DÉFAUT si pas de post pertinent) :
+  Une observation concrète et plausible sur le marché des profils {titre_poste} dans le secteur du prospect (déduis le secteur depuis la fiche).
+  Format : "Sur les profils [rôle précis] en [secteur/contexte], [observation concrète — tension candidats, évolution rémunération, rareté d'une compétence, etc.]. Votre descriptif m'y a fait repenser."
+  Exemples pour illustrer le registre (adapte au rôle réel) :
+    - "Sur les profils Contrôleur de gestion industriel multi-sites, la maîtrise ERP couplée à une vraie présence terrain reste rare — ~1 profil sur 5 parmi ceux que nous rencontrons."
+    - "Sur les profils Consolidation IFRS, la fourchette haute de rémunération a progressé sensiblement en 12 mois, notamment pour les profils à l'aise sur les outils groupe."
+    - "Sur les profils RAF mid-cap, les candidats capables de porter un projet ERP en parallèle du run restent très recherchés."
+    - "Sur les profils Comptable unique en PME industrielle, l'expérience clôtures en autonomie fait la différence — beaucoup de parcours groupe manquent de ce réflexe."
+  RÈGLES observation marché :
+  - Plausible et spécifique (pas "le marché est tendu")
+  - Connectée au rôle réel du poste (pas générique finance)
+  - 1 phrase, pas un paragraphe
+  - JAMAIS inventer de chiffre précis non vérifiable ("35%", "+22%") — rester qualitatif ou en fourchettes larges ("~1 sur 5", "sensiblement", "très recherchés")
 
-[QUESTION FINALE — FIXE]
-Termine TOUJOURS le message 1 par cette question exacte, sans la modifier :
-"Est-ce que cela ferait sens que je vous communique les derniers chiffres de rémunération et les critères de choix des candidats du secteur ?"
+JAMAIS mentionner le nom de l'entreprise du prospect — il y travaille déjà.
+EN CAS DE DOUTE sur Option A → Option B.
+
+[TEASER DE VALEUR — remplace l'ancien pain point]
+Annonce que tu as UN profil concret en tête, connecté à UN élément précis de la fiche (pas "le poste en général").
+Format : "J'ai justement en tête un profil qui pourrait résonner avec [élément spécifique extrait de la fiche]. [1 phrase qui tease 1-2 éléments distinctifs sans tout révéler]."
+Exemples de registre :
+  - "J'ai justement en tête un profil qui a structuré le contrôle de gestion sur un périmètre multi-sites proche du vôtre. Son approche terrain combinée à une solide expérience des phases de déploiement d'outils pourrait bien coller."
+  - "J'ai justement en tête un profil ayant mené plusieurs consolidations groupe en contexte normes IFRS. Sa double sensibilité opérationnelle et technique le distingue des parcours purement Big 4."
+  - "J'ai justement en tête un profil qui combine la rigueur comptable exigée par votre périmètre et une vraie aisance sur les enjeux de digitalisation de la fonction."
+RÈGLES teaser :
+- Connecté à UN élément précis du job posting (technique, sectoriel, contextuel)
+- Ne jamais tout révéler — les détails viennent en M2
+- Pas de jargon recruteur : jamais "candidat", "pépite", "profil rare", "top profile"
+- Pas de superlatifs creux : "excellent", "exceptionnel", "parfait"
+
+[CTA BAS-FRICTION — FIXE]
+Termine TOUJOURS M1 par cette question exacte :
+"Souhaitez-vous que je vous partage sa synthèse en quelques lignes ?"
 
 Bien à vous,
 
@@ -1207,8 +1223,8 @@ Bien à vous,
 ═══════════════════════════════════════════════════════════════════
 CONTRAINTE DE LONGUEUR (CRITIQUE)
 ═══════════════════════════════════════════════════════════════════
-Le MESSAGE 1 doit faire entre 70 et 100 mots MAXIMUM. Sois concis.
-Le pain point doit tenir en 2-3 phrases, pas un paragraphe entier.
+Le MESSAGE 1 doit faire entre 80 et 120 mots MAXIMUM. Sois concis.
+Hook = 1-2 phrases. Teaser = 2 phrases max. CTA = 1 phrase fixe.
 
 ═══════════════════════════════════════════════════════════════════
 INTERDICTIONS ABSOLUES
@@ -1224,6 +1240,7 @@ INTERDICTIONS ABSOLUES
 ❌ JAMAIS adopter une posture où TU recrutes — c'est le PROSPECT qui recrute
 ❌ "rigueur", "agilité", "dynamisme", "dynamique", "croissance"
 ❌ Question finale de type "Qu'est-ce qui manque le plus dans les profils rencontrés..."
+❌ Ancienne CTA "chiffres de rémunération / critères de choix du secteur" — remplacée par la nouvelle CTA fixe sur la synthèse du profil
 ❌ Inventer des compétences/certifications NON dans la fiche
 ❌ Répéter le MÊME pain point entre M1 et M2
 ❌ Utiliser des informations datant de plus de 6 mois
@@ -1233,7 +1250,7 @@ INTERDICTIONS ABSOLUES
 OBJETS D'EMAIL
 ═══════════════════════════════════════════════════════════════════
 Génère 2 objets d'email courts (5-7 mots max).
-OBJET M1 : reformule le pain point du message 1 en quelques mots percutants.
+OBJET M1 : reprend l'angle du teaser de valeur (élément distinctif du profil évoqué). Doit donner envie de lire la synthèse.
 OBJET M2 : mentionne le titre du poste ET un élément distinctif des profils présentés. Doit être spécifique à cette recherche, jamais générique.
 INTERDICTIONS objets : "recrutement", "candidats", "opportunité", "offre" — jamais ces mots.
 Exemples M1 : "Expertise costing et vision industrielle", "Consolidation IFRS et maîtrise outil groupe"
