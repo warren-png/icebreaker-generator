@@ -558,7 +558,7 @@ def scrape_linkedin_posts(apify_client, linkedin_url):
         # Filtre strict 6 mois
         return filter_recent_posts(items, max_age_months=6)
     except Exception as e:
-        print(f"Erreur scraping posts LinkedIn: {e}")
+        st.warning(f"⚠️ Scraping posts LinkedIn échoué: {e}")
         return []
 
 
@@ -1664,11 +1664,14 @@ with tab1:
                     sample = list(processed_ids)[:3]
                     st.write(f"- Exemples : {sample}")
                 st.write("---")
-                st.write("**Tous les champs :**")
-                for key in sorted(p.keys()):
-                    value = p.get(key, '')
-                    if value and str(value).strip():
-                        st.write(f"- `{key}` = {str(value)[:100]}")
+                contact = p.get('contact', {})
+                st.write("**Champs LinkedIn dans contact :**")
+                for lk in ['linkedin_profile', 'linkedin_url', 'linkedin_profile_url', 'linkedin_identifier', 'linkedin']:
+                    st.write(f"- `contact.{lk}` = `{contact.get(lk, 'ABSENT')}`")
+                st.write("---")
+                st.write("**Tous les champs contact (brut) :**")
+                for key in sorted(contact.keys()):
+                    st.write(f"- `{key}` = `{str(contact.get(key, ''))[:120]}`")
 
         # ── Enrichissement Full Enrich ──────────────────────────────────
         st.divider()
@@ -1793,7 +1796,11 @@ with tab1:
                     if p_data.get('linkedin_url'):
                         with st.spinner(f"🔍 Scraping LinkedIn posts..."):
                             posts = scrape_linkedin_posts(apify_client, p_data['linkedin_url'])
-                            st.caption(f"   ✅ {len(posts)} posts LinkedIn (<6 mois)")
+                        st.caption(f"   ✅ {len(posts)} posts LinkedIn (<6 mois)")
+                        if posts:
+                            with st.expander("🔍 DEBUG posts (structure)", expanded=False):
+                                st.write("**Clés post[0] :**", list(posts[0].keys()))
+                                st.write("**Contenu post[0] :**", posts[0])
                     else:
                         st.caption(f"   ⚠️ Pas d'URL LinkedIn — hook désactivé")
                     
