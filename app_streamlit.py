@@ -577,27 +577,39 @@ def filter_recent_posts(posts, max_age_months=6):
         if not isinstance(post, dict):
             continue
         
-        # Récupérer la date - chercher TOUS les champs possibles
+        # Timestamp Unix ms (postedAtTimestamp: 1736239773406)
+        ts_ms = post.get('postedAtTimestamp')
+        if ts_ms:
+            try:
+                post_date = datetime.fromtimestamp(int(ts_ms) / 1000)
+                if post_date >= cutoff:
+                    recent.append(post)
+                continue
+            except Exception:
+                pass
+
+        # Date ISO ou autres champs texte
         date_str = (
-            post.get('date') or 
-            post.get('postedDate') or 
+            post.get('postedAtISO') or
+            post.get('date') or
+            post.get('postedDate') or
             post.get('postedAt') or
-            post.get('timestamp') or
             post.get('publishedAt') or
             post.get('time') or
             post.get('posted') or
             post.get('datePosted') or
+            post.get('timeSincePosted') or  # "1yr", "3mo", "2w"
             ''
         )
-        
+
         # Si pas de date trouvée, on INCLUT quand même le post
         if not date_str:
             recent.append(post)
             continue
-        
+
         # Parser la date
         post_date = parse_date(date_str)
-        
+
         # Si parsing échoue, on inclut quand même
         if post_date is None:
             recent.append(post)
@@ -1389,14 +1401,22 @@ def format_posts(posts):
         )[:500]
         
         # Chercher la date
-        date = (
-            post.get('date') or 
-            post.get('postedDate') or 
-            post.get('postedAt') or
-            post.get('time') or
-            post.get('timestamp') or
-            'Date inconnue'
-        )
+        ts_ms = post.get('postedAtTimestamp')
+        if ts_ms:
+            try:
+                date = datetime.fromtimestamp(int(ts_ms) / 1000).strftime('%Y-%m-%d')
+            except Exception:
+                date = 'Date inconnue'
+        else:
+            date = (
+                post.get('postedAtISO', '')[:10] or
+                post.get('date') or
+                post.get('postedDate') or
+                post.get('postedAt') or
+                post.get('time') or
+                post.get('timeSincePosted') or
+                'Date inconnue'
+            )
         
         # Récupérer les interactions si disponibles
         reactions = post.get('numLikes') or post.get('reactions') or post.get('likes') or ''
