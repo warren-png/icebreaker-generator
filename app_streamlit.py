@@ -1201,13 +1201,20 @@ Autre angle sur une AUTRE difficulté, autres compétences de la fiche.
 
 J'ai identifié 2 profils qui pourraient retenir votre attention :
 
-- L'un [PROFIL 1 : décris le profil avec 2-3 éléments concrets — secteur d'origine,
-  années d'expérience, ce qu'il sait faire concrètement. INTERDICTION de reprendre
-  les termes exacts de la fiche. Interprète les compétences : traduis ce que la personne
-  fait vraiment, pas ce que la fiche demande.]
+- L'un [PROFIL 1 : CE DOIT ÊTRE LE MÊME PROFIL QUE CELUI TEASÉ EN M1, version détaillée.
+  Reprends les éléments distinctifs déjà évoqués en M1 (secteur, parcours, compétence clé)
+  et ajoute 2-3 éléments concrets supplémentaires qui complètent la description sans la
+  contredire. INTERDICTION de reprendre les termes exacts de la fiche. Interprète les
+  compétences : traduis ce que la personne fait vraiment, pas ce que la fiche demande.]
 
-- L'autre [PROFIL 2 : même règle — parcours différent, angle complémentaire,
-  toujours 2-3 éléments concrets et interprétés. PAS "Big 4" par défaut.]
+- L'autre [PROFIL 2 : profil DIFFÉRENT du Profil 1, angle complémentaire.
+  Parcours alternatif, autres compétences de la fiche mises en avant. Même règle
+  d'interprétation — 2-3 éléments concrets. PAS "Big 4" par défaut.]
+
+COHÉRENCE M1 ↔ M2 (CRITIQUE) :
+Le Profil 1 de M2 doit être reconnaissable comme la version étoffée du profil teasé en M1.
+Si M1 évoquait "un profil Big 4 puis groupe avec expérience M&A", alors Profil 1 de M2
+reprend ce cadre et le détaille. Jamais de contradiction entre les deux messages.
 
 RÈGLE ABSOLUE sur les profils :
 Pour chaque compétence ou exigence de la fiche, pose-toi cette question :
