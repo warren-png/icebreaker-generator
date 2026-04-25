@@ -1398,11 +1398,20 @@ def get_firstname(prospect_data):
 
 
 def get_job_title(job_posting_data):
-    """Extrait le titre du poste"""
+    """Extrait le titre du poste — nettoie H/F, CDI/CDD, parenthèses, secteurs en queue"""
     if not job_posting_data:
         return "[Poste]"
     title = job_posting_data.get('title', '')
-    title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', title)
+    # H/F, F/H, M/F, etc. (avec ou sans parenthèses)
+    title = re.sub(r'\s*\(?\s*[HhFfMm]\s*[/\-]\s*[HhFfMm]\s*\)?', '', title)
+    # Mentions de contrat
+    title = re.sub(r'\s*[-–—|·•]?\s*(CDI|CDD|Stage|Alternance|Freelance|Intérim|Contrat)\b', '', title, flags=re.IGNORECASE)
+    # Tout ce qui est entre parenthèses (secteurs, précisions)
+    title = re.sub(r'\s*\([^)]*\)', '', title)
+    # Tout après un séparateur (entreprise, ville, etc.)
+    title = re.sub(r'\s*[-–—|]\s*.*$', '', title)
+    # Espaces multiples
+    title = re.sub(r'\s+', ' ', title)
     return title.strip() or "[Poste]"
 
 
