@@ -593,7 +593,7 @@ Questions et réponses du client :
 Génère le JSON avec les éléments créatifs."""
 
     message = client.messages.create(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=1000,
         system=SYSTEM_PROMPT_CREATIVE,
         messages=[{"role": "user", "content": user_content}]
@@ -671,7 +671,7 @@ Modification demandée :
 Applique UNIQUEMENT cette modification et retourne le HTML complet mis à jour."""
 
     message = client.messages.create(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=8096,
         system=SYSTEM_PROMPT_MODIFICATION,
         messages=[{"role": "user", "content": user_content}]
