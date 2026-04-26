@@ -36,15 +36,17 @@ def _make_token(password: str) -> str:
     return hashlib.sha256(f"entourage_v1_{password}".encode()).hexdigest()
 
 
-@st.cache_resource
 def _get_cookie_manager():
-    """Une seule instance par session pour éviter les doublons d'iframe."""
+    """Une seule instance par session — stockée dans session_state.
+    Ne PAS utiliser @st.cache_resource : CookieManager est un widget Streamlit."""
     if not _COOKIES_AVAILABLE:
         return None
-    try:
-        return stx.CookieManager(key="entourage_auth_cm")
-    except Exception:
-        return None
+    if "_entourage_cookie_mgr" not in st.session_state:
+        try:
+            st.session_state["_entourage_cookie_mgr"] = stx.CookieManager(key="entourage_auth_cm")
+        except Exception:
+            st.session_state["_entourage_cookie_mgr"] = None
+    return st.session_state["_entourage_cookie_mgr"]
 
 
 # ---------------------------------------------------------------------------
