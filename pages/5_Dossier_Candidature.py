@@ -8,6 +8,7 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 import fitz  # pymupdf
 from utils.auth import check_password
+from utils.ui import inject_global_styles
 
 load_dotenv()
 
@@ -16,6 +17,8 @@ st.set_page_config(
     page_icon="📄",
     layout="wide"
 )
+
+inject_global_styles()
 
 if not check_password():
     st.stop()

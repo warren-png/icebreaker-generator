@@ -5,12 +5,15 @@ import io
 import datetime
 from pathlib import Path
 from utils.auth import check_password
+from utils.ui import inject_global_styles
 
 st.set_page_config(
     page_title="Contrat | Biz Dev Entourage",
     page_icon="📋",
     layout="wide"
 )
+
+inject_global_styles()
 
 # — Authentification —
 if not check_password():

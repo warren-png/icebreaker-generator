@@ -20,3 +20,6 @@ Pillow==10.4.0
 pdfplumber
 python-docx
 pymupdf>=1.23.0
+
+# UI / Auth persistence
+extra-streamlit-components>=0.1.71

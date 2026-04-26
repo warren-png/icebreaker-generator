@@ -18,6 +18,7 @@ import re
 import json
 import time
 from utils.auth import check_password
+from utils.ui import inject_global_styles
 
 # — Authentification globale —
 if not check_password():
@@ -39,6 +40,7 @@ load_dotenv()
 # ========================================
 
 st.set_page_config(page_title="Icebreaker Generator V28.7", page_icon="🎯", layout="wide")
+inject_global_styles()
 
 
 ANTHROPIC_API_KEY = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
