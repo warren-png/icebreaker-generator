@@ -121,10 +121,19 @@ PAGE 1 — PRÉSENTATION
 PAGE 2 — SCORE CARD
 
 [C] ÉVALUATION — tableau 4 critères
-    RÈGLE CRITIQUE : Les critères, notes (/5) et observations sont fournis EXPLICITEMENT dans le prompt sous "ÉVALUATION PAR CRITÈRE".
-    → Utilise EXACTEMENT ces critères, ces notes et ces observations. Ne les modifie pas, ne les arrondis pas.
+    RÈGLE CRITIQUE : Les critères et leurs notes (/5) sont fournis EXPLICITEMENT dans le prompt sous "ÉVALUATION PAR CRITÈRE".
+    → Utilise EXACTEMENT ces critères et ces notes. Ne les modifie pas, ne les arrondis pas.
     → Note globale = moyenne arithmétique des notes fournies, sur 5. JAMAIS sur 10.
-    → Analyse par critère : 1 à 2 phrases factuelles qui s'appuient sur les observations du chasseur ET un élément du CV pour étayer la note.
+
+    RATTACHEMENT DES OBSERVATIONS (étape clé) :
+    Les observations du chasseur sont consolidées dans un seul bloc "CONTEXTE GÉNÉRAL DU CANDIDAT" (texte libre). Pour CHAQUE critère du tableau :
+    1. Identifie dans le CONTEXTE GÉNÉRAL les phrases/éléments qui se rapportent directement à ce critère (mots-clés, compétences, environnements, faits chiffrés).
+    2. Croise ces éléments avec un fait précis du CV qui étaye la note.
+    3. Rédige 1 à 2 phrases factuelles qui justifient la note attribuée.
+
+    Si aucun élément du CONTEXTE GÉNÉRAL ne se rattache à un critère, appuie-toi uniquement sur le CV — sans inventer.
+    Ne reproduis JAMAIS le contexte tel quel : extrais, synthétise, factualise.
+
     → Format : <tr><td class="score-cat">Critère</td><td class="score-val">X.X / 5</td><td class="score-txt">Analyse.</td></tr>
 
 [D] PROJETS PHARES & ADÉQUATION
@@ -226,21 +235,25 @@ def build_structured_user_prompt(
     eval_lines = [f"COMMERCIAL : {commercial}\n"]
 
     if context.strip():
-        eval_lines.append(f"CONTEXTE GÉNÉRAL (observations du chasseur) :\n{context.strip()}\n")
+        eval_lines.append(
+            "CONTEXTE GÉNÉRAL DU CANDIDAT (brief consolidé du chasseur — à utiliser pour étayer chaque critère ci-dessous) :\n"
+            f"{context.strip()}\n"
+        )
 
-    eval_lines.append("ÉVALUATION PAR CRITÈRE (notes et observations du chasseur à utiliser TELLES QUELLES) :")
+    eval_lines.append("ÉVALUATION PAR CRITÈRE (notes attribuées par le chasseur — à utiliser TELLES QUELLES) :")
     for cs in criteria_scores:
         eval_lines.append(f"\n— Critère : {cs['name']} ({cs.get('weight', '')})")
         eval_lines.append(f"  Note attribuée : {cs['score']} / 5")
-        obs = cs.get("observation", "").strip()
-        eval_lines.append(f"  Observations : {obs if obs else 'Aucune observation spécifique fournie.'}")
 
     avg = round(sum(cs["score"] for cs in criteria_scores) / len(criteria_scores), 1) if criteria_scores else 0
     eval_lines.append(f"\nNote globale calculée : {avg} / 5 (à utiliser telle quelle dans l'en-tête scorecard)")
 
     eval_lines.append(
         "\n\nINSTRUCTIONS FINALES :\n"
-        "- Utilise EXACTEMENT les notes et observations ci-dessus pour le tableau [C].\n"
+        "- Pour le tableau [C] : utilise EXACTEMENT les notes ci-dessus.\n"
+        "- Pour l'analyse de chaque critère : extrais du CONTEXTE GÉNÉRAL les éléments qui se rattachent au critère, "
+        "croise avec un fait du CV, et rédige 1-2 phrases factuelles qui justifient la note.\n"
+        "- Si aucun élément du contexte ne correspond à un critère, appuie-toi uniquement sur le CV — sans inventer.\n"
         "- Génère UNIQUEMENT les pages 1 et 2. Le CV original sera ajouté automatiquement après.\n"
         f"\nVOICI LE CODE HTML MAÎTRE À REMPLIR :\n{HTML_MASTER_TEMPLATE}"
     )
@@ -383,21 +396,29 @@ if not criteria:
     st.info("⬆️ Upload la Score Card pour accéder au formulaire d'évaluation.")
     st.stop()
 
-st.subheader("📝 Observations d'entretien")
+st.subheader("📝 Brief & Évaluation")
 
+st.markdown("**Contexte général du candidat**")
+st.caption(
+    "Colle ici l'intégralité de ton brief / compte-rendu d'entretien. "
+    "Claude rattachera automatiquement les bons éléments à chaque critère."
+)
 context = st.text_area(
     "Contexte général du candidat",
-    height=100,
+    height=180,
     placeholder=(
         "Ex : Candidat rencontré en visio le 15/04. Très à l'aise sur les sujets M&A, "
-        "a piloté 3 LBO en tant que DAF. Actuellement en poste, disponible sous 3 mois. "
-        "Motivé par la dimension transformation post-acquisition."
+        "a piloté 3 LBO en tant que DAF chez X. Maîtrise SAP et Anaplan. "
+        "Actuellement en poste, disponible sous 3 mois. Motivé par la dimension "
+        "transformation post-acquisition. Prétentions : 110k€ fixe + 20% variable. "
+        "Anglais courant, expérience ETI internationale, équipe gérée de 12 personnes…"
     ),
     key="dossier_context",
+    label_visibility="collapsed",
 )
 
-st.markdown("**Évaluation par critère**")
-st.caption("Note de 1.0 à 5.0 · Justifie chaque note avec ce que tu as observé en entretien.")
+st.markdown("**Notes par critère**")
+st.caption("Attribue manuellement la note de 1.0 à 5.0 pour chaque critère de la scorecard.")
 
 criteria_scores = []
 for i, crit in enumerate(criteria):
@@ -416,20 +437,15 @@ for i, crit in enumerate(criteria):
                 key=f"score_{i}",
                 label_visibility="collapsed",
             )
-            st.markdown(f"<div style='text-align:center;font-size:18px;font-weight:800'>{score}/5</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='text-align:center;font-size:18px;font-weight:800'>{score}/5</div>",
+                unsafe_allow_html=True,
+            )
 
-        observation = st.text_area(
-            "Observations",
-            placeholder=f"Ce que tu as observé sur « {crit['name']} » lors de l'entretien...",
-            height=75,
-            key=f"obs_{i}",
-            label_visibility="collapsed",
-        )
         criteria_scores.append({
             "name": crit["name"],
             "weight": crit.get("weight", ""),
             "score": score,
-            "observation": observation,
         })
 
 st.divider()
@@ -441,8 +457,8 @@ if st.button("✨ Générer le Dossier", type="primary", key="dossier_generate")
         errors.append("Upload le logo Entourage (section en haut)")
     if not cv_file:
         errors.append("Upload le CV PDF du candidat")
-    if not any(cs.get("observation", "").strip() for cs in criteria_scores):
-        errors.append("Renseigne au moins une observation d'entretien")
+    if not context.strip():
+        errors.append("Renseigne le contexte général du candidat (brief consolidé)")
 
     if errors:
         for err in errors:
