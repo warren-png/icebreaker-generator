@@ -146,7 +146,7 @@ def build_reference_html(fields, data):
             <ul style="list-style:none;padding:0;margin:0;">{points_html}</ul>
           </div>
           {cit}
-          <div style="margin-top:auto;padding-top:4mm;border-top:1px solid #ddd;font-size:7pt;color:#aaa;line-height:1.6;">Entretien mené par<br><strong style="color:#555;">{fields["commercial"]}</strong><br>{date_str}</div>
+          <div style="margin-top:auto;padding-top:4mm;border-top:1px solid #ddd;font-size:7pt;color:#aaa;line-height:1.6;">{date_str}</div>
         </aside>'''
 
     def make_footer(page, total):
@@ -313,6 +313,7 @@ if st.button("⚡ Générer la Prise de Références", type="primary", disabled=
 
 if "ref_html" in st.session_state:
     st.divider()
+
     col1, col2, col3 = st.columns([2, 2, 6])
     with col1:
         st.components.v1.html(get_print_button_html(st.session_state.ref_html), height=50)
@@ -321,17 +322,48 @@ if "ref_html" in st.session_state:
             for k in ["ref_html", "ref_data", "ref_fields"]:
                 st.session_state.pop(k, None)
             st.rerun()
+
     st.caption("💡 Cmd+P → Enregistrer en PDF · Décocher les en-têtes/pieds de page navigateur")
 
-    with st.expander("✏️ Demander une modification", expanded=False):
-        modif = st.text_area("Modification", height=80, placeholder="Ex : Reformule la recommandation. Ajoute une section sur son autonomie.", key="ref_modif")
-        if st.button("Appliquer", key="btn_modif") and modif.strip():
-            with st.spinner("Modification en cours…"):
+    st.subheader("Aperçu")
+    st.components.v1.html(st.session_state.ref_html, height=1500, scrolling=True)
+
+    # ── SECTION MODIFICATIONS ────────────────────────────────────────────────
+    st.divider()
+    st.subheader("✏️ Demander des modifications")
+    st.caption(
+        "Décris la correction souhaitée — Claude met à jour uniquement les parties concernées "
+        "sans régénérer l'ensemble du document."
+    )
+
+    modification = st.text_area(
+        "Modifications souhaitées",
+        placeholder=(
+            "Exemples :\n"
+            "• \"Reformule la recommandation en étant plus direct\"\n"
+            "• \"Ajoute une section sur son rapport à l'autorité\"\n"
+            "• \"Raccourcis la section sur les compétences managériales\"\n"
+            "• \"Change la citation par quelque chose de plus percutant\""
+        ),
+        height=130,
+        label_visibility="collapsed"
+    )
+
+    if st.button("🔄 Appliquer les modifications", type="secondary"):
+        if modification.strip():
+            with st.spinner("Application des modifications…"):
                 try:
                     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
                     msg = client.messages.create(
-                        model="claude-sonnet-4-6", max_tokens=4096, system=SYSTEM_PROMPT,
-                        messages=[{"role": "user", "content": f"JSON actuel :\n{json.dumps(st.session_state.ref_data, ensure_ascii=False, indent=2)}\n\nModification : {modif}\n\nRetourne le JSON complet mis à jour."}]
+                        model="claude-sonnet-4-6",
+                        max_tokens=4096,
+                        system=SYSTEM_PROMPT,
+                        messages=[{"role": "user", "content": (
+                            f"Voici le JSON actuel de la prise de références :\n"
+                            f"{json.dumps(st.session_state.ref_data, ensure_ascii=False, indent=2)}\n\n"
+                            f"Modification demandée : {modification}\n\n"
+                            f"Applique uniquement cette modification et retourne le JSON complet mis à jour."
+                        )}]
                     )
                     text = msg.content[0].text.strip()
                     text = re.sub(r"^```[^\n]*\n", "", text)
@@ -343,6 +375,5 @@ if "ref_html" in st.session_state:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erreur : {e}")
-
-    st.subheader("Aperçu")
-    st.components.v1.html(st.session_state.ref_html, height=1500, scrolling=True)
+        else:
+            st.warning("Décris d'abord les modifications souhaitées.")
