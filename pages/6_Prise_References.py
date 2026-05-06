@@ -34,7 +34,7 @@ COMMERCIAUX = {
     }
 }
 
-SECTIONS_PER_PAGE = 3
+SECTIONS_PER_PAGE = 2
 
 @st.cache_resource
 def load_logo_base64_cached():
@@ -85,11 +85,13 @@ Retourne UNIQUEMENT un JSON valide (sans markdown, sans backticks) avec cette st
 }
 
 REGLES :
-- Entre 5 et 7 sections thématiques
-- Réponses riches et détaillées — minimum 3-4 phrases par section
-- Mots-clés importants en strong (qualités, compétences, comportements observés, résultats)
-- Rédige à la 3ème personne (il/elle)
+- Entre 5 et 7 sections thématiques bien distinctes — chaque section aborde un angle UNIQUE
+- ZERO répétition entre sections : une information donnée dans une section ne doit PAS réapparaître ailleurs
+- Réponses riches et détaillées — minimum 3-4 phrases par section, construites comme un paragraphe rédigé
+- Mots-clés importants en strong (qualités, compétences, comportements observés, résultats concrets)
+- Rédige à la 3ème personne (il/elle), ton professionnel et synthétique
 - Si aucun point de vigilance : mettre null pour vigilance
+- La recommandation doit être une conclusion synthétique et percutante — pas une répétition des sections
 - Langue : français professionnel"""
 
 def generate_reference_json(transcription, candidate_name, reference_name):
@@ -132,7 +134,6 @@ def build_reference_html(fields, data):
         return f'''<aside style="width:55mm;background:#F8F9FA;padding:8mm 5mm 8mm 7mm;border-right:1px solid #ddd;display:flex;flex-direction:column;gap:5mm;flex-shrink:0;overflow:hidden;">
           <div style="text-align:center;">
             <div style="width:18mm;height:18mm;border-radius:50%;background:#000;border:2px solid #FFD700;display:flex;align-items:center;justify-content:center;margin:0 auto 3mm auto;"><span style="font-family:\'Playfair Display\',serif;font-size:14pt;font-weight:700;color:#FFD700;">{initiales}</span></div>
-            <div style="font-weight:800;color:#000;font-size:9.5pt;">{fields["candidate_nom"]}</div>
             <div style="font-size:7.5pt;color:#777;font-style:italic;margin-top:1mm;">Candidat évalué</div>
           </div>
           <div>
@@ -215,7 +216,7 @@ def build_reference_html(fields, data):
             {make_sidebar(show_citation=(idx==0))}
             <div style="flex:1;padding:9mm 12mm 6mm;overflow:hidden;display:flex;flex-direction:column;">
               <h1 style="font-family:\'Playfair Display\',serif;font-size:15pt;color:#000;margin-bottom:7mm;line-height:1.2;flex-shrink:0;">
-                Synthèse &nbsp;<span style="border-bottom:3px solid #FFD700;">{fields["candidate_nom"]}</span>
+                Synthèse de <span style="border-bottom:3px solid #FFD700;">l'entretien</span>
               </h1>
               {secs_html}
             </div>
