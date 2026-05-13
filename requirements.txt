@@ -23,3 +23,6 @@ pymupdf>=1.23.0
 
 # UI / Auth persistence
 extra-streamlit-components>=0.1.71
+
+# Coach Prospection (transcription d'appels)
+assemblyai>=0.30.0

@@ -29,3 +29,6 @@ Thumbs.db
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Coach Prospection — corpus privé du coaching, ne PAS committer
+coach_prospection/corpus/*.md
