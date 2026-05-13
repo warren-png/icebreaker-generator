@@ -25,4 +25,5 @@ pymupdf>=1.23.0
 extra-streamlit-components>=0.1.71
 
 # Coach Prospection (transcription d'appels)
-assemblyai>=0.30.0
+# >=0.36 nécessaire pour supporter les modèles universal-2 / universal-3-pro
+assemblyai>=0.36.0

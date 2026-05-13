@@ -69,7 +69,11 @@ def transcribe_audio_file(
 
     log("Préparation du fichier audio…")
 
+    # L'API AssemblyAI exige depuis 2026 que speech_models (au pluriel) soit
+    # une liste contenant 'universal-2' ou 'universal-3-pro'. On force
+    # 'universal-2' qui supporte la diarisation multi-langues (dont le français).
     config = aai.TranscriptionConfig(
+        speech_models=["universal-2"],
         language_code=language,
         speaker_labels=True,  # diarisation activée
         punctuate=True,
