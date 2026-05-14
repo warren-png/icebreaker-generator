@@ -595,3 +595,20 @@ with st.sidebar:
         with st.expander("Détail"):
             for fname in stats["filenames"]:
                 st.caption(f"• {fname}")
+        st.markdown("---")
+        if st.button("Mettre à jour le corpus", use_container_width=True):
+            # Force le re-téléchargement depuis Drive et vide les caches
+            import shutil
+            from coach_prospection.corpus_loader import CORPUS_DIR
+
+            if CORPUS_DIR.exists():
+                shutil.rmtree(CORPUS_DIR)
+            ensure_corpus_ready.clear()
+            get_corpus.clear()
+            get_corpus_stats.clear()
+            st.success("Corpus rechargé depuis Google Drive.")
+            st.rerun()
+        st.caption(
+            "À cliquer après avoir poussé une nouvelle version du corpus "
+            "sur Drive (`drive_sync upload`)."
+        )
