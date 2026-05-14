@@ -271,21 +271,45 @@ def markdown_to_docx(markdown_text: str, title: str, subtitle: str | None = None
             continue
         if kind == "h1":
             p = doc.add_paragraph()
-            r = p.add_run(payload)
-            _set_run_style(r, bold=True, color=INK_RGB, size=18, font="Cambria")
+            for text, attrs in _expand_indicators(payload, {"bold": True}):
+                r = p.add_run(text)
+                _set_run_style(
+                    r,
+                    bold=True,
+                    italic=attrs.get("italic", False),
+                    color=attrs.get("color") or INK_RGB,
+                    size=18,
+                    font="Cambria",
+                )
             continue
         if kind == "h2":
             p = doc.add_paragraph()
-            r = p.add_run(payload)
-            _set_run_style(r, bold=True, color=INK_RGB, size=14, font="Cambria")
+            for text, attrs in _expand_indicators(payload, {"bold": True}):
+                r = p.add_run(text)
+                _set_run_style(
+                    r,
+                    bold=True,
+                    italic=attrs.get("italic", False),
+                    color=attrs.get("color") or INK_RGB,
+                    size=14,
+                    font="Cambria",
+                )
             p.paragraph_format.space_before = Pt(10)
             p.paragraph_format.space_after = Pt(4)
             continue
         if kind == "h3":
             p = doc.add_paragraph()
-            r = p.add_run(payload)
-            _set_run_style(r, bold=True, color=GOLD_RGB, size=11, font="Calibri")
-            r.font.all_caps = True
+            for text, attrs in _expand_indicators(payload, {"bold": True}):
+                r = p.add_run(text)
+                _set_run_style(
+                    r,
+                    bold=True,
+                    italic=attrs.get("italic", False),
+                    color=attrs.get("color") or GOLD_RGB,
+                    size=11,
+                    font="Calibri",
+                )
+                r.font.all_caps = True
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(2)
             continue
