@@ -44,6 +44,49 @@ INK_RGB = (10, 10, 10)
 MUTED = "#5A5A5A"
 PAPER = "#FAFAF8"
 
+# Indicateurs de notation : remplacement des emojis (non rendus en PDF/Word)
+# par des labels textuels colorés.
+GREEN_HEX = "#2D7A3E"
+ORANGE_HEX = "#D97706"
+RED_HEX = "#B91C1C"
+GREEN_RGB = (45, 122, 62)
+ORANGE_RGB = (217, 119, 6)
+RED_RGB = (185, 28, 28)
+
+INDICATOR_TOKENS = {
+    "<<VERT>>": ("VERT", GREEN_RGB, GREEN_HEX),
+    "<<ORANGE>>": ("ORANGE", ORANGE_RGB, ORANGE_HEX),
+    "<<ROUGE>>": ("ROUGE", RED_RGB, RED_HEX),
+    "<<GO>>": ("GO", GREEN_RGB, GREEN_HEX),
+    "<<NOGO>>": ("NO GO", RED_RGB, RED_HEX),
+}
+
+
+def _normalize_indicators(markdown_text: str) -> str:
+    """Remplace les emojis 🟢🟠🔴✅❌ par des tokens internes <<VERT>> etc.
+
+    Capture les patterns composites courants comme « GO ✅ », « NO GO ❌ »,
+    « DÉCISION : GO ✅ » pour éviter qu'il reste un emoji orphelin.
+    """
+    t = markdown_text
+    # Composites avec emoji (NO GO avant GO pour éviter le matching partiel).
+    # On NE consomme PAS le ** markdown éventuel autour : il sera traité après.
+    t = re.sub(r"\bNO\s*GO\s*[❌✗]", "<<NOGO>>", t)
+    t = re.sub(r"\bGO\s*[✅✓]", "<<GO>>", t)
+    # Si on trouve "GO" ou "NO GO" en gras seuls (sans emoji), on les colore
+    # quand même en repérant le contexte d'une ligne de décision.
+    t = re.sub(r"DÉCISION\s*:\s*\*\*\s*NO\s*GO\s*\*\*", "DÉCISION : **<<NOGO>>**", t, flags=re.IGNORECASE)
+    t = re.sub(r"DÉCISION\s*:\s*\*\*\s*GO\s*\*\*", "DÉCISION : **<<GO>>**", t, flags=re.IGNORECASE)
+    # Standalones (cercles colorés)
+    t = t.replace("🟢", "<<VERT>>")
+    t = t.replace("🟠", "<<ORANGE>>")
+    t = t.replace("🔴", "<<ROUGE>>")
+    # Emojis isolés restants : supprimer
+    t = t.replace("✅", "").replace("❌", "").replace("✓", "").replace("✗", "")
+    # Compresse les doubles espaces résultants
+    t = re.sub(r"  +", " ", t)
+    return t
+
 
 # ===========================================================================
 # Parsing du markdown produit par Claude
@@ -55,33 +98,57 @@ def _strip_inline_markdown(text: str) -> str:
     return text
 
 
-def _parse_runs(text: str) -> list[tuple[str, dict]]:
-    """Découpe une ligne markdown en runs avec leurs styles.
+def _expand_indicators(text: str, base_attrs: dict) -> list[tuple[str, dict]]:
+    """Découpe un texte sur les tokens d'indicateurs et applique leur couleur,
+    en conservant les attributs hérités (bold/italic du parent markdown)."""
+    out: list[tuple[str, dict]] = []
+    token_pattern = re.compile(r"(<<VERT>>|<<ORANGE>>|<<ROUGE>>|<<GO>>|<<NOGO>>)")
+    pos = 0
+    for m in token_pattern.finditer(text):
+        if m.start() > pos:
+            out.append((text[pos : m.start()], dict(base_attrs)))
+        tok = m.group(0)
+        label, rgb, _hex = INDICATOR_TOKENS[tok]
+        attrs = dict(base_attrs)
+        attrs["bold"] = True  # un indicateur est toujours en gras
+        attrs["color"] = rgb
+        out.append((label, attrs))
+        pos = m.end()
+    if pos < len(text):
+        out.append((text[pos:], dict(base_attrs)))
+    return [r for r in out if r[0]]
 
-    Reconnaît : **gras**, *italique*, ***gras italique***, `code`, > blockquote.
-    Retourne une liste de tuples (texte, attrs) où attrs = {bold, italic, code}.
+
+def _parse_runs(text: str) -> list[tuple[str, dict]]:
+    """Découpe une ligne markdown en runs avec styles.
+
+    Reconnaît : **gras**, *italique*, ***gras italique***, `code`, et
+    expanse récursivement les tokens d'indicateurs <<VERT>>/etc à
+    l'intérieur des blocs gras/italique.
     """
     runs: list[tuple[str, dict]] = []
-    # Pattern combiné pour ***/**/*/`...`
     pattern = re.compile(r"(\*\*\*.+?\*\*\*|\*\*.+?\*\*|\*.+?\*|`.+?`)")
     pos = 0
     for m in pattern.finditer(text):
         if m.start() > pos:
-            runs.append((text[pos : m.start()], {}))
+            runs.extend(_expand_indicators(text[pos : m.start()], {}))
         tok = m.group(0)
         if tok.startswith("***") and tok.endswith("***"):
-            runs.append((tok[3:-3], {"bold": True, "italic": True}))
+            content = tok[3:-3]
+            runs.extend(_expand_indicators(content, {"bold": True, "italic": True}))
         elif tok.startswith("**") and tok.endswith("**"):
-            runs.append((tok[2:-2], {"bold": True}))
+            content = tok[2:-2]
+            runs.extend(_expand_indicators(content, {"bold": True}))
         elif tok.startswith("`") and tok.endswith("`"):
             runs.append((tok[1:-1], {"code": True}))
         elif tok.startswith("*") and tok.endswith("*"):
-            runs.append((tok[1:-1], {"italic": True}))
+            content = tok[1:-1]
+            runs.extend(_expand_indicators(content, {"italic": True}))
         else:
-            runs.append((tok, {}))
+            runs.extend(_expand_indicators(tok, {}))
         pos = m.end()
     if pos < len(text):
-        runs.append((text[pos:], {}))
+        runs.extend(_expand_indicators(text[pos:], {}))
     return runs
 
 
@@ -132,11 +199,12 @@ def _set_run_style(run, *, bold=False, italic=False, color=None, size=None, font
 def _add_runs_to_paragraph(para, runs: list[tuple[str, dict]], base_font="Calibri", base_size=11, base_color=INK_RGB):
     for text, attrs in runs:
         run = para.add_run(text)
+        color = attrs.get("color") or base_color
         _set_run_style(
             run,
             bold=attrs.get("bold", False),
             italic=attrs.get("italic", False),
-            color=base_color,
+            color=color,
             size=base_size,
             font="Consolas" if attrs.get("code") else base_font,
         )
@@ -157,6 +225,7 @@ def _add_horizontal_rule(doc, color="C9A227"):
 
 def markdown_to_docx(markdown_text: str, title: str, subtitle: str | None = None) -> bytes:
     """Convertit le markdown de Claude en .docx Entourage."""
+    markdown_text = _normalize_indicators(markdown_text)
     doc = Document()
 
     # Marges
@@ -355,21 +424,24 @@ def _pdf_styles():
 
 def _md_runs_to_pdf_markup(text: str) -> str:
     """Convertit le markdown inline en balises reportlab (<b>, <i>, <font>)."""
-    # Préserve les espaces ; échappe les caractères HTML hostiles minimaux
+    # 1. Échappe les caractères HTML hostiles
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    # ***bold italic***
+    # 2. Remet les tokens internes (qui avaient été échappés)
+    for tok, (label, _rgb, hex_color) in INDICATOR_TOKENS.items():
+        escaped_tok = tok.replace("<", "&lt;").replace(">", "&gt;")
+        replacement = f'<b><font color="{hex_color}">{label}</font></b>'
+        text = text.replace(escaped_tok, replacement)
+    # 3. Markdown inline
     text = re.sub(r"\*\*\*(.+?)\*\*\*", r"<b><i>\1</i></b>", text)
-    # **bold**
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-    # *italic*
     text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
-    # `code`
     text = re.sub(r"`(.+?)`", r'<font face="Courier">\1</font>', text)
     return text
 
 
 def markdown_to_pdf(markdown_text: str, title: str, subtitle: str | None = None) -> bytes:
     """Convertit le markdown en PDF style document Entourage."""
+    markdown_text = _normalize_indicators(markdown_text)
     buf = io.BytesIO()
     styles = _pdf_styles()
 
