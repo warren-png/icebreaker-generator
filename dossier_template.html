@@ -152,6 +152,49 @@ position: relative;
 .score-cat { width: 30%; font-weight: 800; font-size: 11pt; color: #000; border-right: 4px solid #FFD700; }
 .score-val { width: 15%; font-weight: 800; font-size: 14pt; color: #000; text-align: center; }
 .score-txt { font-size: 9.5pt; color: #444; line-height: 1.4; }
+/* --- STYLES PAGE 3 : PROJETS PHARES --- */
+.projects-list { display: flex; flex-direction: column; gap: 6mm; margin-top: 2mm; }
+.project-card {
+background: #f8f9fa;
+border-left: 3mm solid #FFD700;
+padding: 5mm 6mm;
+position: relative;
+}
+.project-card .project-title {
+font-family: 'Playfair Display', serif;
+font-size: 12pt;
+font-weight: 700;
+color: #000;
+margin-bottom: 2mm;
+line-height: 1.2;
+}
+.project-card .project-context {
+font-size: 9pt;
+color: #666;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+font-weight: 700;
+margin-bottom: 3mm;
+}
+.project-card .project-body {
+font-size: 10pt;
+line-height: 1.5;
+color: #333;
+text-align: justify;
+}
+.project-card .project-body strong { color: #000; font-weight: 700; }
+.project-card .project-result {
+margin-top: 3mm;
+padding-top: 3mm;
+border-top: 1px dashed #ddd;
+font-size: 9.5pt;
+color: #000;
+font-weight: 700;
+display: flex;
+align-items: center;
+gap: 6px;
+}
+.project-card .project-result i { color: #FFD700; }
 /* --- STYLES CV --- */
 .cv-grid { display: grid; grid-template-columns: 60mm 1fr; height: 100%; gap: 8mm; }
 .cv-sidebar { background: #f8f9fa; height: 100%; padding: 5mm; border-right: 1px solid #eee; }
@@ -239,11 +282,25 @@ position: relative;
       <!-- Claude insère ici exactement 4 <tr> avec classes score-cat / score-val / score-txt -->
     </tbody>
   </table>
-  <div style="margin-top: 8mm;">
-    <h2 class="section-title"><i class="fa-solid fa-lightbulb"></i> Projets Phares &amp; Adéquation</h2>
-    <div style="background: #f8f9fa; padding: 5mm; border-left: 3mm solid #FFD700; font-size: 9.5pt; line-height: 1.4; color: #333; text-align: justify;">
-      {{TEXTE_PROJETS_PHARES}}
-    </div>
+</div>
+<div class="footer">
+  {{PIED_DE_PAGE_COMMERCIAL}}
+</div>
+</div>
+
+<!-- ========== PAGE 3 : PROJETS PHARES ========== -->
+<div class="page">
+<div class="header">
+  <div class="brand">
+    <img src="LOGO_PLACEHOLDER" alt="Entourage Recrutement">
+  </div>
+  <div class="doc-title">PROJETS PHARES &amp; ADÉQUATION</div>
+</div>
+<div class="content">
+  <h2 class="section-title"><i class="fa-solid fa-lightbulb"></i> Projets Phares &amp; Adéquation</h2>
+  <div class="projects-list">
+    <!-- Claude insère ici 2 à 3 .project-card -->
+    {{PROJETS_PHARES_CARDS}}
   </div>
 </div>
 <div class="footer">
@@ -251,7 +308,7 @@ position: relative;
 </div>
 </div>
 
-<!-- Les pages CV (page 3 et suivantes) sont insérées automatiquement par Python (pymupdf) -->
+<!-- Les pages CV (page 4 et suivantes) sont insérées automatiquement par Python (pymupdf) -->
 
 </body>
 </html>

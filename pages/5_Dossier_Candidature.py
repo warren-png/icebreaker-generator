@@ -34,7 +34,15 @@ claude_api_key = (
 )
 
 _template_path = Path(__file__).parent.parent / "dossier_template.html"
-HTML_MASTER_TEMPLATE = _template_path.read_text(encoding="utf-8") if _template_path.exists() else ""
+
+
+def _load_template() -> str:
+    """Read the template from disk on every generation — avoids any Streamlit / Python module cache."""
+    return _template_path.read_text(encoding="utf-8") if _template_path.exists() else ""
+
+
+# Module-level constant kept for the existing existence check at page boot only.
+HTML_MASTER_TEMPLATE = _load_template()
 
 MODEL = "claude-sonnet-4-6"
 
@@ -43,6 +51,22 @@ MODEL = "claude-sonnet-4-6"
 # ============================================================
 
 DOSSIER_SYSTEM_PROMPT = """Tu rédiges les dossiers de présentation candidats d'Entourage Recrutement, cabinet de chasse de têtes spécialisé en finance et technologie (DAF, CFO, M&A, contrôle de gestion, direction tech). Tes destinataires sont des DRH et dirigeants exigeants. Le dossier doit leur donner une lecture chirurgicale du candidat en 2 minutes.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+0. PRINCIPE FONDATEUR — HIÉRARCHIE DES SOURCES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Le brief du chasseur (CONTEXTE GÉNÉRAL DU CANDIDAT) est la SOURCE PRIMAIRE et PRIORITAIRE.
+Le CV est une source SECONDAIRE qui sert uniquement à :
+- Donner des chiffres, dates, intitulés exacts quand le brief y fait référence sans les détailler.
+- Compléter ponctuellement quand un critère scorecard n'est pas couvert par le brief.
+
+Règles d'or :
+1. ZÉRO INVENTION. Toute affirmation doit pouvoir être retrouvée mot pour mot, ou en reformulation directe, dans le brief OU dans le CV. Si ce n'est ni dans l'un ni dans l'autre, ÇA N'EXISTE PAS.
+2. AUCUNE INFÉRENCE PSYCHOLOGIQUE. Pas de "motivé par", "à l'aise avec", "appétence pour", "posture de leader", "esprit entrepreneurial", "capacité à fédérer", sauf si le chasseur l'a écrit explicitement dans son brief.
+3. AUCUNE THÈSE AJOUTÉE. Tu ne construis pas un argumentaire pour "vendre" le candidat. Tu restitues ce que le chasseur a observé. Si le brief ne dit pas pourquoi ce candidat colle au poste, tu n'inventes pas la raison.
+4. PRIORITÉ AU BRIEF. Quand le brief couvre un sujet, c'est la formulation du brief qui prime — pas l'angle que tu aurais choisi. Tu reformules pour le registre, tu ne réorientes pas le propos.
+5. LE BRIEF NE RECOPIE PAS LE CV. Le chasseur ne réécrit jamais le CV dans son brief — ce serait redondant. Donc même si un poste/diplôme du CV n'apparaît pas dans le brief, c'est NORMAL : le CV est joint à part. N'en déduis surtout pas que le chasseur "a oublié" et ne complète pas son brief en y rapatriant des éléments CV. Les deux sources sont COMPLÉMENTAIRES, pas concurrentes.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 I. RÈGLES HTML — NON NÉGOCIABLES
@@ -65,8 +89,15 @@ I. RÈGLES HTML — NON NÉGOCIABLES
    - "Commercial : Helder" → Responsable de chasse : <a href="https://www.linkedin.com/in/helder-alturas-48010463/">Helder</a> - 06 22 30 96 11
 
 5. OUTPUT
-   Générer UNIQUEMENT les pages 1 et 2. Le CV est ajouté automatiquement après.
+   Générer EXACTEMENT 3 pages, soit EXACTEMENT 3 blocs <div class="page">...</div> entre <body> et </body>.
+   - Bloc 1 = page 1 (Présentation, Notre Analyse, Points Clés)
+   - Bloc 2 = page 2 (Score Card UNIQUEMENT : tableau + note globale, RIEN d'autre, AUCUNE section "Projets Phares" sur cette page)
+   - Bloc 3 = page 3 (Projets Phares & Adéquation UNIQUEMENT, avec des .project-card)
+   INTERDICTION ABSOLUE : tu ne dois JAMAIS mettre "Projets Phares" sur la même page que la Score Card. Si tu le fais, le dossier est cassé.
+   Le CV est ajouté automatiquement après (pages 4+) — tu n'as PAS à le générer.
    Retourner UNIQUEMENT le HTML complet, sans markdown (pas de ```html), sans commentaire.
+   Chacune des 3 pages doit tenir sur un format A4 strict : ne JAMAIS laisser une section déborder.
+   Si une section devient trop longue, raccourcis le contenu plutôt que de risquer une coupure visuelle au PDF.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 II. TON ET REGISTRE — PRIORITÉ ABSOLUE
@@ -82,6 +113,7 @@ MOTS ET FORMULES INTERDITS (liste exhaustive) :
 - Formules de politesse : "nous sommes ravis", "nous avons le plaisir", "il est avec plaisir", "c'est avec enthousiasme"
 - Adjectifs vagues : "bonne expérience", "profil intéressant", "belle trajectoire", "riche expérience", "grande expertise"
 - Généralités : "le sens des responsabilités", "l'adaptabilité", "la rigueur", "le leadership naturel"
+- Inférences psychologiques non sourcées : "motivé par", "à l'aise avec", "appétence pour", "posture de", "capacité à"
 - Reformulations : un fait cité dans une section ne peut pas être reformulé dans une autre
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -89,10 +121,10 @@ III. RÈGLE ANTI-RÉPÉTITION — ABSOLUE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Chaque section éclaire un angle DISTINCT et EXCLUSIF :
-- Notre Analyse → positionnement et trajectoire (pourquoi ce candidat pour ce poste précis)
-- Points Clés → faits bruts opérationnels à transmettre au client
-- Score Card → évaluation critère par critère (basée sur les notes et observations du chasseur)
-- Projets Phares → réalisations concrètes avec contexte, action, résultat mesurable
+- Notre Analyse (page 1) → restitution structurée du brief du chasseur (positionnement, trajectoire, fit poste — tels qu'observés par le chasseur)
+- Points Clés (page 1) → faits bruts opérationnels à transmettre au client (tirés du brief)
+- Score Card (page 2) → évaluation critère par critère (basée sur les notes et observations du chasseur)
+- Projets Phares (page 3) → réalisations concrètes du CV avec contexte, action, résultat mesurable
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IV. CONTENU PAR SECTION
@@ -101,24 +133,29 @@ IV. CONTENU PAR SECTION
 PAGE 1 — PRÉSENTATION
 
 [A] NOTRE ANALYSE
-    Objectif : justifier précisément le choix de ce candidat pour CE poste.
-    → Cohérence du parcours avec les enjeux du poste (secteur, périmètre, niveau de responsabilité).
-    → 1-2 éléments de différenciation factuelle issus des observations du chasseur : type d'environnement (ETI, grand groupe, scale-up), marché couvert, compétence rare, contexte particulier.
-    → Si pertinent : adéquation avec le brief managérial.
-    INTERDITS : salaires, notes scorecard, reformulation des points clés, projets déjà décrits en [D].
-    Format : 5 à 7 phrases, 90 à 130 mots.
+    Objectif : RESTITUER, dans le registre conseil haut de gamme, ce que le chasseur a observé dans son brief sur ce candidat et son fit avec le poste.
+    Méthode :
+    → Extraire du brief les éléments qui parlent de positionnement, trajectoire, fit poste, environnements traversés, contexte de la recherche.
+    → Les structurer en un paragraphe analytique cohérent, en gardant le sens et l'angle du chasseur.
+    → Compléter avec un (et UN seul) fait du CV uniquement si nécessaire pour rendre l'analyse lisible (ex : intitulé exact du poste actuel, scope chiffré).
+    → Si le brief est court ou silencieux sur un aspect, l'analyse est plus courte. Mieux vaut 4 phrases denses qu'une 5ème phrase inventée.
+    INTERDITS : salaires, notes scorecard, reformulation des points clés, projets déjà décrits en [D], thèse ou jugement qui ne figure pas dans le brief, inférence sur la personnalité ou la motivation.
+    Format : 4 à 7 phrases, 70 à 130 mots (longueur indicative — adaptable selon densité du brief).
 
 [B] POINTS CLÉS & VIGILANCE — 4 à 5 .point-card
-    Objectif : informations opérationnelles à transmettre au client, non développées en [A].
+    Objectif : informations opérationnelles tirées du brief, non développées en [A].
     Structure imposée :
-    → 1 card "Prétentions salariales" (obligatoire) : chiffre précis des observations, ou "Non communiquées — à préciser."
-    → 1 à 2 cards "Atout" : fait mesurable ou labellisé (certification CFA, équipe de X personnes, outil spécifique, scope géographique précis).
-    → 1 à 2 cards "Point de vigilance" : élément à valider en entretien (expérience managériale limitée, secteur partiel, disponibilité, mobilité).
-    INTERDITS : reformuler [A], anticiper le contenu du tableau [C].
+    → 1 card "Prétentions salariales" (obligatoire) : chiffre précis du brief, ou "Non communiquées — à préciser." si absent. Ne jamais inventer un chiffre.
+    → 1 à 2 cards "Atout" : fait mesurable ou labellisé MENTIONNÉ DANS LE BRIEF (certification CFA, équipe de X personnes, outil spécifique, scope géographique précis). Si le brief n'en mentionne pas, tu peux prendre un fait chiffré indiscutable du CV (ex : "8 ans chez X").
+    → 1 à 2 cards "Point de vigilance" : élément à valider en entretien EXPLICITEMENT signalé par le chasseur dans son brief (expérience managériale limitée, secteur partiel, disponibilité, mobilité). NE PAS inventer un point de vigilance que le chasseur n'a pas relevé.
+    INTERDITS : reformuler [A], anticiper le contenu du tableau [C], inventer un atout ou une vigilance non sourcés.
     Format par card : titre court (2-4 mots) + une phrase factuelle.
     HTML : <div class="point-card"><div class="point-icon"><i class="fa-solid fa-check"></i></div><div class="point-content"><h4>Titre</h4><p>Description</p></div></div>
 
-PAGE 2 — SCORE CARD
+PAGE 2 — SCORE CARD UNIQUEMENT
+    Cette page contient EXCLUSIVEMENT : le header noir/jaune, le bloc .score-header (Note Globale), le tableau .score-table avec ses 4 lignes, et le footer.
+    AUCUN autre contenu. Pas de "Projets Phares". Pas d'analyse complémentaire. Pas de texte additionnel.
+    Si tu ressens le besoin d'ajouter quoi que ce soit ici, ARRÊTE-TOI : ce contenu va sur la page 3.
 
 [C] ÉVALUATION — tableau 4 critères
     RÈGLE CRITIQUE : Les critères et leurs notes (/5) sont fournis EXPLICITEMENT dans le prompt sous "ÉVALUATION PAR CRITÈRE".
@@ -126,38 +163,62 @@ PAGE 2 — SCORE CARD
     → Note globale = moyenne arithmétique des notes fournies, sur 5. JAMAIS sur 10.
 
     RATTACHEMENT DES OBSERVATIONS (étape clé) :
-    Les observations du chasseur sont consolidées dans un seul bloc "CONTEXTE GÉNÉRAL DU CANDIDAT" (texte libre). Pour CHAQUE critère du tableau :
-    1. Identifie dans le CONTEXTE GÉNÉRAL les phrases/éléments qui se rapportent directement à ce critère (mots-clés, compétences, environnements, faits chiffrés).
-    2. Croise ces éléments avec un fait précis du CV qui étaye la note.
-    3. Rédige 1 à 2 phrases factuelles qui justifient la note attribuée.
+    Pour CHAQUE critère du tableau :
+    1. PRIORITÉ AU BRIEF : identifie dans le CONTEXTE GÉNÉRAL les phrases/éléments qui se rapportent directement à ce critère. Ce sont eux qui justifient la note.
+    2. Complément CV : si — et seulement si — le brief ne couvre pas du tout ce critère, va chercher dans le CV un fait précis (poste, durée, scope, outil).
+    3. Rédige 1 à 2 phrases factuelles qui justifient la note, en restant fidèle à ce que le chasseur a observé.
 
-    Si aucun élément du CONTEXTE GÉNÉRAL ne se rattache à un critère, appuie-toi uniquement sur le CV — sans inventer.
-    Ne reproduis JAMAIS le contexte tel quel : extrais, synthétise, factualise.
+    Ne reproduis JAMAIS le brief tel quel : extrais, synthétise, factualise — mais sans réorienter le propos.
+    Si la note est haute (≥4) mais que le brief ne dit pas pourquoi, ne fabrique pas une justification flatteuse. Reste descriptif et factuel.
 
     → Format : <tr><td class="score-cat">Critère</td><td class="score-val">X.X / 5</td><td class="score-txt">Analyse.</td></tr>
+    Chaque analyse : 2 à 3 phrases denses, 35 à 55 mots MAX. Ne dépasse pas — sinon le tableau déborde de la page A4.
+
+PAGE 3 — PROJETS PHARES & ADÉQUATION (pleine page dédiée)
 
 [D] PROJETS PHARES & ADÉQUATION
-    Objectif : illustrer l'adéquation par des réalisations concrètes non mentionnées en [A] ou [B].
-    Contenu : 2 à 3 missions ou projets significatifs, choisis pour leur lien direct avec les enjeux du poste.
-    Structure par projet : contexte (1 phrase) → action menée → résultat chiffré si disponible.
-    INTERDITS : répéter la trajectoire globale de [A] ou des faits déjà cités en [B].
-    Format : 4 à 6 phrases, 80 à 110 mots.
+    Objectif : illustrer l'adéquation par des réalisations CONCRÈTES tirées du CV (section où le CV prime, car le brief ne recopie pas les expériences).
+    Contenu : 2 ou 3 missions/projets significatifs du CV, choisis pour leur lien direct avec les enjeux du poste tels qu'ils ressortent du brief et de la scorecard.
+
+    STRUCTURE HTML OBLIGATOIRE — remplace {{PROJETS_PHARES_CARDS}} par 2 ou 3 .project-card formatées EXACTEMENT comme ceci :
+
+    <div class="project-card">
+      <div class="project-title">Intitulé court du projet (ex : "Plan stratégique assureur français")</div>
+      <div class="project-context">Entreprise · Période · Rôle</div>
+      <div class="project-body">
+        <strong>Contexte :</strong> 1 à 2 phrases sur l'environnement et l'enjeu.<br>
+        <strong>Action :</strong> 2 à 3 phrases sur ce que le candidat a piloté/livré concrètement.
+      </div>
+      <div class="project-result"><i class="fa-solid fa-bullseye"></i> Résultat chiffré ou livrable concret (issu du CV).</div>
+    </div>
+
+    RÈGLES :
+    - Si aucun résultat chiffré n'apparaît dans le CV pour ce projet, omets entièrement le bloc .project-result (ne fabrique pas un chiffre).
+    - Chaque .project-card : 60 à 90 mots au total. La page doit rester aérée et tenir sur un A4.
+    - Choisis 2 projets si chacun est dense, 3 si chacun est plus court — JAMAIS plus de 3.
+    INTERDITS : répéter la trajectoire globale de [A], reprendre les faits déjà cités en [B], inventer un chiffre/résultat absent du CV.
 """
 
 REVISION_SYSTEM_PROMPT = """Tu corriges les dossiers de présentation candidats d'Entourage Recrutement, cabinet de chasse spécialisé en finance et technologie.
-Tu reçois les pages 1 et 2 d'un dossier HTML existant et des instructions de correction du chasseur.
+Tu reçois les pages 1, 2 et 3 d'un dossier HTML existant (Analyse + Points Clés, Score Card, Projets Phares) et des instructions de correction du chasseur.
+
+PRINCIPE FONDATEUR
+- Les corrections du chasseur sont la SOURCE PRIMAIRE absolue : applique-les littéralement, sans réinterprétation.
+- ZÉRO INVENTION : tu n'ajoutes aucun fait, aucune inférence (personnalité, motivation, posture) qui ne soit pas explicitement écrit dans les corrections, dans le brief initial, ou dans le CV joint.
+- Le brief du chasseur ne recopie pas le CV — c'est NORMAL. Ne rapatrie pas le contenu du CV dans les pages 1-2 pour "combler" un brief que tu trouverais court.
 
 RÈGLES HTML — NON NÉGOCIABLES
 1. Ne modifie jamais le CSS, les couleurs, les polices, la structure des divs.
 2. Conserver EXACTEMENT : src="LOGO_PLACEHOLDER" et LINKEDIN_CONTACT_ITEM_PLACEHOLDER.
 3. Notes du tableau toujours /5 (jamais /10). Note globale = moyenne des critères.
-4. Retourner UNIQUEMENT le HTML complet des pages 1 et 2, sans markdown, sans explication.
-5. Ne pas ajouter de page 3 ou suivante — le CV est géré séparément.
+4. Retourner UNIQUEMENT le HTML complet des pages 1, 2 et 3, sans markdown, sans explication.
+5. Ne pas ajouter de page 4 ou suivante — le CV est géré séparément.
+6. Chaque page doit tenir sur un A4 strict. Si une correction allonge une section, raccourcis ailleurs pour éviter toute coupure visuelle en PDF.
 
 REGISTRE À MAINTENIR
 - Ton factuel, analytique, direct. Registre conseil haut de gamme (niveau Korn Ferry, Spencer Stuart).
 - Phrases courtes, présent de l'indicatif, voix active. Vocabulaire métier précis.
-- Aucun superlatif ni adjectif vague. Chaque affirmation étayée par un fait précis.
+- Aucun superlatif, adjectif vague, ni inférence psychologique non sourcée.
 - Appliquer uniquement les corrections demandées. Ne pas réécrire ce qui n'est pas visé.
 - Chaque section garde son rôle distinct : pas de répétition d'une rubrique à l'autre.
 """
@@ -236,7 +297,11 @@ def build_structured_user_prompt(
 
     if context.strip():
         eval_lines.append(
-            "CONTEXTE GÉNÉRAL DU CANDIDAT (brief consolidé du chasseur — à utiliser pour étayer chaque critère ci-dessous) :\n"
+            "CONTEXTE GÉNÉRAL DU CANDIDAT — SOURCE PRIMAIRE\n"
+            "Ce brief est consolidé par le chasseur et constitue la source PRIORITAIRE pour la rédaction "
+            "des pages 1, 2 et 3. Le chasseur n'y recopie volontairement PAS le CV (qui est joint séparément) — "
+            "les deux sources sont complémentaires. Si un sujet n'apparaît pas dans le brief, NE LE COMPENSE PAS "
+            "en allant chercher dans le CV au-delà de ce qui est strictement nécessaire pour une section donnée.\n\n"
             f"{context.strip()}\n"
         )
 
@@ -250,12 +315,26 @@ def build_structured_user_prompt(
 
     eval_lines.append(
         "\n\nINSTRUCTIONS FINALES :\n"
-        "- Pour le tableau [C] : utilise EXACTEMENT les notes ci-dessus.\n"
-        "- Pour l'analyse de chaque critère : extrais du CONTEXTE GÉNÉRAL les éléments qui se rattachent au critère, "
-        "croise avec un fait du CV, et rédige 1-2 phrases factuelles qui justifient la note.\n"
-        "- Si aucun élément du contexte ne correspond à un critère, appuie-toi uniquement sur le CV — sans inventer.\n"
-        "- Génère UNIQUEMENT les pages 1 et 2. Le CV original sera ajouté automatiquement après.\n"
-        f"\nVOICI LE CODE HTML MAÎTRE À REMPLIR :\n{HTML_MASTER_TEMPLATE}"
+        "- HIÉRARCHIE DES SOURCES : le CONTEXTE GÉNÉRAL est la source PRIMAIRE. Le CV est secondaire et "
+        "ne sert qu'à donner des faits précis (chiffres, intitulés, dates) ou à couvrir un critère scorecard "
+        "totalement absent du brief.\n"
+        "- ZÉRO INVENTION : si une affirmation n'est ni dans le brief ni dans le CV, elle n'existe pas. Pas "
+        "d'inférence psychologique, pas de thèse ajoutée, pas de motivation devinée.\n"
+        "- Le brief ne recopie pas le CV (c'est volontaire — éviter la redondance). Donc ne complète pas le "
+        "brief en y rapatriant des éléments CV, et ne considère pas qu'un sujet absent du brief est un oubli.\n"
+        "- [A] NOTRE ANALYSE : restitue le brief du chasseur dans le registre conseil haut de gamme. "
+        "Tu reformules pour le ton, tu ne réorientes pas le propos. Si le brief est court, l'analyse est courte.\n"
+        "- [B] POINTS CLÉS : tirés du brief. N'invente pas un atout ou une vigilance que le chasseur n'a pas relevés.\n"
+        "- [C] SCORE CARD : utilise EXACTEMENT les notes ci-dessus. Pour chaque critère, justifie d'abord avec "
+        "le brief ; ne complète avec le CV que si le brief est silencieux sur ce critère. Reste descriptif, "
+        "même quand la note est haute.\n"
+        "- [D] PROJETS PHARES (page 3 dédiée) : seule section où le CV prime (le brief ne recopie pas les expériences). "
+        "Choisis 2-3 réalisations CV en lien direct avec la scorecard, sans inventer de chiffres absents du CV. "
+        "Utilise EXACTEMENT la structure HTML .project-card décrite dans le system prompt — remplace {{PROJETS_PHARES_CARDS}} par 2 ou 3 cartes.\n"
+        "- MISE EN PAGE A4 : chaque page (1, 2, 3) doit tenir SANS DÉBORDER. Mieux vaut un texte un peu plus court qu'une coupure visuelle au PDF. "
+        "Limite stricte : analyses de la score card = 35-55 mots chacune ; chaque .project-card = 60-90 mots.\n"
+        "- Génère les pages 1, 2 ET 3. Le CV original sera ajouté automatiquement après (pages 4+).\n"
+        f"\nVOICI LE CODE HTML MAÎTRE À REMPLIR (recharge à chaque appel — STRUCTURE INTOUCHABLE) :\n{_load_template()}"
     )
 
     content_blocks.append({"type": "text", "text": "\n".join(eval_lines)})
@@ -494,11 +573,22 @@ if st.button("✨ Générer le Dossier", type="primary", key="dossier_generate")
                 generated_html = response.content[0].text
 
                 if response.stop_reason == "max_tokens":
-                    st.warning("⚠️ Génération interrompue (limite de tokens atteinte). Les pages 1 et 2 peuvent être incomplètes.")
+                    st.warning("⚠️ Génération interrompue (limite de tokens atteinte). Les pages 1, 2 et 3 peuvent être incomplètes.")
 
                 st.write("🖼 Injection du logo et finalisation…")
                 generated_html = re.sub(r"^```[^\n]*\n", "", generated_html)
                 generated_html = re.sub(r"\n```\s*$", "", generated_html.strip())
+
+                # --- GARDE-FOU : vérifier qu'on a bien 3 pages dossier ---
+                nb_pages = len(re.findall(r'<div class="page"', generated_html))
+                if nb_pages < 3:
+                    st.warning(
+                        f"⚠️ Claude n'a généré que {nb_pages} page(s) dossier au lieu de 3. "
+                        "La Score Card et les Projets Phares sont probablement sur la même page (risque de coupure PDF). "
+                        "Régénère le dossier — si ça persiste, restart le serveur Streamlit pour vider le cache du template."
+                    )
+                elif nb_pages > 3:
+                    st.warning(f"⚠️ Claude a généré {nb_pages} pages dossier au lieu de 3 — vérifier le rendu.")
 
                 final_html = inject_logo_and_linkedin(
                     generated_html,
@@ -506,7 +596,7 @@ if st.button("✨ Générer le Dossier", type="primary", key="dossier_generate")
                     linkedin_url,
                 )
 
-                # Sauvegarde pages 1+2 (placeholders intacts) pour révisions
+                # Sauvegarde pages 1+2+3 (placeholders intacts) pour révisions
                 st.session_state["dossier_html_pages12"] = generated_html
                 st.session_state["dossier_pdf_bytes"] = pdf_bytes
                 st.session_state["dossier_criteria_scores"] = criteria_scores
@@ -554,8 +644,8 @@ if st.session_state.get("dossier_html"):
     # --- MODE RÉVISION ---
     with st.expander("✏️ Corrections — décrire et régénérer"):
         st.caption(
-            "Décris ce que tu veux modifier (ton, scores, analyse, points clés…). "
-            "Claude régénère les pages 1 et 2 en intégrant tes corrections. Le CV reste inchangé."
+            "Décris ce que tu veux modifier (ton, scores, analyse, points clés, projets phares…). "
+            "Claude régénère les pages 1, 2 et 3 en intégrant tes corrections. Le CV reste inchangé."
         )
         user_corrections = st.text_area(
             "Tes corrections",
@@ -583,7 +673,7 @@ if st.session_state.get("dossier_html"):
 
                         revision_user_prompt = (
                             f"CORRECTIONS DEMANDÉES :\n{user_corrections.strip()}\n\n"
-                            "PAGES 1 ET 2 ACTUELLES (HTML à corriger) :\n"
+                            "PAGES 1, 2 ET 3 ACTUELLES (HTML à corriger) :\n"
                             f"{html_p12}"
                         )
 
