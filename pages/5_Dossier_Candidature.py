@@ -166,25 +166,26 @@ PAGE 2 — SCORE CARD + PROJETS PHARES (les deux sur la même page A4, dans cet 
     Si la note est haute (≥4) mais que le brief ne dit pas pourquoi, ne fabrique pas une justification flatteuse. Reste descriptif et factuel.
 
     → Format : <tr><td class="score-cat">Critère</td><td class="score-val">X.X / 5</td><td class="score-txt">Analyse.</td></tr>
-    LONGUEUR STRICTE : chaque analyse de critère = 2 à 3 phrases, 30 à 50 mots MAX. C'est non négociable pour que la page 2 ne déborde pas.
+    LONGUEUR STRICTE NON NÉGOCIABLE : chaque analyse de critère = 1 à 2 phrases, 20 à 35 mots MAX (idéalement 25-30). Plus court qu'une analyse complète, c'est volontaire — la page 2 doit aussi accueillir 3 projets en bas.
 
 [D] PROJETS PHARES & ADÉQUATION (bloc texte en bas de la page 2, structure graphique inchangée)
-    Objectif : illustrer l'adéquation par des réalisations CONCRÈTES tirées du CV (section où le CV prime, car le brief ne recopie pas les expériences).
-    Contenu : 2 ou 3 missions/projets significatifs du CV, choisis pour leur lien direct avec les enjeux du poste.
+    Objectif : illustrer l'adéquation par 3 réalisations CONCRÈTES tirées du CV (section où le CV prime, car le brief ne recopie pas les expériences).
+    Contenu : EXACTEMENT 3 missions/projets significatifs du CV, choisis pour leur lien direct avec les enjeux du poste.
 
     FORMAT — texte plat à insérer dans {{TEXTE_PROJETS_PHARES}} :
-    - Chaque projet sur une ligne (un paragraphe court séparé par <br><br>).
-    - Structure d'un projet : "<strong>Intitulé court :</strong> contexte (1 phrase) — action menée — résultat chiffré si disponible dans le CV."
+    - 3 projets séparés par <br><br>.
+    - Structure d'un projet : "<strong>Intitulé court (entreprise) :</strong> 1 phrase qui combine contexte + action + résultat chiffré si dispo."
     - Pas de tableau, pas de div, pas de classe CSS — juste du texte avec <strong> et <br>.
 
-    LONGUEUR STRICTE :
-    - 2 à 3 projets MAXIMUM (jamais plus).
-    - Chaque projet : 30 à 45 mots.
-    - Total du bloc Projets Phares : 80 à 130 mots MAX. C'est ce qui permet à la page 2 de tenir en A4 sous le tableau Score Card.
+    LONGUEUR STRICTE NON NÉGOCIABLE (sinon le 3ème projet sera coupé du PDF) :
+    - EXACTEMENT 3 projets, ni 2 ni 4.
+    - Chaque projet : UNE SEULE PHRASE, 18 à 28 mots MAX (titre <strong> compris).
+    - Total du bloc Projets Phares : 75 mots MAX, AUCUNE EXCEPTION.
 
     RÈGLES :
-    - Si aucun résultat chiffré n'apparaît dans le CV pour un projet, n'invente pas — décris simplement l'action.
-    INTERDITS : répéter la trajectoire globale de [A], reprendre les faits déjà cités en [B], inventer un chiffre/résultat absent du CV, dépasser 130 mots au total.
+    - Si aucun résultat chiffré n'apparaît dans le CV pour un projet, n'invente pas — décris l'action sans chiffre.
+    - Préfère un projet condensé en une phrase nominale percutante à une phrase longue.
+    INTERDITS : répéter la trajectoire globale de [A], reprendre les faits déjà cités en [B], inventer un chiffre/résultat absent du CV, dépasser 75 mots au total, dépasser 28 mots pour un projet, mettre moins ou plus de 3 projets.
 """
 
 REVISION_SYSTEM_PROMPT = """Tu corriges les dossiers de présentation candidats d'Entourage Recrutement, cabinet de chasse spécialisé en finance et technologie.
@@ -202,7 +203,7 @@ RÈGLES HTML — NON NÉGOCIABLES
 4. Retourner UNIQUEMENT le HTML complet des pages 1 et 2, sans markdown, sans explication.
 5. Ne pas ajouter de page 3 ou suivante — le CV est géré séparément.
 6. Chaque page doit tenir sur un A4 strict. Si une correction allonge une section, raccourcis ailleurs pour éviter toute coupure visuelle en PDF.
-   En particulier page 2 (Score Card + Projets Phares) : analyses critères = 30-50 mots chacune, Projets Phares = 130 mots MAX au total.
+   Page 2 (Score Card + Projets Phares) — LIMITES STRICTES : analyses critères = 20-35 mots chacune ; EXACTEMENT 3 projets phares, 18-28 mots chacun, 75 mots MAX au total. Si tu dépasses, le 3ème projet sera coupé du PDF.
 
 REGISTRE À MAINTENIR
 - Ton factuel, analytique, direct. Registre conseil haut de gamme (niveau Korn Ferry, Spencer Stuart).
@@ -317,18 +318,64 @@ def build_structured_user_prompt(
         "- [C] SCORE CARD : utilise EXACTEMENT les notes ci-dessus. Pour chaque critère, justifie d'abord avec "
         "le brief ; ne complète avec le CV que si le brief est silencieux sur ce critère. Reste descriptif, "
         "même quand la note est haute.\n"
-        "- [D] PROJETS PHARES (bloc texte en bas de page 2) : seule section où le CV prime (le brief ne recopie pas les expériences). "
-        "Choisis 2 ou 3 réalisations CV en lien direct avec la scorecard, sans inventer de chiffres absents du CV. "
-        "Format texte plat dans {{TEXTE_PROJETS_PHARES}} : paragraphes courts séparés par <br><br>, intitulé en <strong>, "
-        "30-45 mots par projet, 130 mots MAX au total.\n"
-        "- MISE EN PAGE A4 : la page 2 doit tenir SANS DÉBORDER (Score Card + Projets Phares sur le même A4). "
-        "Limite stricte non négociable : analyses scorecard = 30-50 mots chacune ; Projets Phares = 130 mots MAX au total.\n"
+        "- [D] PROJETS PHARES (bloc texte en bas de page 2) : EXACTEMENT 3 réalisations CV en lien direct avec la scorecard, "
+        "sans inventer de chiffres absents du CV. Format texte plat dans {{TEXTE_PROJETS_PHARES}} : 3 projets séparés par <br><br>, "
+        "intitulé en <strong>, UNE SEULE PHRASE par projet, 18-28 mots par projet, 75 mots MAX au total.\n"
+        "- MISE EN PAGE A4 — RISQUE N°1 : la page 2 doit tenir SANS DÉBORDER (Score Card 4 critères + 3 Projets Phares sur le même A4). "
+        "Limites strictes NON NÉGOCIABLES : chaque analyse scorecard = 20-35 mots ; chaque projet phare = 18-28 mots ; total Projets Phares = 75 mots MAX. "
+        "Si tu dépasses, le 3ème projet sera COUPÉ du PDF.\n"
         "- Génère les pages 1 ET 2. Le CV original sera ajouté automatiquement après (pages 3+).\n"
         f"\nVOICI LE CODE HTML MAÎTRE À REMPLIR (recharge à chaque appel — STRUCTURE INTOUCHABLE) :\n{_load_template()}"
     )
 
     content_blocks.append({"type": "text", "text": "\n".join(eval_lines)})
     return content_blocks
+
+
+def _count_words(text: str) -> int:
+    """Count words in plain text (strips HTML tags first)."""
+    clean = re.sub(r"<[^>]+>", " ", text)
+    return len(re.findall(r"\b\w+\b", clean, flags=re.UNICODE))
+
+
+def check_length_budgets(html: str) -> list[str]:
+    """Return a list of human-readable warnings if the page-2 content overflows our A4 budget.
+
+    Budgets (calibrated to ensure 3 projets phares + 4 score card rows fit on a single A4 page) :
+    - Each score card analysis : ≤ 35 words
+    - Each project phare : ≤ 28 words
+    - Total projets phares block : ≤ 75 words, exactly 3 projets
+    """
+    warnings: list[str] = []
+
+    # Score card analyses (td.score-txt)
+    for i, m in enumerate(re.finditer(r'<td class="score-txt">(.*?)</td>', html, flags=re.DOTALL), start=1):
+        wc = _count_words(m.group(1))
+        if wc > 35:
+            warnings.append(f"Score Card critère {i} : {wc} mots (max 35) — risque de débordement A4.")
+
+    # Projets phares block (whole gray box)
+    pp_match = re.search(
+        r'border-left:\s*3mm\s*solid\s*#FFD700[^>]*>(.*?)</div>\s*</div>',
+        html,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if pp_match:
+        pp_html = pp_match.group(1)
+        total_words = _count_words(pp_html)
+        if total_words > 75:
+            warnings.append(f"Projets Phares : {total_words} mots au total (max 75) — le 3ème projet risque d'être coupé du PDF.")
+        # Count projets (separated by <br><br>)
+        parts = re.split(r"<br\s*/?>\s*<br\s*/?>", pp_html, flags=re.IGNORECASE)
+        parts = [p.strip() for p in parts if p.strip()]
+        if len(parts) != 3:
+            warnings.append(f"Projets Phares : {len(parts)} projet(s) détecté(s) au lieu de 3.")
+        for i, part in enumerate(parts, start=1):
+            wc = _count_words(part)
+            if wc > 28:
+                warnings.append(f"Projet phare #{i} : {wc} mots (max 28) — réduire pour éviter coupure A4.")
+
+    return warnings
 
 
 def inject_logo_and_linkedin(html: str, logo_b64: str, linkedin_url: str) -> str:
@@ -553,13 +600,18 @@ if st.button("✨ Générer le Dossier", type="primary", key="dossier_generate")
                 )
 
                 claude_client = Anthropic(api_key=claude_api_key)
-                response = claude_client.messages.create(
-                    model=MODEL,
-                    max_tokens=8000,
-                    system=DOSSIER_SYSTEM_PROMPT,
-                    messages=[{"role": "user", "content": content_blocks}],
-                    timeout=240.0,
-                )
+
+                def _call_claude(messages_payload):
+                    return claude_client.messages.create(
+                        model=MODEL,
+                        max_tokens=8000,
+                        system=DOSSIER_SYSTEM_PROMPT,
+                        messages=messages_payload,
+                        timeout=240.0,
+                    )
+
+                base_messages = [{"role": "user", "content": content_blocks}]
+                response = _call_claude(base_messages)
                 generated_html = response.content[0].text
 
                 if response.stop_reason == "max_tokens":
@@ -569,13 +621,50 @@ if st.button("✨ Générer le Dossier", type="primary", key="dossier_generate")
                 generated_html = re.sub(r"^```[^\n]*\n", "", generated_html)
                 generated_html = re.sub(r"\n```\s*$", "", generated_html.strip())
 
-                # --- GARDE-FOU : vérifier qu'on a bien 2 pages dossier ---
+                # --- GARDE-FOU 1 : nombre de pages dossier ---
                 nb_pages = len(re.findall(r'<div class="page"', generated_html))
                 if nb_pages != 2:
                     st.warning(
-                        f"⚠️ Claude a généré {nb_pages} page(s) dossier au lieu de 2 (attendu : page 1 = Analyse+Points, page 2 = Score Card + Projets Phares). "
-                        "Vérifie le rendu et régénère si besoin."
+                        f"⚠️ Claude a généré {nb_pages} page(s) dossier au lieu de 2 — vérifie le rendu."
                     )
+
+                # --- GARDE-FOU 2 : longueur des sections page 2 ---
+                length_warnings = check_length_budgets(generated_html)
+                if length_warnings:
+                    st.write("📏 Dépassement de longueur détecté — relance automatique pour resserrer le texte…")
+                    correction_msg = (
+                        "Le brouillon que tu viens de produire dépasse les limites de longueur strictes "
+                        "pour la page 2. Voici les dépassements à corriger :\n\n"
+                        + "\n".join(f"- {w}" for w in length_warnings)
+                        + "\n\nReprends le HTML précédent et raccourcis UNIQUEMENT les sections concernées, "
+                        "sans rien changer d'autre. Respecte impérativement :\n"
+                        "- Chaque analyse Score Card ≤ 35 mots\n"
+                        "- EXACTEMENT 3 projets phares\n"
+                        "- Chaque projet ≤ 28 mots\n"
+                        "- Total Projets Phares ≤ 75 mots\n"
+                        "Retourne UNIQUEMENT le HTML corrigé, sans markdown, sans commentaire."
+                    )
+                    retry_messages = base_messages + [
+                        {"role": "assistant", "content": generated_html},
+                        {"role": "user", "content": correction_msg},
+                    ]
+                    retry_response = _call_claude(retry_messages)
+                    retry_html = retry_response.content[0].text
+                    retry_html = re.sub(r"^```[^\n]*\n", "", retry_html)
+                    retry_html = re.sub(r"\n```\s*$", "", retry_html.strip())
+
+                    # Use retry only if it actually improved things
+                    new_warnings = check_length_budgets(retry_html)
+                    if len(new_warnings) < len(length_warnings):
+                        generated_html = retry_html
+                        if new_warnings:
+                            for w in new_warnings:
+                                st.warning(f"⚠️ {w}")
+                        else:
+                            st.write("✅ Longueurs corrigées après relance.")
+                    else:
+                        for w in length_warnings:
+                            st.warning(f"⚠️ {w}")
 
                 final_html = inject_logo_and_linkedin(
                     generated_html,
