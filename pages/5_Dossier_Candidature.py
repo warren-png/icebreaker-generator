@@ -174,18 +174,19 @@ PAGE 2 — SCORE CARD + PROJETS PHARES (les deux sur la même page A4, dans cet 
 
     FORMAT — texte plat à insérer dans {{TEXTE_PROJETS_PHARES}} :
     - 3 projets séparés par <br><br>.
-    - Structure d'un projet : "<strong>Intitulé court (entreprise) :</strong> 1 phrase qui combine contexte + action + résultat chiffré si dispo."
+    - Structure d'un projet : "<strong>Intitulé court (entreprise) :</strong> 1 à 2 phrases qui combinent contexte + action + résultat chiffré si dispo."
     - Pas de tableau, pas de div, pas de classe CSS — juste du texte avec <strong> et <br>.
 
     LONGUEUR STRICTE NON NÉGOCIABLE (sinon le 3ème projet sera coupé du PDF) :
     - EXACTEMENT 3 projets, ni 2 ni 4.
-    - Chaque projet : UNE SEULE PHRASE, 18 à 28 mots MAX (titre <strong> compris).
-    - Total du bloc Projets Phares : 75 mots MAX, AUCUNE EXCEPTION.
+    - Chaque projet : 2 à 3 phrases, 40 à 55 mots MAX (titre <strong> compris).
+    - Total du bloc Projets Phares : 150 mots MAX, AUCUNE EXCEPTION.
+    - Vise 45-50 mots par projet pour donner de la matière substantielle — la Score Card a été compactée justement pour libérer ce budget.
 
     RÈGLES :
     - Si aucun résultat chiffré n'apparaît dans le CV pour un projet, n'invente pas — décris l'action sans chiffre.
-    - Préfère un projet condensé en une phrase nominale percutante à une phrase longue.
-    INTERDITS : répéter la trajectoire globale de [A], reprendre les faits déjà cités en [B], inventer un chiffre/résultat absent du CV, dépasser 75 mots au total, dépasser 28 mots pour un projet, mettre moins ou plus de 3 projets.
+    - Si possible, structure ainsi : 1ère phrase = contexte + action ; 2ème phrase courte = résultat/impact concret.
+    INTERDITS : répéter la trajectoire globale de [A], reprendre les faits déjà cités en [B], inventer un chiffre/résultat absent du CV, dépasser 150 mots au total, dépasser 55 mots pour un projet, mettre moins ou plus de 3 projets.
 """
 
 REVISION_SYSTEM_PROMPT = """Tu corriges les dossiers de présentation candidats d'Entourage Recrutement, cabinet de chasse spécialisé en finance et technologie.
@@ -203,7 +204,7 @@ RÈGLES HTML — NON NÉGOCIABLES
 4. Retourner UNIQUEMENT le HTML complet des pages 1 et 2, sans markdown, sans explication.
 5. Ne pas ajouter de page 3 ou suivante — le CV est géré séparément.
 6. Chaque page doit tenir sur un A4 strict. Si une correction allonge une section, raccourcis ailleurs pour éviter toute coupure visuelle en PDF.
-   Page 2 (Score Card + Projets Phares) — LIMITES STRICTES : analyses critères = 20-35 mots chacune ; EXACTEMENT 3 projets phares, 18-28 mots chacun, 75 mots MAX au total. Si tu dépasses, le 3ème projet sera coupé du PDF.
+   Page 2 (Score Card + Projets Phares) — LIMITES STRICTES : analyses critères = 20-35 mots chacune ; EXACTEMENT 3 projets phares, 40-55 mots chacun, 150 mots MAX au total. Si tu dépasses, le 3ème projet sera coupé du PDF.
 
 REGISTRE À MAINTENIR
 - Ton factuel, analytique, direct. Registre conseil haut de gamme (niveau Korn Ferry, Spencer Stuart).
@@ -320,9 +321,11 @@ def build_structured_user_prompt(
         "même quand la note est haute.\n"
         "- [D] PROJETS PHARES (bloc texte en bas de page 2) : EXACTEMENT 3 réalisations CV en lien direct avec la scorecard, "
         "sans inventer de chiffres absents du CV. Format texte plat dans {{TEXTE_PROJETS_PHARES}} : 3 projets séparés par <br><br>, "
-        "intitulé en <strong>, UNE SEULE PHRASE par projet, 18-28 mots par projet, 75 mots MAX au total.\n"
+        "intitulé en <strong>, 2 à 3 phrases par projet, 40-55 mots par projet, 150 mots MAX au total. "
+        "Vise 45-50 mots par projet pour donner de la matière substantielle.\n"
         "- MISE EN PAGE A4 — RISQUE N°1 : la page 2 doit tenir SANS DÉBORDER (Score Card 4 critères + 3 Projets Phares sur le même A4). "
-        "Limites strictes NON NÉGOCIABLES : chaque analyse scorecard = 20-35 mots ; chaque projet phare = 18-28 mots ; total Projets Phares = 75 mots MAX. "
+        "La Score Card a été compactée (~15%) pour libérer de la place aux Projets Phares — utilise ce budget. "
+        "Limites strictes NON NÉGOCIABLES : chaque analyse scorecard = 20-35 mots ; chaque projet phare = 40-55 mots ; total Projets Phares = 150 mots MAX. "
         "Si tu dépasses, le 3ème projet sera COUPÉ du PDF.\n"
         "- Génère les pages 1 ET 2. Le CV original sera ajouté automatiquement après (pages 3+).\n"
         f"\nVOICI LE CODE HTML MAÎTRE À REMPLIR (recharge à chaque appel — STRUCTURE INTOUCHABLE) :\n{_load_template()}"
@@ -341,10 +344,10 @@ def _count_words(text: str) -> int:
 def check_length_budgets(html: str) -> list[str]:
     """Return a list of human-readable warnings if the page-2 content overflows our A4 budget.
 
-    Budgets (calibrated to ensure 3 projets phares + 4 score card rows fit on a single A4 page) :
+    Budgets (calibrated after the Score Card was compacted ~15% to free room for richer projets) :
     - Each score card analysis : ≤ 35 words
-    - Each project phare : ≤ 28 words
-    - Total projets phares block : ≤ 75 words, exactly 3 projets
+    - Each projet phare : ≤ 55 words
+    - Total projets phares block : ≤ 150 words, exactly 3 projets
     """
     warnings: list[str] = []
 
@@ -363,8 +366,8 @@ def check_length_budgets(html: str) -> list[str]:
     if pp_match:
         pp_html = pp_match.group(1)
         total_words = _count_words(pp_html)
-        if total_words > 75:
-            warnings.append(f"Projets Phares : {total_words} mots au total (max 75) — le 3ème projet risque d'être coupé du PDF.")
+        if total_words > 150:
+            warnings.append(f"Projets Phares : {total_words} mots au total (max 150) — le 3ème projet risque d'être coupé du PDF.")
         # Count projets (separated by <br><br>)
         parts = re.split(r"<br\s*/?>\s*<br\s*/?>", pp_html, flags=re.IGNORECASE)
         parts = [p.strip() for p in parts if p.strip()]
@@ -372,8 +375,8 @@ def check_length_budgets(html: str) -> list[str]:
             warnings.append(f"Projets Phares : {len(parts)} projet(s) détecté(s) au lieu de 3.")
         for i, part in enumerate(parts, start=1):
             wc = _count_words(part)
-            if wc > 28:
-                warnings.append(f"Projet phare #{i} : {wc} mots (max 28) — réduire pour éviter coupure A4.")
+            if wc > 55:
+                warnings.append(f"Projet phare #{i} : {wc} mots (max 55) — réduire pour éviter coupure A4.")
 
     return warnings
 
@@ -640,8 +643,8 @@ if st.button("✨ Générer le Dossier", type="primary", key="dossier_generate")
                         "sans rien changer d'autre. Respecte impérativement :\n"
                         "- Chaque analyse Score Card ≤ 35 mots\n"
                         "- EXACTEMENT 3 projets phares\n"
-                        "- Chaque projet ≤ 28 mots\n"
-                        "- Total Projets Phares ≤ 75 mots\n"
+                        "- Chaque projet ≤ 55 mots\n"
+                        "- Total Projets Phares ≤ 150 mots\n"
                         "Retourne UNIQUEMENT le HTML corrigé, sans markdown, sans commentaire."
                     )
                     retry_messages = base_messages + [
