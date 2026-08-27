@@ -72,6 +72,112 @@ def get_logo_entourage() -> str:
 
 
 # ---------------------------------------------------------------------------
+# CLAUSE OPTIONNELLE — EXCLUSIVITÉ DE RECHERCHE (ANNEXE 1)
+# ---------------------------------------------------------------------------
+
+_NOMBRES_LETTRES = {
+    15: "quinze", 30: "trente", 45: "quarante-cinq",
+    60: "soixante", 75: "soixante-quinze", 90: "quatre-vingt-dix",
+}
+
+
+def _en_lettres(n: int) -> str:
+    """Retourne le nombre en toutes lettres (fallback : chiffres)."""
+    return _NOMBRES_LETTRES.get(int(n), str(n))
+
+
+def build_annexe_exclusivite(
+    fields: dict,
+    commercial: dict,
+    logo_tag_content: str,
+    date_str: str,
+    excl_jours_txt: str,
+    excl_penalite: int,
+    client_sig_name: str,
+    client_sig_title_prefix: str,
+    total_pages: int,
+) -> str:
+    """Page 5 — Annexe 1 : clause d'exclusivité de recherche (générée uniquement si l'option est cochée)."""
+    return f"""
+<!-- ═══════════════════════════════════════ PAGE 5 : ANNEXE 1 — EXCLUSIVITÉ DE RECHERCHE ═══════════════════════════════════════ -->
+<div class="page">
+  <div class="content-header">
+    <div>{logo_tag_content}</div>
+    <div class="content-header-doc">Annexe 1 · Exclusivité de recherche · {fields["client_nom"].upper()}</div>
+  </div>
+
+  <div class="content-body">
+
+    <div class="article">
+      <div class="article-title">
+        <div class="article-num" style="width:auto;min-width:6mm;padding:0 1.5mm;border-radius:3mm;">A1</div>
+        Annexe 1 — Clause d&rsquo;Exclusivité de Recherche
+      </div>
+      <div class="article-body">
+        <p>La présente Annexe fait partie intégrante du Contrat de prestations de services conclu entre les Parties le {date_str}. Elle précise et complète l&rsquo;Article 8 du Contrat, sur lequel elle prévaut en cas de contradiction.</p>
+
+        <p style="margin-top:2mm;"><strong>A.1 &mdash; Octroi et durée de l&rsquo;exclusivité</strong></p>
+        <p>Le Client confie au Prestataire, <strong>à titre exclusif</strong>, la recherche, l&rsquo;approche et la sélection des candidats pour le ou les postes objets du Contrat (la &laquo;&nbsp;Mission&nbsp;&raquo;), pour une durée de <strong>{excl_jours_txt} jours calendaires</strong> à compter de la date de signature du Contrat (la &laquo;&nbsp;Période d&rsquo;Exclusivité&nbsp;&raquo;).</p>
+        <p>À l&rsquo;expiration de la Période d&rsquo;Exclusivité, et à défaut de reconduction expresse et écrite des Parties, l&rsquo;exclusivité cesse de plein droit et sans formalité, sans effet sur les Articles 5 et 7 du Contrat qui poursuivent leurs effets.</p>
+
+        <p style="margin-top:2mm;"><strong>A.2 &mdash; Portée de l&rsquo;engagement du Client</strong></p>
+        <p>Pendant la Période d&rsquo;Exclusivité, le Client s&rsquo;interdit, directement ou indirectement, par lui-même ou par toute entité de son groupe&nbsp;:</p>
+        <ul>
+          <li>de confier tout ou partie de la même recherche à un autre cabinet de recrutement, chasseur de têtes, prestataire indépendant, plateforme de sourcing ou tout tiers exerçant une activité analogue&nbsp;;</li>
+          <li>de mandater ou de rémunérer un tiers, à quelque titre que ce soit, pour identifier, approcher ou présenter des candidats sur les postes concernés&nbsp;;</li>
+          <li>de publier ou faire publier une annonce relative à ces postes sans en avoir informé préalablement le Prestataire par écrit.</li>
+        </ul>
+        <p>Ne constituent pas un manquement&nbsp;: (i) les candidatures spontanées reçues avant la signature, sous réserve d&rsquo;avoir été communiquées par écrit au Prestataire dans les cinq (5) jours ouvrés suivant celle-ci&nbsp;; (ii) la cooptation et le sourcing interne, à condition que le Prestataire en soit informé sans délai.</p>
+
+        <p style="margin-top:2mm;"><strong>A.3 &mdash; Obligation d&rsquo;information et de loyauté</strong></p>
+        <p>Le Client informe le Prestataire, sans délai et par écrit, de toute candidature reçue ou de tout contact engagé sur les postes concernés, quelle qu&rsquo;en soit la source. Les Parties conviennent expressément que les articles A.2 et A.3 constituent des <strong>obligations essentielles</strong>, sans lesquelles le Prestataire n&rsquo;aurait pas contracté aux conditions financières de l&rsquo;Article 5.</p>
+
+        <p style="margin-top:2mm;"><strong>A.4 &mdash; Contrepartie à la charge du Prestataire</strong></p>
+        <p>En contrepartie, le Prestataire s&rsquo;engage à lancer la Mission dans les quarante-huit (48) heures ouvrées de la signature, à rendre compte de son avancement lors d&rsquo;un point hebdomadaire et à présenter une première sélection de candidats qualifiés avant l&rsquo;expiration de la Période d&rsquo;Exclusivité.</p>
+
+        <p style="margin-top:2mm;"><strong>A.5 &mdash; Manquement, résiliation et pénalités</strong></p>
+        <p>Tout manquement du Client aux articles A.2 ou A.3 constitue un <strong>manquement grave</strong> au sens de l&rsquo;Article 4 du Contrat. Le Prestataire pourra alors, sans préjudice de la réparation de son préjudice&nbsp;:</p>
+        <ul>
+          <li><strong>résilier le Contrat</strong> de plein droit et aux torts exclusifs du Client, par lettre recommandée avec accusé de réception, huit (8) jours après mise en demeure restée sans effet, sans qu&rsquo;aucune indemnité ne soit due par le Prestataire&nbsp;;</li>
+          <li>exiger une <strong>pénalité forfaitaire de {excl_penalite}&nbsp;% de la rémunération annuelle brute</strong> prévue pour le poste concerné, stipulée à titre de clause pénale au sens de l&rsquo;article 1231-5 du Code civil et payable dans les {fields["paiement_jours"]} jours de sa facturation&nbsp;;</li>
+          <li>percevoir l&rsquo;<strong>intégralité des honoraires</strong> de l&rsquo;Article 5 si le poste est pourvu &mdash; pendant la Période d&rsquo;Exclusivité ou dans les six (6) mois suivant son terme &mdash; par un candidat identifié, approché ou présenté en violation de la présente Annexe.</li>
+        </ul>
+        <p>Ces montants se cumulent et ne libèrent pas le Client des sommes déjà exigibles. Les stipulations du présent article survivent à l&rsquo;expiration de la Période d&rsquo;Exclusivité comme à la cessation du Contrat.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:4mm; padding-top:3mm; border-top: 2px solid #FFD700;">
+      <div style="font-family:'Playfair Display',serif; font-size:10pt; color:#000; margin-bottom:2mm;">Signature de l&rsquo;Annexe 1</div>
+      <div class="signature-grid">
+        <div class="sig-box" style="padding:3mm;">
+          <div class="sig-label">Pour le Client</div>
+          <div class="sig-name">{client_sig_name}</div>
+          <div class="sig-title">{client_sig_title_prefix}{fields["client_nom"]}</div>
+          <div class="sig-area" style="height:9mm;"></div>
+          <div class="sig-lu">Lu et approuvé &mdash; Bon pour accord sur la clause d&rsquo;exclusivité</div>
+        </div>
+        <div class="sig-box" style="padding:3mm;">
+          <div class="sig-label">Pour Entourage Recrutement</div>
+          <div class="sig-name">{fields["commercial"]}</div>
+          <div class="sig-title">{commercial["titre"]} &middot; Entourage Recrutement</div>
+          <div class="sig-area" style="height:9mm;"></div>
+          <div class="sig-lu">Lu et approuvé &mdash; Bon pour accord sur la clause d&rsquo;exclusivité</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="content-footer">
+    <span>Entourage Recrutement · SAS · RCS Paris 828 310 581</span>
+    <span>Page 5 / {total_pages}</span>
+    <span><a href="{commercial['linkedin']}">{fields["commercial"]}</a> · {commercial["tel"]}</span>
+  </div>
+</div>
+"""
+
+
+# ---------------------------------------------------------------------------
 # GÉNÉRATION DU HTML CONTRAT
 # ---------------------------------------------------------------------------
 
@@ -118,6 +224,44 @@ def build_contract_html(fields: dict) -> str:
 
     client_sig_name = fields.get("client_representant") or "________________________"
     client_sig_title_prefix = f'{fields["client_titre_rep"]} &middot; ' if fields.get("client_titre_rep") else ""
+
+    # ── Option : clause d'exclusivité de recherche (Annexe 1) ──────────────
+    excl_active = bool(fields.get("exclusivite_recherche"))
+    excl_jours = int(fields.get("exclusivite_jours") or 30)
+    excl_penalite = int(fields.get("exclusivite_penalite_pct") or 15)
+    excl_jours_txt = f"{_en_lettres(excl_jours)} ({excl_jours})"
+    total_pages = 5 if excl_active else 4
+
+    # Article 8 — texte alternatif selon l'option (longueur équivalente : mise en page page 4 préservée)
+    if excl_active:
+        art8_titre = "Exclusivité de Recherche"
+        art8_body = (
+            f'<p>Le Client confère au Prestataire une <strong>exclusivité de recherche '
+            f'de {excl_jours_txt} jours calendaires</strong> à compter de la signature du '
+            f'Contrat, dans les conditions fixées à l&rsquo;<strong>Annexe 1</strong>, laquelle '
+            f'fait partie intégrante du présent Contrat et dont le Client reconnaît avoir pris connaissance.</p>'
+        )
+    else:
+        art8_titre = "Exclusivité"
+        art8_body = (
+            "<p>Le Prestataire ne bénéficie pas d'un droit d'exclusivité concernant les besoins "
+            "exprimés par le Client, lequel reste libre de solliciter d'autres prestataires pour "
+            "tout ou partie de la Prestation.</p>"
+        )
+
+    toc_annexe = (
+        '<div class="toc-item"><span><strong>A1.</strong> Annexe &mdash; Exclusivité de recherche</span>'
+        '<span class="toc-page">p.5</span></div>'
+        if excl_active else ""
+    )
+
+    annexe_html = (
+        build_annexe_exclusivite(
+            fields, commercial, logo_tag_content, date_str, excl_jours_txt,
+            excl_penalite, client_sig_name, client_sig_title_prefix, total_pages,
+        )
+        if excl_active else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -310,11 +454,12 @@ def build_contract_html(fields: dict) -> str:
           <div class="toc-item"><span><strong>5.</strong> Conditions financières</span><span class="toc-page">p.3</span></div>
           <div class="toc-item"><span><strong>6.</strong> Facturation &amp; Paiement</span><span class="toc-page">p.4</span></div>
           <div class="toc-item"><span><strong>7.</strong> Garantie</span><span class="toc-page">p.4</span></div>
-          <div class="toc-item"><span><strong>8.</strong> Exclusivité</span><span class="toc-page">p.4</span></div>
+          <div class="toc-item"><span><strong>8.</strong> {art8_titre}</span><span class="toc-page">p.4</span></div>
           <div class="toc-item"><span><strong>9.</strong> Confidentialité</span><span class="toc-page">p.4</span></div>
           <div class="toc-item"><span><strong>10.</strong> Responsabilité</span><span class="toc-page">p.4</span></div>
           <div class="toc-item"><span><strong>11.</strong> Divers</span><span class="toc-page">p.4</span></div>
           <div class="toc-item"><span><strong>12.</strong> Loi applicable &amp; Juridiction</span><span class="toc-page">p.4</span></div>
+          {toc_annexe}
         </div>
       </div>
     </div>
@@ -323,7 +468,7 @@ def build_contract_html(fields: dict) -> str:
 
   <div class="content-footer">
     <span>Entourage Recrutement · SAS · RCS Paris 828 310 581</span>
-    <span>Page 2 / 4</span>
+    <span>Page 2 / {total_pages}</span>
     <span><a href="{commercial['linkedin']}">{fields["commercial"]}</a> · {commercial["tel"]}</span>
   </div>
 </div>
@@ -397,7 +542,7 @@ def build_contract_html(fields: dict) -> str:
 
   <div class="content-footer">
     <span>Entourage Recrutement · SAS · RCS Paris 828 310 581</span>
-    <span>Page 3 / 4</span>
+    <span>Page 3 / {total_pages}</span>
     <span><a href="{commercial['linkedin']}">{fields["commercial"]}</a> · {commercial["tel"]}</span>
   </div>
 </div>
@@ -429,9 +574,9 @@ def build_contract_html(fields: dict) -> str:
     </div>
 
     <div class="article">
-      <div class="article-title"><div class="article-num">8</div> Exclusivité</div>
+      <div class="article-title"><div class="article-num">8</div> {art8_titre}</div>
       <div class="article-body">
-        <p>Le Prestataire ne bénéficie pas d'un droit d'exclusivité concernant les besoins exprimés par le Client, lequel reste libre de solliciter d'autres prestataires pour tout ou partie de la Prestation.</p>
+        {art8_body}
       </div>
     </div>
 
@@ -489,11 +634,11 @@ def build_contract_html(fields: dict) -> str:
 
   <div class="content-footer">
     <span>Entourage Recrutement · SAS · RCS Paris 828 310 581</span>
-    <span>Page 4 / 4</span>
+    <span>Page 4 / {total_pages}</span>
     <span><a href="{commercial['linkedin']}">{fields["commercial"]}</a> · {commercial["tel"]}</span>
   </div>
 </div>
-
+{annexe_html}
 </body>
 </html>"""
 
@@ -599,6 +744,36 @@ with col3:
 with col4:
     exclusivite_mois = st.number_input("Exclusivité CV (mois)", min_value=6, max_value=24, value=12, step=1)
 
+st.markdown("")
+exclusivite_recherche = st.checkbox(
+    "🔒 Clause d'exclusivité de recherche (Annexe 1)",
+    value=False,
+    help=(
+        "Ajoute une annexe juridique au contrat : le cabinet conserve l'exclusivité de la recherche "
+        "pendant la durée choisie. Le recours du Client à une autre ressource de recrutement pendant "
+        "cette période ouvre droit à résiliation aux torts du Client et au paiement de pénalités. "
+        "Décoché, le contrat reste non exclusif (Article 8 d'origine)."
+    ),
+)
+
+excl_jours = 30
+excl_penalite_pct = 15
+if exclusivite_recherche:
+    col_e1, col_e2 = st.columns(2)
+    with col_e1:
+        excl_jours = st.number_input(
+            "Durée de l'exclusivité (jours)", min_value=15, max_value=90, value=30, step=15
+        )
+    with col_e2:
+        excl_penalite_pct = st.number_input(
+            "Pénalité forfaitaire (% rém. annuelle brute)", min_value=5, max_value=50, value=15, step=5
+        )
+    st.info(
+        f"➕ Le contrat comportera **5 pages** : l'Article 8 renvoie à l'**Annexe 1**, "
+        f"qui détaille l'exclusivité de {excl_jours} jours, l'obligation d'information du Client, "
+        f"la résiliation aux torts exclusifs du Client et la pénalité de {excl_penalite_pct} %."
+    )
+
 st.divider()
 
 # SECTION 3 — Signature
@@ -632,6 +807,9 @@ if st.button("⚡ Générer le Contrat", type="primary", disabled=not tous_rempl
         "garantie_mois": garantie_mois,
         "paiement_jours": paiement_jours,
         "exclusivite_mois": exclusivite_mois,
+        "exclusivite_recherche": exclusivite_recherche,
+        "exclusivite_jours": excl_jours,
+        "exclusivite_penalite_pct": excl_penalite_pct,
         "commercial": commercial,
         "date_signature": date_signature,
     }
