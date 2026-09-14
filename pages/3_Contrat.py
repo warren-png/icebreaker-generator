@@ -123,20 +123,18 @@ def build_annexe_exclusivite(
         <p style="margin-top:2mm;"><strong>A.2 &mdash; Portée de l&rsquo;engagement du Client</strong></p>
         <p>Pendant la Période d&rsquo;Exclusivité, le Client s&rsquo;interdit, directement ou indirectement, par lui-même ou par toute entité de son groupe&nbsp;:</p>
         <ul>
-          <li>de confier tout ou partie de la même recherche à un autre cabinet de recrutement, chasseur de têtes, prestataire indépendant, plateforme de sourcing ou tout tiers exerçant une activité analogue&nbsp;;</li>
-          <li>de mandater ou de rémunérer un tiers, à quelque titre que ce soit, pour identifier, approcher ou présenter des candidats sur les postes concernés&nbsp;;</li>
-          <li>de publier ou faire publier une annonce relative à ces postes sans en avoir informé préalablement le Prestataire par écrit.</li>
+          <li>de confier tout ou partie de la même recherche à un autre cabinet de recrutement, chasseur de têtes, prestataire indépendant ou tout tiers intermédiaire exerçant une activité analogue&nbsp;;</li>
+          <li>de mandater ou de rémunérer un tel tiers, à quelque titre que ce soit, pour identifier, approcher ou présenter des candidats sur les postes concernés, y compris par la diffusion d&rsquo;annonces pour le compte du Client.</li>
         </ul>
-        <p>Ne constituent pas un manquement&nbsp;: (i) les candidatures spontanées reçues avant la signature, sous réserve d&rsquo;avoir été communiquées par écrit au Prestataire dans les cinq (5) jours ouvrés suivant celle-ci&nbsp;; (ii) la cooptation et le sourcing interne, à condition que le Prestataire en soit informé sans délai.</p>
+        <p>Demeurent expressément autorisés et ne constituent pas un manquement&nbsp;: (i) <strong>la diffusion par le Client lui-même d&rsquo;annonces</strong> relatives aux postes concernés, sur ses propres canaux ou sur tout site d&rsquo;emploi, ainsi que le traitement des candidatures qui en résultent&nbsp;; (ii) les candidatures spontanées reçues par le Client&nbsp;; (iii) la cooptation et le sourcing interne.</p>
+        <p>Les Parties conviennent expressément que l&rsquo;engagement du présent article constitue une <strong>obligation essentielle</strong>, sans laquelle le Prestataire n&rsquo;aurait pas contracté aux conditions financières de l&rsquo;Article 5.</p>
 
-        <p style="margin-top:2mm;"><strong>A.3 &mdash; Obligation d&rsquo;information et de loyauté</strong></p>
-        <p>Le Client informe le Prestataire, sans délai et par écrit, de toute candidature reçue ou de tout contact engagé sur les postes concernés, quelle qu&rsquo;en soit la source. Les Parties conviennent expressément que les articles A.2 et A.3 constituent des <strong>obligations essentielles</strong>, sans lesquelles le Prestataire n&rsquo;aurait pas contracté aux conditions financières de l&rsquo;Article 5.</p>
 
-        <p style="margin-top:2mm;"><strong>A.4 &mdash; Contrepartie à la charge du Prestataire</strong></p>
+        <p style="margin-top:2mm;"><strong>A.3 &mdash; Contrepartie à la charge du Prestataire</strong></p>
         <p>En contrepartie, le Prestataire s&rsquo;engage à lancer la Mission dans les quarante-huit (48) heures ouvrées de la signature, à rendre compte de son avancement lors d&rsquo;un point hebdomadaire et à présenter une première sélection de candidats qualifiés avant l&rsquo;expiration de la Période d&rsquo;Exclusivité.</p>
 
-        <p style="margin-top:2mm;"><strong>A.5 &mdash; Manquement, résiliation et pénalités</strong></p>
-        <p>Tout manquement du Client aux articles A.2 ou A.3 constitue un <strong>manquement grave</strong> au sens de l&rsquo;Article 4 du Contrat. Le Prestataire pourra alors, sans préjudice de la réparation de son préjudice&nbsp;:</p>
+        <p style="margin-top:2mm;"><strong>A.4 &mdash; Manquement, résiliation et pénalités</strong></p>
+        <p>Tout manquement du Client à l&rsquo;article A.2 constitue un <strong>manquement grave</strong> au sens de l&rsquo;Article 4 du Contrat. Le Prestataire pourra alors, sans préjudice de la réparation de son préjudice&nbsp;:</p>
         <ul>
           <li><strong>résilier le Contrat</strong> de plein droit et aux torts exclusifs du Client, par lettre recommandée avec accusé de réception, huit (8) jours après mise en demeure restée sans effet, sans qu&rsquo;aucune indemnité ne soit due par le Prestataire&nbsp;;</li>
           <li>exiger une <strong>pénalité forfaitaire de {excl_penalite}&nbsp;% de la rémunération annuelle brute</strong> prévue pour le poste concerné, stipulée à titre de clause pénale au sens de l&rsquo;article 1231-5 du Code civil et payable dans les {fields["paiement_jours"]} jours de sa facturation&nbsp;;</li>
@@ -750,8 +748,9 @@ exclusivite_recherche = st.checkbox(
     value=False,
     help=(
         "Ajoute une annexe juridique au contrat : le cabinet conserve l'exclusivité de la recherche "
-        "pendant la durée choisie. Le recours du Client à une autre ressource de recrutement pendant "
-        "cette période ouvre droit à résiliation aux torts du Client et au paiement de pénalités. "
+        "pendant la durée choisie. Le recours du Client à un autre cabinet ou intermédiaire de recrutement pendant "
+        "cette période ouvre droit à résiliation aux torts du Client et au paiement de pénalités "
+        "(la diffusion de ses propres annonces reste autorisée). "
         "Décoché, le contrat reste non exclusif (Article 8 d'origine)."
     ),
 )
@@ -770,7 +769,7 @@ if exclusivite_recherche:
         )
     st.info(
         f"➕ Le contrat comportera **5 pages** : l'Article 8 renvoie à l'**Annexe 1**, "
-        f"qui détaille l'exclusivité de {excl_jours} jours, l'obligation d'information du Client, "
+        f"qui détaille l'exclusivité de {excl_jours} jours (annonces du Client autorisées), "
         f"la résiliation aux torts exclusifs du Client et la pénalité de {excl_penalite_pct} %."
     )
 
