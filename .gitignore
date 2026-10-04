@@ -32,3 +32,6 @@ Thumbs.db
 
 # Coach Prospection — corpus privé du coaching, ne PAS committer
 coach_prospection/corpus/*.md
+
+# Mandats — stockage local de développement (MANDATS_STORAGE=local)
+mandats_local/

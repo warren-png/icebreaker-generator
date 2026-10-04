@@ -1,2242 +1,797 @@
 """
-═══════════════════════════════════════════════════════════════════
-APP STREAMLIT V28.8 - LINKEDIN AUTO + COPIER-COLLER POUR LE RESTE
-═══════════════════════════════════════════════════════════════════
-- URLs fiches de poste depuis Leonar (custom_text_1) ou manuelles
-- LinkedIn Jobs : scraping automatique
-- Indeed/HelloWork/Apec : copier-coller (JS non supporté)
-- Messages injectés dans custom_variable_1/2/3 (séquence auto)
-- Backup dans notes (lisible)
-- Pagination Leonar (récupère tous les prospects)
-═══════════════════════════════════════════════════════════════════
+Page d'accueil — Mandats : base partagée des mandats en cours et passés.
+(Remplace l'ancienne page Icebreaker, retirée en octobre 2026 ; voir l'historique git.)
+
+Pour chaque mandat : nom, entreprise, date, responsable, statut, notes,
+fiche de poste (PDF/Word ou texte collé), échanges audio (manager, RH…)
+et leur transcription intégrale (AssemblyAI, avec locuteurs et horodatage).
+
+Stockage : Drive partagé Entourage, dossier « Mandats » (voir mandats_store.py).
 """
 
-import streamlit as st
-import requests
+import io
 import os
 import re
-import json
-import time
+import sys
+import mimetypes
+from datetime import date, datetime
+
+import streamlit as st
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from utils.auth import check_password
 from utils.ui import inject_global_styles
+from mandats_store import get_store, StorageError
 
-# — Authentification globale —
-if not check_password():
-    st.stop()
-import anthropic
-from datetime import datetime, timedelta
-from urllib.parse import quote as url_quote
-from dotenv import load_dotenv
-from bs4 import BeautifulSoup
-from cv_generator import generate_cv_content, estimate_cv_length, condense_cv_content
-from cv_templates import create_cv_pdf
-from google_drive_uploader import upload_cv
-from message_cv_sequence import generate_sequence_with_cv, generate_subject_lines_cv
 
-load_dotenv()
-
-# ========================================
-# CONFIGURATION
-# ========================================
-
-st.set_page_config(page_title="Icebreaker Generator V28.7", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Mandats | Entourage", page_icon="🗂️", layout="wide")
 inject_global_styles()
 
+if not check_password():
+    st.stop()
 
-ANTHROPIC_API_KEY = st.secrets.get("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-APIFY_API_TOKEN = st.secrets.get("APIFY_API_TOKEN") or os.getenv("APIFY_API_TOKEN")
-SERPER_API_KEY = st.secrets.get("SERPER_API_KEY") or os.getenv("SERPER_API_KEY")
-FULLENRICH_API_KEY = st.secrets.get("FULLENRICH_API_KEY") or os.getenv("FULLENRICH_API_KEY")
 
-LEONAR_API_KEY = st.secrets.get("LEONAR_API_KEY") or os.getenv("LEONAR_API_KEY")
+RESPONSABLES = ["Warren", "Helder", "Bruno"]
+STATUTS = ["En cours", "Pourvu", "Clos"]
+STATUT_COLORS = {"En cours": "orange", "Pourvu": "green", "Clos": "gray"}
+AUDIO_TYPES = ["m4a", "mp3", "wav", "mp4", "aac", "ogg", "webm", "flac", "mpeg", "mov"]
+FICHE_TYPES = ["pdf", "docx", "doc"]
 
-# ========================================
-# PROJET LEONAR V2
-# ========================================
-LEONAR_PROJECT_ID = "61f7ae44-ce3e-4444-b6aa-836573c628c6"
-LEONAR_SEQUENCE_ID = "835a18cb-9433-4649-8846-4517912f66e5"
-LEONAR_BASE_URL = "https://app.leonar.app/api/v1"
-
-PROCESSED_FILE = "processed_prospects.txt"
-
-# ========================================
-# SÉCURITÉ - SANITISATION DES INPUTS
-# ========================================
-
-# Longueurs maximales pour éviter les DoS et les dépassements de tokens
-MAX_JOB_DESC_LEN = 4000
-MAX_FIELD_LEN = 500
-MAX_URL_LEN = 2048
-MAX_MANUAL_DESC_LEN = 8000
-
-def sanitize_text(text, max_length=MAX_FIELD_LEN):
-    """Tronque et nettoie un champ texte avant injection dans un prompt.
-    Supprime les séquences de contrôle qui pourraient perturber l'interprétation du prompt.
+st.markdown(
     """
-    if not text or not isinstance(text, str):
-        return ""
-    # Supprimer les caractères nuls et de contrôle (hors newline/tab)
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
-    return text[:max_length]
-
-def sanitize_url(url):
-    """Valide et nettoie une URL : doit commencer par https://"""
-    if not url or not isinstance(url, str):
-        return ""
-    url = url.strip()[:MAX_URL_LEN]
-    if not url.startswith("https://"):
-        return ""
-    return url
-
-# Session state
-if 'leonar_prospects' not in st.session_state:
-    st.session_state.leonar_prospects = []
-if 'generation_stats' not in st.session_state:
-    st.session_state.generation_stats = {'calls': 0, 'tokens': 0, 'cost': 0}
-
-
-# ========================================
-# LEONAR API
-# ========================================
-
-def get_leonar_headers():
-    """Retourne les headers d'authentification Leonar V2"""
-    return {
-        'Authorization': f'Bearer {LEONAR_API_KEY}',
-        'Content-Type': 'application/json'
-    }
+    <style>
+      .mandat-meta { color: #71717A; font-size: 0.86rem; margin-top: -0.2rem; }
+      .mandat-title { font-weight: 800; font-size: 1.02rem; color: #0A0A0A; letter-spacing: -0.01em; }
+      .mandat-files { color: #52525B; font-size: 0.82rem; }
+      .mandat-empty {
+          text-align: center; padding: 48px 20px; color: #71717A;
+          border: 1.5px dashed #D4D4CE; border-radius: 14px; background: #FFFFFF;
+      }
+      .mandat-empty b { color: #0A0A0A; font-size: 1.05rem; display: block; margin-bottom: 4px; }
+      .mandat-transcript { font-size: 0.9rem; line-height: 1.6; }
+      .mandat-transcript .ts { color: #A1A1AA; font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+      .mandat-transcript .spk { font-weight: 750; color: #0A0A0A; }
+      .mandat-transcript p { margin: 0 0 0.55rem 0; }
+      /* Sur cette page, beaucoup de téléchargements : style secondaire, plus léger */
+      .stDownloadButton > button {
+          background: #FFFFFF !important;
+          color: #18181B !important;
+          border: 1px solid #E4E4E0 !important;
+          box-shadow: 0 1px 2px rgba(16,16,16,0.04) !important;
+      }
+      .stDownloadButton > button:hover {
+          border-color: #D4D4CE !important;
+          color: #0A0A0A !important;
+          background: #FCFCFA !important;
+          box-shadow: 0 1px 2px rgba(16,16,16,0.04), 0 6px 20px rgba(16,16,16,0.05) !important;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
-def get_contact_full(contact_id):
-    """Récupère le contact complet depuis Leonar V2 pour obtenir linkedin_url et autres champs manquants"""
-    try:
-        r = requests.get(
-            f"{LEONAR_BASE_URL}/contacts/{contact_id}",
-            headers=get_leonar_headers(),
-            timeout=10
-        )
-        if r.status_code == 200:
-            return r.json().get('data', {})
-        return {}
-    except Exception:
-        return {}
+# ─────────────────────────────────────────────────────────────────────────────
+# Stockage
+# ─────────────────────────────────────────────────────────────────────────────
 
 
-def get_new_prospects_leonar(verbose=True):
-    """Récupère les prospects depuis le projet Leonar V2 (avec pagination)"""
-    try:
-        all_entries = []
-        offset = 0
-        limit = 100
+@st.cache_resource(show_spinner=False)
+def store():
+    return get_store()
 
-        while True:
-            r = requests.get(
-                f"{LEONAR_BASE_URL}/projects/{LEONAR_PROJECT_ID}/entries",
-                headers=get_leonar_headers(),
-                params={'limit': limit, 'offset': offset},
-                timeout=15
-            )
 
-            if r.status_code != 200:
-                st.error(f"❌ Leonar V2 API erreur: status {r.status_code} — {r.text[:100]}")
-                break
+@st.cache_data(ttl=120, show_spinner=False)
+def load_snapshot() -> dict:
+    return store().snapshot()
 
-            data = r.json()
-            entries = data.get('data', [])
-            meta = data.get('meta', {})
 
-            all_entries.extend(entries)
+@st.cache_data(max_entries=3, show_spinner=False)
+def fetch_bytes(file_id: str) -> bytes:
+    return store().download(file_id)
 
-            if verbose:
-                st.info(f"📊 Page offset={offset}: {len(entries)} entrées (total: {len(all_entries)})")
 
-            if not meta.get('has_more', False) or not entries:
-                break
+def refresh_and_rerun(flash: str | None = None, mandat_id: str | None = None):
+    load_snapshot.clear()
+    if flash:
+        st.session_state["_mandats_flash"] = flash
+    if mandat_id is not None:
+        st.query_params["mandat"] = mandat_id
+    st.rerun()
 
-            offset += limit
-            if offset > 1000:
-                if verbose:
-                    st.warning("⚠️ Limite de 1000 prospects atteinte")
-                break
 
-        # Récupérer les contacts déjà inscrits dans la séquence (avec pagination)
-        enrolled_ids = set()
+def ensure_env(key: str) -> str | None:
+    """Les secrets Streamlit Cloud ne sont pas toujours exportés en variables d'env."""
+    if not os.getenv(key):
         try:
-            enroll_offset = 0
-            enroll_limit = 100
-            while True:
-                r = requests.get(
-                    f"{LEONAR_BASE_URL}/sequences/{LEONAR_SEQUENCE_ID}/enrollments",
-                    headers={'Authorization': f'Bearer {LEONAR_API_KEY}'},
-                    params={'limit': enroll_limit, 'offset': enroll_offset},
-                    timeout=10
-                )
-                if r.status_code != 200:
-                    break
-                data = r.json()
-                enrollments = data.get('data', [])
-                for e in enrollments:
-                    cid = e.get('contact_id') or e.get('contact', {}).get('id', '')
-                    if cid:
-                        enrolled_ids.add(cid)
-                if not data.get('meta', {}).get('has_more', False) or not enrollments:
-                    break
-                enroll_offset += enroll_limit
+            if key in st.secrets:
+                os.environ[key] = str(st.secrets[key])
         except Exception:
             pass
-
-        # Filtrer les déjà inscrits (Leonar) + déjà traités localement
-        processed_ids = load_processed()
-        filtered = []
-        skipped_enrolled = 0
-        skipped_processed = 0
-        for entry in all_entries:
-            contact = entry.get('contact', {})
-            contact_id = contact.get('id', '')
-            entry_id = entry.get('id', '')  # Leonar V2 utilise 'id' (pas '_id')
-            already_enrolled = contact_id and contact_id in enrolled_ids
-            # processed_prospects.txt peut stocker contact.id OU entry.id selon le contexte
-            already_processed = (
-                (contact_id and contact_id in processed_ids) or
-                (entry_id and entry_id in processed_ids)
-            )
-            if already_enrolled:
-                skipped_enrolled += 1
-            elif already_processed:
-                skipped_processed += 1
-            else:
-                filtered.append(entry)
-
-        if verbose:
-            st.success(f"✅ {len(filtered)} prospect(s) à traiter ({len(all_entries)} au total)")
-            if skipped_enrolled > 0:
-                st.caption(f"   └─ {skipped_enrolled} ignorés : déjà inscrits dans la séquence Leonar")
-            if skipped_processed > 0:
-                st.caption(f"   └─ {skipped_processed} ignorés : déjà traités (processed_prospects.txt)")
-            if len(all_entries) == 0:
-                st.warning("⚠️ Aucune entrée retournée par l'API — vérifier PROJECT_ID ou API key")
-        else:
-            st.caption(f"   └─ {len(all_entries)} dans le projet → {len(filtered)} nouveaux "
-                       f"({skipped_enrolled} déjà inscrits séquence, {skipped_processed} déjà traités localement)")
-
-        return filtered
-
-    except Exception as e:
-        st.error(f"Erreur Leonar V2: {e}")
-        return []
+    return os.getenv(key)
 
 
-def get_all_new_prospects():
-    """Récupère tous les nouveaux prospects du projet Leonar V2"""
-    prospects = get_new_prospects_leonar(verbose=False)
-    if prospects:
-        st.success(f"✅ **{len(prospects)} prospect(s) à traiter**")
-    else:
-        st.warning("⚠️ Aucun nouveau prospect trouvé dans le projet")
-    return prospects
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers d'affichage
+# ─────────────────────────────────────────────────────────────────────────────
 
 
-def enrich_phones_fullenrich(prospects, token):
-    """Enrichit les numéros de téléphone via Full Enrich API et les écrit dans Leonar"""
-
-    if not FULLENRICH_API_KEY:
-        st.error("❌ FULLENRICH_API_KEY manquante dans les secrets Streamlit")
-        return
-
-    # Séparer prospects avec/sans numéro
-    to_enrich = [p for p in prospects if not p.get('phone')]
-    already_have_phone = len(prospects) - len(to_enrich)
-
-    if not to_enrich:
-        st.success(f"⏭️ Tous les {len(prospects)} prospects ont déjà un numéro de téléphone")
-        return
-
-    st.info(f"📤 {len(to_enrich)} prospect(s) à enrichir · ⏭️ {already_have_phone} déjà avec numéro (skippés)")
-
-    # Construire le payload Full Enrich
-    fe_data = []
-    skipped_no_data = []
-
-    for p in to_enrich:
-        contact = {"custom": {"prospect_id": str(p['_id'])}}
-
-        # URL LinkedIn
-        linkedin_url = (
-            p.get('linkedin_url') or
-            p.get('linkedin_profile_url') or
-            p.get('linkedin') or
-            p.get('custom_text_3') or ''
-        ).strip()
-
-        # Prénom / Nom (champs directs Leonar en priorité, sinon split du full_name)
-        first_name = (p.get('first_name') or '').strip()
-        last_name = (p.get('last_name') or '').strip()
-        if not first_name or not last_name:
-            full_name = (
-                p.get('user_full name') or
-                p.get('full_name') or
-                p.get('name') or ''
-            ).strip()
-            if full_name and not first_name:
-                parts = full_name.split(' ', 1)
-                first_name = parts[0]
-                last_name = parts[1] if len(parts) > 1 else last_name
-
-        # Entreprise
-        company = (
-            p.get('linkedin_company') or
-            p.get('company') or
-            p.get('company_name') or ''
-        ).strip()
-
-        # Domaine extrait de l'email (ex: "nathalie@ortec.fr" → "ortec.fr")
-        email = (p.get('email') or '').strip()
-        domain = email.split('@')[1] if '@' in email else ''
-
-        if linkedin_url:
-            contact["linkedin_url"] = linkedin_url
-        if first_name:
-            contact["firstname"] = first_name
-        if last_name:
-            contact["lastname"] = last_name
-        if domain:
-            contact["domain"] = domain
-        elif company:
-            contact["company_name"] = company
-
-        # Spécifier qu'on veut uniquement le téléphone (valeur exacte API Full Enrich v1)
-        contact["enrich_fields"] = ["contact.phones"]
-
-        # Full Enrich nécessite : linkedin_url OU (prénom + nom + domaine/entreprise)
-        has_linkedin = bool(linkedin_url)
-        has_name_company = bool(first_name and last_name and (domain or company))
-
-        if has_linkedin or has_name_company:
-            fe_data.append(contact)
-        else:
-            skipped_no_data.append(p.get('user_full name') or p.get('full_name') or str(p.get('_id', '?')))
-
-    if skipped_no_data:
-        st.warning(
-            f"⚠️ {len(skipped_no_data)} prospect(s) ignorés car ni URL LinkedIn ni nom+entreprise disponibles dans Leonar : "
-            f"{', '.join(str(x) for x in skipped_no_data[:5])}"
-            + (' ...' if len(skipped_no_data) > 5 else '')
-        )
-
-    if not fe_data:
-        st.error(
-            "❌ Aucun prospect ne peut être enrichi — données insuffisantes dans Leonar.\n\n"
-            "Full Enrich nécessite pour chaque prospect : **URL LinkedIn** OU **(Prénom + Nom + Entreprise)**.\n"
-            "Vérifiez le Debug Leonar ci-dessus pour voir les champs disponibles."
-        )
-        return
-
-    st.info(f"📤 {len(fe_data)} prospect(s) envoyés à Full Enrich")
-
-    # Envoi en batches de 100 max
-    enrichment_ids = []
-    batches = [fe_data[i:i + 100] for i in range(0, len(fe_data), 100)]
-
-    for batch_num, batch in enumerate(batches):
-        try:
-            r = requests.post(
-                'https://app.fullenrich.com/api/v1/contact/enrich/bulk?silentFail=true',
-                headers={
-                    'Authorization': f'Bearer {FULLENRICH_API_KEY}',
-                    'Content-Type': 'application/json'
-                },
-                json={
-                    'name': f'Entourage {datetime.now().strftime("%Y-%m-%d %H:%M")} ({batch_num + 1}/{len(batches)})',
-                    'datas': batch
-                },
-                timeout=30
-            )
-            if r.status_code == 200:
-                eid = r.json().get('enrichment_id')
-                enrichment_ids.append(eid)
-            else:
-                st.error(f"❌ Erreur envoi batch {batch_num + 1}: {r.status_code} — {r.text[:200]}")
-                return
-        except Exception as e:
-            st.error(f"❌ Erreur réseau Full Enrich: {e}")
-            return
-
-    # Polling jusqu'à FINISHED
-    results_by_id = {}  # prospect_id -> numéro ou None
-    progress_bar = st.progress(0)
-    status_ph = st.empty()
-
-    for idx, eid in enumerate(enrichment_ids):
-        max_wait = 150  # 2min30 max par batch
-        elapsed = 0
-        poll_interval = 10
-
-        while elapsed < max_wait:
-            time.sleep(poll_interval)
-            elapsed += poll_interval
-
-            overall = (idx + min(elapsed / max_wait, 1.0)) / len(enrichment_ids)
-            progress_bar.progress(min(overall, 0.99))
-            status_ph.info(f"⏳ Enrichissement en cours… {elapsed}s écoulées (moyenne ~60s par batch)")
-
-            try:
-                r = requests.get(
-                    f'https://app.fullenrich.com/api/v1/contact/enrich/bulk/{eid}',
-                    headers={'Authorization': f'Bearer {FULLENRICH_API_KEY}'},
-                    timeout=15
-                )
-                if r.status_code == 200:
-                    data = r.json()
-                    status = data.get('status', '')
-
-                    if status == 'FINISHED':
-                        # DEBUG temporaire — à supprimer après validation
-                        with st.expander("🔍 Debug réponse Full Enrich (raw)", expanded=False):
-                            st.json(data)
-                        # Full Enrich peut retourner 'datas' ou 'data' selon les endpoints
-                        contacts_list = data.get('datas') or data.get('data') or []
-                        for contact_result in contacts_list:
-                            pid = contact_result.get('custom', {}).get('prospect_id')
-                            # Chercher le téléphone dans plusieurs structures possibles
-                            phone = None
-                            ci = contact_result.get('contact_info') or {}
-                            # Structure 1 : most_probable_phone.number
-                            mpp = ci.get('most_probable_phone') or {}
-                            if mpp.get('number'):
-                                phone = mpp['number']
-                            # Structure 2 : phones[].number (tableau)
-                            if not phone:
-                                phones_list = ci.get('phones') or []
-                                if phones_list and isinstance(phones_list, list):
-                                    first_p = phones_list[0]
-                                    phone = (first_p.get('number') or first_p.get('phone_number') or first_p.get('value'))
-                            # Structure 3 : phone direct sur contact_info
-                            if not phone:
-                                phone = ci.get('phone') or ci.get('phone_number')
-                            if pid:
-                                results_by_id[pid] = phone
-                        break
-                    elif status in ['CREDITS_INSUFFICIENT', 'CANCELED']:
-                        status_ph.error(f"❌ Enrichissement stoppé : {status}")
-                        break
-            except Exception as e:
-                status_ph.warning(f"⚠️ Erreur polling: {e}")
-
-    progress_bar.progress(1.0)
-    status_ph.empty()
-    progress_bar.empty()
-
-    # Afficher résultats et écrire dans Leonar
-    found = 0
-    not_found = 0
-
-    st.subheader("📋 Résultats détaillés")
-    for p in to_enrich:
-        pid = str(p['_id'])
-        phone = results_by_id.get(pid)
-        name = p.get('user_full name', 'Inconnu')
-
-        if phone:
-            try:
-                r = requests.patch(
-                    f'https://dashboard.leonar.app/api/1.1/obj/matching/{pid}',
-                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-                    json={'phone': phone},
-                    timeout=10
-                )
-                if r.status_code in [200, 204]:
-                    st.success(f"✅ **{name}** → `{phone}` — enregistré dans Leonar")
-                else:
-                    st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur écriture Leonar ({r.status_code})")
-                found += 1
-            except Exception as e:
-                st.warning(f"⚠️ **{name}** → `{phone}` trouvé mais erreur: {e}")
-                found += 1
-        else:
-            st.warning(f"❌ **{name}** → Aucun numéro trouvé")
-            not_found += 1
-
-    # Résumé final
-    st.divider()
-    c1, c2, c3 = st.columns(3)
-    c1.metric("✅ Numéros trouvés", found)
-    c2.metric("⏭️ Déjà enrichis", already_have_phone)
-    c3.metric("❌ Non trouvés", not_found)
+def md(text: str) -> str:
+    """Échappe le texte saisi pour l'afficher en markdown."""
+    return re.sub(r"([\\`*_\[\]{}<>#|$~])", r"\\\1", str(text or ""))
 
 
-def save_sequence_as_note_v2(contact_id, sequence_data):
-    """Sauvegarde la séquence générée en note dans Leonar V2 (backup lisible)"""
-    if not LEONAR_API_KEY or not contact_id:
-        return False
+def fmt_date(iso: str) -> str:
     try:
-        note_content = (
-            f"=== SÉQUENCE GÉNÉRÉE LE {datetime.now().strftime('%d/%m/%Y %H:%M')} ===\n\n"
-            f"📧 OBJET M1: {sequence_data.get('subject_1', '')}\n"
-            f"📧 OBJET M2: {sequence_data.get('subject_2', '')}\n\n"
-            f"--- MESSAGE 1 ---\n{sequence_data.get('message_1', '')}\n\n"
-            f"--- MESSAGE 2 ---\n{sequence_data.get('message_2', '')}"
-        )
-        r = requests.post(
-            f"{LEONAR_BASE_URL}/contacts/{contact_id}/notes",
-            headers=get_leonar_headers(),
-            json={"content": note_content},
-            timeout=10
-        )
-        return r.status_code in [200, 201]
-    except Exception as e:
-        print(f"Erreur sauvegarde note Leonar: {e}")
-        return False
+        return datetime.fromisoformat(iso).strftime("%d/%m/%Y")
+    except Exception:
+        return iso or "—"
 
 
-def update_prospect_leonar(token_unused, prospect_id, sequence_data):
-    """Inscrit le prospect dans la séquence Leonar V2 et sauvegarde en note"""
-    from sequence_generator_v28 import enroll_leonar_v2
-    success, err = enroll_leonar_v2(
-        contact_id=prospect_id,
-        message_1=sequence_data.get('message_1', ''),
-        message_2=sequence_data.get('message_2', ''),
-        subject_1=sequence_data.get('subject_1', ''),
-        subject_2=sequence_data.get('subject_2', ''),
-        api_key=LEONAR_API_KEY
-    )
-    if not success:
-        st.error(f"❌ Leonar API error (contact_id={prospect_id}): {err}")
+def fmt_datetime(iso: str) -> str:
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).strftime("%d/%m/%Y à %H:%M")
+    except Exception:
+        return iso or "—"
+
+
+def fmt_size(n: int) -> str:
+    if not n:
+        return ""
+    if n < 1024:
+        return f"{n} o"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.0f} Ko"
+    return f"{n / (1024 * 1024):.1f} Mo"
+
+
+def ms_ts(ms: int) -> str:
+    s = int((ms or 0) / 1000)
+    return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
+
+
+def strip_prefix(name: str) -> str:
+    return re.sub(r"^(Audio|Transcription|Fiche de poste) — ", "", name)
+
+
+def guess_mime(name: str, fallback: str = "application/octet-stream") -> str:
+    return mimetypes.guess_type(name)[0] or fallback
+
+
+def audio_display_name(audio: dict) -> str:
+    return audio["props"].get("label") or strip_prefix(audio["name"])
+
+
+def badges(m: dict) -> str:
+    statut = m.get("statut", "En cours")
+    color = STATUT_COLORS.get(statut, "gray")
+    parts = [f":{color}-badge[{md(statut)}]"]
+    if m.get("responsable"):
+        parts.append(f":gray-badge[:material/person: {md(m['responsable'])}]")
+    parts.append(f":gray-badge[:material/calendar_today: {fmt_date(m.get('date', ''))}]")
+    return " ".join(parts)
+
+
+def files_summary(files: list[dict]) -> str:
+    n_fiche = sum(1 for f in files if f["kind"] == "fiche")
+    n_audio = sum(1 for f in files if f["kind"] == "audio")
+    n_tr = sum(1 for f in files if f["kind"] == "transcript")
+    bits = [
+        "Fiche de poste ✓" if n_fiche else "Pas de fiche",
+        f"{n_audio} audio{'s' if n_audio > 1 else ''}",
+        f"{n_tr} transcription{'s' if n_tr > 1 else ''}",
+    ]
+    return " · ".join(bits)
+
+
+def sort_key(m: dict):
+    return (m.get("date", ""), m.get("created_at", ""))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Transcriptions
+# ─────────────────────────────────────────────────────────────────────────────
+
+_LINE_RE = re.compile(r"^\[(\d{2}:\d{2}:\d{2})\] (Locuteur [^:]+) : (.*)$")
+
+
+def build_transcript(mandat: dict, audio: dict, result: dict) -> str:
+    duration = ms_ts((result.get("duration_seconds") or 0) * 1000)
+    header = [
+        "TRANSCRIPTION INTÉGRALE",
+        f"Mandat : {mandat.get('nom', '')}",
+        f"Entreprise : {mandat.get('entreprise', '')}",
+        f"Date du mandat : {fmt_date(mandat.get('date', ''))}",
+        f"Audio : {audio_display_name(audio)}",
+        f"Durée : {duration} · {result.get('speakers_count', 0)} locuteur(s)",
+        "─" * 60,
+        "",
+    ]
+    lines = []
+    for u in result.get("utterances") or []:
+        text = (u.get("text") or "").strip()
+        if text:
+            lines.append(f"[{ms_ts(u.get('start_ms'))}] Locuteur {u.get('speaker', '?')} : {text}")
+    if not lines:
+        lines = [result.get("formatted_text", "")]
+    return "\n".join(header + lines) + "\n"
+
+
+def transcript_to_docx(text: str, title: str) -> bytes:
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+
+    doc = Document()
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(10.5)
+    doc.add_heading(title, level=1)
+    for line in text.splitlines():
+        m = _LINE_RE.match(line)
+        p = doc.add_paragraph()
+        if m:
+            ts = p.add_run(f"[{m.group(1)}] ")
+            ts.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            ts.font.size = Pt(9)
+            p.add_run(f"{m.group(2)} : ").bold = True
+            p.add_run(m.group(3))
+        else:
+            p.add_run(line)
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def render_transcript(text: str):
+    html = []
+    for line in text.splitlines():
+        m = _LINE_RE.match(line)
+        if m:
+            esc = lambda s: s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            html.append(
+                f'<p><span class="ts">{m.group(1)}</span>&nbsp; '
+                f'<span class="spk">{esc(m.group(2))}</span> — {esc(m.group(3))}</p>'
+            )
+    if not html:
+        st.text(text)
+        return
+    st.markdown(f'<div class="mandat-transcript">{"".join(html)}</div>', unsafe_allow_html=True)
+
+
+def transcribe_and_store(mandat: dict, audio: dict, audio_bytes: bytes) -> bool:
+    """Transcrit un audio déjà stocké et enregistre la transcription à côté."""
+    if not ensure_env("ASSEMBLYAI_API_KEY"):
+        st.error("ASSEMBLYAI_API_KEY manquante : l'audio est enregistré, mais pas transcrit.")
         return False
-    save_sequence_as_note_v2(prospect_id, sequence_data)
+    from coach_prospection.transcription import transcribe_audio_file
+
+    name = audio_display_name(audio)
+    with st.status(f"Transcription de « {name} »…", expanded=True) as status:
+        st.caption("Gardez cette page ouverte : comptez 2 à 5 minutes pour 1 h d'audio.")
+        try:
+            result = transcribe_audio_file(
+                audio_bytes,
+                filename=strip_prefix(audio["name"]),
+                language="fr",
+                progress_callback=status.write,
+            )
+            text = build_transcript(mandat, audio, result)
+            stem = os.path.splitext(strip_prefix(audio["name"]))[0]
+            store().upload(
+                mandat["id"],
+                f"Transcription — {stem}.txt",
+                text.encode("utf-8"),
+                "text/plain",
+                {"ent_kind": "transcript", "audio_id": audio["id"], "label": audio["props"].get("label")},
+            )
+        except Exception as e:
+            status.update(label=f"Transcription échouée — {name}", state="error")
+            st.error(f"La transcription a échoué : {e}. L'audio est bien enregistré, vous pouvez relancer.")
+            return False
+        status.update(label=f"Transcription enregistrée — {name}", state="complete", expanded=False)
     return True
 
 
-def load_processed():
-    """Charge la liste des prospects déjà traités"""
-    if os.path.exists(PROCESSED_FILE):
-        with open(PROCESSED_FILE, 'r') as f:
-            return set(f.read().splitlines())
-    return set()
-
-
-def save_processed(pid):
-    """Sauvegarde un prospect comme traité"""
-    with open(PROCESSED_FILE, 'a') as f:
-        f.write(f"{pid}\n")
-
-
-# ========================================
-# APIFY - SCRAPING LINKEDIN
-# ========================================
-
-def init_apify_client():
-    """Initialise le client Apify"""
-    from apify_client import ApifyClient
-    if not APIFY_API_TOKEN:
-        raise ValueError("APIFY_API_TOKEN manquant")
-    return ApifyClient(APIFY_API_TOKEN)
-
-
-def scrape_linkedin_profile(apify_client, linkedin_url):
-    """Scrape un profil LinkedIn"""
-    try:
-        run = apify_client.actor("dev_fusion/Linkedin-Profile-Scraper").call(
-            run_input={"profileUrls": [linkedin_url]}
+def add_audio(mandat: dict, uploaded, label: str = "") -> bool:
+    data = uploaded.getvalue()
+    with st.spinner(f"Envoi de « {uploaded.name} » sur le Drive…"):
+        audio = store().upload(
+            mandat["id"],
+            f"Audio — {uploaded.name}",
+            data,
+            uploaded.type or guess_mime(uploaded.name, "audio/mpeg"),
+            {"ent_kind": "audio", "label": label.strip() or None},
         )
-        items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
-        return items[0] if items else {}
-    except Exception as e:
-        print(f"Erreur scraping profil LinkedIn: {e}")
-        return {}
+    return transcribe_and_store(mandat, audio, data)
 
 
-def scrape_linkedin_posts(apify_client, linkedin_url):
-    """Scrape les posts LinkedIn"""
-    try:
-        run = apify_client.actor("supreme_coder/linkedin-post").call(
-            run_input={
-                "deepScrape": True,
-                "limitPerSource": 10,
-                "rawData": False,
-                "urls": [linkedin_url]
-            }
-        )
-        items = list(apify_client.dataset(run["defaultDatasetId"]).iterate_items())
-        # Filtre strict 6 mois
-        return filter_recent_posts(items, max_age_months=6)
-    except Exception as e:
-        st.warning(f"⚠️ Scraping posts LinkedIn échoué: {e}")
-        return []
-
-
-def filter_recent_posts(posts, max_age_months=6):
-    """
-    Filtre les posts < 6 mois
-    Si date non parsable → on INCLUT le post (moins strict)
-    """
-    if not posts:
-        return []
-    
-    cutoff = datetime.now() - timedelta(days=max_age_months * 30)
-    recent = []
-    
-    for post in posts:
-        if not isinstance(post, dict):
-            continue
-        
-        # Timestamp Unix ms (postedAtTimestamp: 1736239773406)
-        ts_ms = post.get('postedAtTimestamp')
-        if ts_ms:
-            try:
-                post_date = datetime.fromtimestamp(int(ts_ms) / 1000)
-                if post_date >= cutoff:
-                    recent.append(post)
-                continue
-            except Exception:
-                pass
-
-        # Date ISO ou autres champs texte
-        date_str = (
-            post.get('postedAtISO') or
-            post.get('date') or
-            post.get('postedDate') or
-            post.get('postedAt') or
-            post.get('publishedAt') or
-            post.get('time') or
-            post.get('posted') or
-            post.get('datePosted') or
-            post.get('timeSincePosted') or  # "1yr", "3mo", "2w"
-            ''
-        )
-
-        # Si pas de date trouvée, on INCLUT quand même le post
-        if not date_str:
-            recent.append(post)
-            continue
-
-        # Parser la date
-        post_date = parse_date(date_str)
-
-        # Si parsing échoue, on inclut quand même
-        if post_date is None:
-            recent.append(post)
-            continue
-        
-        # Si date récente, on inclut
-        if post_date >= cutoff:
-            recent.append(post)
-    
-    return recent[:5]
-
-
-def parse_date(date_str):
-    """Parse une date avec plusieurs formats"""
-    if not date_str:
-        return None
-    
-    date_str = str(date_str).strip()
-    
-    # Formats standards
-    formats = [
-        '%Y-%m-%d',
-        '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%dT%H:%M:%S.%fZ',
-        '%Y-%m-%dT%H:%M:%SZ',
-        '%d/%m/%Y',
-        '%d-%m-%Y',
-        '%Y/%m/%d',
-        '%B %d, %Y',
-        '%b %d, %Y',
-    ]
-    
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_str[:19], fmt)
-        except ValueError:
-            continue
-    
-    # Dates relatives ("2d ago", "3w ago", "il y a 2 jours")
-    return parse_relative_date(date_str)
-
-
-def parse_relative_date(date_str):
-    """Parse les dates relatives - formats LinkedIn et autres"""
-    if not date_str:
-        return None
-    
-    date_str = date_str.lower().strip()
-    now = datetime.now()
-    
-    # Patterns anglais et français
-    patterns = [
-        # Anglais complet
-        (r'(\d+)\s*d(?:ay)?s?\s*ago', 'days'),
-        (r'(\d+)\s*w(?:eek)?s?\s*ago', 'weeks'),
-        (r'(\d+)\s*mo(?:nth)?s?\s*ago', 'months'),
-        (r'(\d+)\s*h(?:our)?s?\s*ago', 'hours'),
-        (r'(\d+)\s*yr?s?\s*ago', 'years'),
-        # Anglais court (LinkedIn style: "1d", "2w", "3mo")
-        (r'^(\d+)d$', 'days'),
-        (r'^(\d+)w$', 'weeks'),
-        (r'^(\d+)mo$', 'months'),
-        (r'^(\d+)h$', 'hours'),
-        (r'^(\d+)yr?$', 'years'),
-        # Avec espace
-        (r'(\d+)\s*d\b', 'days'),
-        (r'(\d+)\s*w\b', 'weeks'),
-        (r'(\d+)\s*mo\b', 'months'),
-        (r'(\d+)\s*h\b', 'hours'),
-        # Français
-        (r'il y a (\d+)\s*jour', 'days'),
-        (r'il y a (\d+)\s*semaine', 'weeks'),
-        (r'il y a (\d+)\s*mois', 'months'),
-        (r'il y a (\d+)\s*heure', 'hours'),
-        (r'il y a (\d+)\s*an', 'years'),
-        # "posted X days ago"
-        (r'posted\s*(\d+)\s*d', 'days'),
-        (r'posted\s*(\d+)\s*w', 'weeks'),
-        (r'posted\s*(\d+)\s*mo', 'months'),
-        # "X days" sans "ago"
-        (r'^(\d+)\s*days?$', 'days'),
-        (r'^(\d+)\s*weeks?$', 'weeks'),
-        (r'^(\d+)\s*months?$', 'months'),
-    ]
-    
-    for pattern, unit in patterns:
-        match = re.search(pattern, date_str)
-        if match:
-            value = int(match.group(1))
-            if unit == 'hours':
-                return now - timedelta(hours=value)
-            elif unit == 'days':
-                return now - timedelta(days=value)
-            elif unit == 'weeks':
-                return now - timedelta(weeks=value)
-            elif unit == 'months':
-                return now - timedelta(days=value * 30)
-            elif unit == 'years':
-                return now - timedelta(days=value * 365)
-    
-    return None
-
-
-# ========================================
-# SCRAPING WEB (SERPER)
-# ========================================
-
-def search_web_prospect(full_name, company_name):
-    """
-    Recherche web sur le prospect via Serper
-    Retourne les résultats récents (<6 mois)
-    """
-    if not SERPER_API_KEY:
-        return []
-    
-    try:
-        # Recherche actualités récentes
-        query = f'"{full_name}" "{company_name}" OR "{full_name}" finance'
-        
-        response = requests.post(
-            'https://google.serper.dev/search',
-            headers={
-                'X-API-KEY': SERPER_API_KEY,
-                'Content-Type': 'application/json'
-            },
-            json={
-                'q': query,
-                'num': 10,
-                'tbs': 'qdr:m6'  # Derniers 6 mois
-            },
-            timeout=10
-        )
-        
-        if response.status_code != 200:
-            return []
-        
-        data = response.json()
-        results = []
-        
-        # Organic results
-        for item in data.get('organic', [])[:5]:
-            results.append({
-                'title': item.get('title', ''),
-                'snippet': item.get('snippet', ''),
-                'link': item.get('link', ''),
-                'type': 'web'
-            })
-        
-        # News results (souvent plus récents)
-        for item in data.get('news', [])[:3]:
-            results.append({
-                'title': item.get('title', ''),
-                'snippet': item.get('snippet', ''),
-                'link': item.get('link', ''),
-                'date': item.get('date', ''),
-                'type': 'news'
-            })
-        
-        return results
-        
-    except Exception as e:
-        print(f"Erreur Serper: {e}")
-        return []
-
-
-# ========================================
-# SCRAPING FICHE DE POSTE - MULTI-SITES
-# ========================================
-
-def scrape_job_posting(url):
-    """
-    Scrape une fiche de poste depuis différents job boards
-    Supporte : HelloWork, LinkedIn, Apec, Indeed, générique
-    """
-    if not url or not url.strip():
-        return None
-
-    url = sanitize_url(url)
-    if not url:
-        print("scrape_job_posting: URL rejetée (doit être HTTPS)")
-        return None
-
-    try:
-        if "hellowork.com" in url:
-            return scrape_hellowork_apify(url)
-        elif "linkedin.com/jobs" in url:
-            return scrape_linkedin_job(url)
-        elif "apec.fr" in url:
-            return scrape_apec(url)
-        elif "indeed.com" in url or "indeed.fr" in url:
-            return scrape_indeed_apify(url)
+def save_fiche(mandat_id: str, files: list[dict], uploaded=None, text: str = ""):
+    fiches = [f for f in files if f["kind"] == "fiche"]
+    if uploaded is not None:
+        name = f"Fiche de poste — {uploaded.name}"
+        mime = uploaded.type or guess_mime(uploaded.name)
+        existing = next((f for f in fiches if f["props"].get("format") == "file"), None)
+        if existing:
+            store().replace_content(existing["id"], name, uploaded.getvalue(), mime)
         else:
-            return scrape_generic(url)
-    except Exception as e:
-        print(f"Erreur scraping: {e}")
-        return scrape_generic(url)
-
-
-# ========================================
-# NOUVEAU : SCRAPING APIFY POUR HELLOWORK/INDEED
-# ========================================
-
-def scrape_hellowork_apify(url):
-    """
-    HelloWork : pas de scraper Apify fiable pour URL directe
-    Retourne None pour déclencher le fallback copier-coller
-    """
-    print("HelloWork: scraping auto non supporté, utiliser copier-coller")
-    return None
-
-
-def scrape_indeed_apify(url):
-    """
-    Indeed : pas de scraper Apify fiable pour URL directe
-    Retourne None pour déclencher le fallback copier-coller
-    """
-    print("Indeed: scraping auto non supporté, utiliser copier-coller")
-    return None
-
-
-def extract_title_from_text(text):
-    """Extrait le titre depuis le contenu textuel"""
-    if not text:
-        return "[Poste]"
-    
-    lines = text.strip().split('\n')
-    for line in lines:
-        line = line.strip()
-        # Chercher une ligne qui ressemble à un titre de poste
-        if line and 10 < len(line) < 150:
-            # Éviter les lignes trop génériques
-            if not any(skip in line.lower() for skip in ['cookie', 'accept', 'menu', 'navigation', 'connexion', 'login']):
-                # Nettoyer H/F
-                title = re.sub(r'\s*\(?[HhFf]\s*[/\-]\s*[HhFfMm]\)?', '', line)
-                return title.strip()
-    
-    return "[Poste]"
-
-
-# Fallback : scraping basique (sans JS)
-def scrape_hellowork_basic(url):
-    """Scrape HelloWork - Fallback sans Apify"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        }
-        
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return None
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Titre - plusieurs sélecteurs possibles
-        title = ""
-        for selector in ['h1.tw-text-3xl', 'h1[data-cy="job-title"]', 'h1']:
-            elem = soup.select_one(selector)
-            if elem:
-                title = elem.get_text(strip=True)
-                break
-        
-        # Description - chercher dans plusieurs conteneurs
-        description = ""
-        for selector in ['div[data-cy="job-description"]', 'div.job-description', 'div.description', 'article', 'main']:
-            elem = soup.select_one(selector)
-            if elem:
-                description = elem.get_text(separator='\n', strip=True)
-                if len(description) > 200:
-                    break
-        
-        # Fallback : tous les paragraphes
-        if len(description) < 200:
-            paragraphs = soup.find_all(['p', 'li'])
-            description = '\n'.join([p.get_text(strip=True) for p in paragraphs])
-        
-        if len(description) < 100:
-            return None  # Pas assez de contenu
-        
-        return {
-            'title': title[:200],
-            'description': description[:4000],
-            'source': 'HelloWork',
-            'url': url
-        }
-    except Exception as e:
-        print(f"Erreur scraping HelloWork: {e}")
-        return None
-
-
-def scrape_indeed_basic(url):
-    """Scrape Indeed - Fallback sans Apify"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-        }
-        
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return None
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Titre
-        title = ""
-        for selector in ['h1.jobsearch-JobInfoHeader-title', 'h1[data-testid="jobTitle"]', 'h1']:
-            elem = soup.select_one(selector)
-            if elem:
-                title = elem.get_text(strip=True)
-                break
-        
-        # Description
-        description = ""
-        for selector in ['div#jobDescriptionText', 'div.jobsearch-jobDescriptionText', 'div[data-testid="jobDescription"]']:
-            elem = soup.select_one(selector)
-            if elem:
-                description = elem.get_text(separator='\n', strip=True)
-                break
-        
-        if len(description) < 100:
-            return None  # Pas assez de contenu
-        
-        return {
-            'title': title[:200],
-            'description': description[:4000],
-            'source': 'Indeed',
-            'url': url
-        }
-    except Exception as e:
-        print(f"Erreur scraping Indeed: {e}")
-        return None
-
-
-def scrape_linkedin_job(url):
-    """Scrape LinkedIn Jobs"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-        }
-        
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return scrape_generic(url)
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Titre
-        title = ""
-        for selector in ['h1.top-card-layout__title', 'h1.topcard__title', 'h1']:
-            elem = soup.select_one(selector)
-            if elem:
-                title = elem.get_text(strip=True)
-                break
-        
-        # Description
-        description = ""
-        for selector in ['div.show-more-less-html__markup', 'div.description__text', 'div.job-description']:
-            elem = soup.select_one(selector)
-            if elem:
-                description = elem.get_text(separator='\n', strip=True)
-                break
-        
-        return {
-            'title': title[:200],
-            'description': description[:4000],
-            'source': 'LinkedIn',
-            'url': url
-        }
-    except Exception as e:
-        print(f"Erreur scraping LinkedIn job: {e}")
-        return scrape_generic(url)
-
-
-def scrape_apec(url):
-    """Scrape Apec"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-            'Accept-Language': 'fr-FR,fr;q=0.9',
-        }
-        
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return scrape_generic(url)
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Titre
-        title = ""
-        for selector in ['h1[data-cy="offerTitle"]', 'h1.offer-title', 'h1']:
-            elem = soup.select_one(selector)
-            if elem:
-                title = elem.get_text(strip=True)
-                break
-        
-        # Description - Apec structure spécifique
-        description = ""
-        
-        # Chercher les sections de contenu
-        content_sections = soup.select('div.offer-description, div.job-description, section.description, div[class*="description"]')
-        for section in content_sections:
-            text = section.get_text(separator='\n', strip=True)
-            if len(text) > len(description):
-                description = text
-        
-        # Fallback
-        if len(description) < 200:
-            main_content = soup.select_one('main') or soup.select_one('article')
-            if main_content:
-                description = main_content.get_text(separator='\n', strip=True)
-        
-        return {
-            'title': title[:200],
-            'description': description[:4000],
-            'source': 'Apec',
-            'url': url
-        }
-    except Exception as e:
-        print(f"Erreur scraping Apec: {e}")
-        return scrape_generic(url)
-
-
-def scrape_generic(url):
-    """Scraping générique pour sites non supportés"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        }
-        
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return None
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Supprimer scripts et styles
-        for tag in soup(['script', 'style', 'nav', 'footer', 'header']):
-            tag.decompose()
-        
-        # Titre
-        title = ""
-        h1 = soup.find('h1')
-        if h1:
-            title = h1.get_text(strip=True)
-        
-        # Description - prendre le contenu principal
-        description = ""
-        
-        # Chercher le contenu principal
-        main = soup.find('main') or soup.find('article') or soup.find('div', class_=re.compile('content|description|job', re.I))
-        if main:
-            description = main.get_text(separator='\n', strip=True)
+            store().upload(mandat_id, name, uploaded.getvalue(), mime, {"ent_kind": "fiche", "format": "file"})
+    if text.strip():
+        name = "Fiche de poste (texte).txt"
+        existing = next((f for f in fiches if f["props"].get("format") == "text"), None)
+        if existing:
+            store().replace_content(existing["id"], name, text.strip().encode("utf-8"), "text/plain")
         else:
-            # Fallback : tous les paragraphes
-            paragraphs = soup.find_all(['p', 'li'])
-            description = '\n'.join([p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20])
-        
-        return {
-            'title': title[:200],
-            'description': description[:4000],
-            'source': 'Generic',
-            'url': url
-        }
-    except Exception as e:
-        print(f"Erreur scraping générique: {e}")
-        return None
-
-
-# ========================================
-# GÉNÉRATION V28 - UN SEUL APPEL CLAUDE
-# ========================================
-
-def generate_sequence_v28(prospect_data, posts_data, web_data, job_posting_data):
-    """
-    Génère M1 + M2 en UN SEUL appel Claude
-    Intègre posts LinkedIn + résultats web
-    """
-    
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
-    # Extraire données
-    prenom = sanitize_text(get_firstname(prospect_data), MAX_FIELD_LEN)
-    titre_poste = sanitize_text(get_job_title(job_posting_data), MAX_FIELD_LEN)
-
-    # Formater pour le prompt
-    posts_formatted = sanitize_text(format_posts(posts_data), MAX_JOB_DESC_LEN)
-    web_formatted = sanitize_text(format_web_results(web_data), MAX_JOB_DESC_LEN)
-    profile_formatted = sanitize_text(format_profile(prospect_data), MAX_JOB_DESC_LEN)
-    fiche_formatted = sanitize_text(
-        job_posting_data.get('description', '') if job_posting_data else '',
-        MAX_JOB_DESC_LEN
-    )
-    
-    prompt = f"""Tu es chasseur de têtes Finance chez Entourage Recrutement.
-Tu dois générer 2 messages de prospection pour ce prospect.
-
-═══════════════════════════════════════════════════════════════════
-DONNÉES PROSPECT
-═══════════════════════════════════════════════════════════════════
-{profile_formatted}
-
-═══════════════════════════════════════════════════════════════════
-POSTS LINKEDIN RÉCENTS (<6 mois uniquement)
-═══════════════════════════════════════════════════════════════════
-{posts_formatted}
-
-═══════════════════════════════════════════════════════════════════
-ACTUALITÉS WEB RÉCENTES (<6 mois uniquement)
-═══════════════════════════════════════════════════════════════════
-{web_formatted}
-
-═══════════════════════════════════════════════════════════════════
-FICHE DE POSTE : {titre_poste}
-═══════════════════════════════════════════════════════════════════
-{fiche_formatted[:2500]}
-
-═══════════════════════════════════════════════════════════════════
-GÉNÈRE LES 2 MESSAGES
-═══════════════════════════════════════════════════════════════════
-
-**MESSAGE 1 (Icebreaker VALUE-FIRST V29)** - Structure EXACTE :
-
-Bonjour {prenom},
-
-[HOOK — 2 OPTIONS PAR ORDRE DE PRIORITÉ]
-
-Option A — Post LinkedIn récent LIÉ au domaine du poste (PRIORITAIRE si disponible) :
-  Le lien doit être ÉVIDENT et NATUREL — pas forcé.
-  Valides : post sur consolidation IFRS → poste consolidation / post sur data science → poste data / post sur contrôle de gestion → poste RAF-DAF / post sur transformation digitale finance → poste finance.
-  Invalides (→ Option B) : post de recherche d'emploi (#OpenToWork) / recommandation d'un candidat / vie personnelle / salon non lié / sujet RH générique / annonce de recrutement en cours / post vieux de plus de 6 mois.
-  Formulation : "J'ai lu votre [post/article] sur [sujet précis], ce qui m'a amené à consulter votre descriptif de {titre_poste}."
-
-Option B — Observation marché spécifique au rôle ET secteur (DÉFAUT si pas de post pertinent) :
-  Une observation concrète et plausible sur le marché des profils {titre_poste} dans le secteur du prospect (déduis le secteur depuis la fiche).
-  Format : "Sur les profils [rôle précis] en [secteur/contexte], [observation concrète — tension candidats, évolution rémunération, rareté d'une compétence, etc.]. Votre descriptif m'y a fait repenser."
-  Exemples pour illustrer le registre (adapte au rôle réel) :
-    - "Sur les profils Contrôleur de gestion industriel multi-sites, la maîtrise ERP couplée à une vraie présence terrain reste rare — ~1 profil sur 5 parmi ceux que nous rencontrons."
-    - "Sur les profils Consolidation IFRS, la fourchette haute de rémunération a progressé sensiblement en 12 mois, notamment pour les profils à l'aise sur les outils groupe."
-    - "Sur les profils RAF mid-cap, les candidats capables de porter un projet ERP en parallèle du run restent très recherchés."
-    - "Sur les profils Comptable unique en PME industrielle, l'expérience clôtures en autonomie fait la différence — beaucoup de parcours groupe manquent de ce réflexe."
-  RÈGLES observation marché :
-  - Plausible et spécifique (pas "le marché est tendu")
-  - Connectée au rôle réel du poste (pas générique finance)
-  - 1 phrase, pas un paragraphe
-  - JAMAIS inventer de chiffre précis non vérifiable ("35%", "+22%") — rester qualitatif ou en fourchettes larges ("~1 sur 5", "sensiblement", "très recherchés")
-
-JAMAIS mentionner le nom de l'entreprise du prospect — il y travaille déjà.
-EN CAS DE DOUTE sur Option A → Option B.
-
-[TEASER DE VALEUR — remplace l'ancien pain point]
-Annonce que tu as UN profil concret en tête, connecté à UN élément précis de la fiche (pas "le poste en général").
-Format : "J'ai justement en tête un profil qui pourrait résonner avec [élément spécifique extrait de la fiche]. [1 phrase qui tease 1-2 éléments distinctifs sans tout révéler]."
-Exemples de registre :
-  - "J'ai justement en tête un profil qui a structuré le contrôle de gestion sur un périmètre multi-sites proche du vôtre. Son approche terrain combinée à une solide expérience des phases de déploiement d'outils pourrait bien coller."
-  - "J'ai justement en tête un profil ayant mené plusieurs consolidations groupe en contexte normes IFRS. Sa double sensibilité opérationnelle et technique le distingue des parcours purement Big 4."
-  - "J'ai justement en tête un profil qui combine la rigueur comptable exigée par votre périmètre et une vraie aisance sur les enjeux de digitalisation de la fonction."
-RÈGLES teaser :
-- Connecté à UN élément précis du job posting (technique, sectoriel, contextuel)
-- Ne jamais tout révéler — les détails viennent en M2
-- Pas de jargon recruteur : jamais "candidat", "pépite", "profil rare", "top profile"
-- Pas de superlatifs creux : "excellent", "exceptionnel", "parfait"
-
-[CTA BAS-FRICTION — FIXE]
-Termine TOUJOURS M1 par cette question exacte :
-"Souhaitez-vous que je vous partage sa synthèse en quelques lignes ?"
-
-Bien à vous,
-
----
-
-**MESSAGE 2 (Relance avec profils)** - Structure EXACTE :
-
-Bonjour {prenom},
-
-Je me permets de vous relancer concernant votre recherche de {titre_poste}.
-
-[PAIN POINT #2 - DIFFÉRENT DE M1]
-Autre angle sur une AUTRE difficulté, autres compétences de la fiche.
-
-J'ai identifié 2 profils qui pourraient retenir votre attention :
-
-- L'un [PROFIL 1 : CE DOIT ÊTRE LE MÊME PROFIL QUE CELUI TEASÉ EN M1, version détaillée.
-  Reprends les éléments distinctifs déjà évoqués en M1 (secteur, parcours, compétence clé)
-  et ajoute 2-3 éléments concrets supplémentaires qui complètent la description sans la
-  contredire. INTERDICTION de reprendre les termes exacts de la fiche. Interprète les
-  compétences : traduis ce que la personne fait vraiment, pas ce que la fiche demande.]
-
-- L'autre [PROFIL 2 : profil DIFFÉRENT du Profil 1, angle complémentaire.
-  Parcours alternatif, autres compétences de la fiche mises en avant. Même règle
-  d'interprétation — 2-3 éléments concrets. PAS "Big 4" par défaut.]
-
-COHÉRENCE M1 ↔ M2 (CRITIQUE) :
-Le Profil 1 de M2 doit être reconnaissable comme la version étoffée du profil teasé en M1.
-Si M1 évoquait "un profil Big 4 puis groupe avec expérience M&A", alors Profil 1 de M2
-reprend ce cadre et le détaille. Jamais de contradiction entre les deux messages.
-
-RÈGLE ABSOLUE sur les profils :
-Pour chaque compétence ou exigence de la fiche, pose-toi cette question :
-"Qu'est-ce que ça signifie concrètement pour quelqu'un qui fait ce travail au quotidien ?"
-Exprime la réponse à cette question — pas la compétence telle qu'elle est écrite dans la fiche.
-Le manager sait ce qu'il a écrit dans sa fiche. Il veut comprendre ce que le profil sait FAIRE,
-pas voir sa propre fiche lui être renvoyée.
-
-Seriez-vous d'accord pour recevoir leurs synthèses anonymisées ?
-
-Bien à vous,
-
-═══════════════════════════════════════════════════════════════════
-CONTRAINTE DE LONGUEUR (CRITIQUE)
-═══════════════════════════════════════════════════════════════════
-Le MESSAGE 1 doit faire entre 80 et 120 mots MAXIMUM. Sois concis.
-Hook = 1-2 phrases. Teaser = 2 phrases max. CTA = 1 phrase fixe.
-
-═══════════════════════════════════════════════════════════════════
-INTERDICTIONS ABSOLUES
-═══════════════════════════════════════════════════════════════════
-❌ Mentionner le nom de l'entreprise dans M1 — le prospect y travaille déjà
-❌ Reprendre mot pour mot le vocabulaire de la fiche — dans les pain points ET dans les profils
-❌ Citer des numéros de comptes comptables, des noms d'outils ou des acronymes directement issus de la fiche
-❌ "double casquette" — terme familier
-❌ Le mot "candidats" dans M1 — registre recruteur, pas adapté
-❌ Termes familiers : "glisser", "déraper", "coincer" — vocabulaire professionnel uniquement
-❌ "Je travaille sur...", "Je travaille actuellement..."
-❌ "Nous recherchons...", "Nous accompagnons...", "Nous recrutons..."
-❌ JAMAIS adopter une posture où TU recrutes — c'est le PROSPECT qui recrute
-❌ "rigueur", "agilité", "dynamisme", "dynamique", "croissance"
-❌ Question finale de type "Qu'est-ce qui manque le plus dans les profils rencontrés..."
-❌ Ancienne CTA "chiffres de rémunération / critères de choix du secteur" — remplacée par la nouvelle CTA fixe sur la synthèse du profil
-❌ Inventer des compétences/certifications NON dans la fiche
-❌ Répéter le MÊME pain point entre M1 et M2
-❌ Utiliser des informations datant de plus de 6 mois
-❌ Profils incohérents avec la fiche
-
-═══════════════════════════════════════════════════════════════════
-OBJETS D'EMAIL
-═══════════════════════════════════════════════════════════════════
-Génère 2 objets d'email courts (5-7 mots max).
-OBJET M1 : reprend l'angle du teaser de valeur (élément distinctif du profil évoqué). Doit donner envie de lire la synthèse.
-OBJET M2 : mentionne le titre du poste ET un élément distinctif des profils présentés. Doit être spécifique à cette recherche, jamais générique.
-INTERDICTIONS objets : "recrutement", "candidats", "opportunité", "offre" — jamais ces mots.
-Exemples M1 : "Expertise costing et vision industrielle", "Consolidation IFRS et maîtrise outil groupe"
-Exemples M2 : "Deux profils Data Scientist — consumer data et retail", "Deux profils RAF — multi-sites et secteur santé", "Deux profils Consolidation — groupe industriel et transaction services"
-
-═══════════════════════════════════════════════════════════════════
-FORMAT DE RÉPONSE
-═══════════════════════════════════════════════════════════════════
----SUBJECT_1---
-[objet email message 1]
----SUBJECT_2---
-[objet email message 2]
----MESSAGE_1---
-[contenu message 1]
----MESSAGE_2---
-[contenu message 2]
-"""
-
-    try:
-        # Retry avec backoff exponentiel pour rate limit
-        max_retries = 3
-        base_delay = 30  # secondes
-        
-        for attempt in range(max_retries):
-            try:
-                message = client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=2500,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                break  # Succès, sortir de la boucle
-            except anthropic.RateLimitError as e:
-                if attempt < max_retries - 1:
-                    wait_time = base_delay * (2 ** attempt)  # 30s, 60s, 120s
-                    st.warning(f"⏳ Rate limit (429). Attente {wait_time}s avant retry ({attempt + 1}/{max_retries})...")
-                    time.sleep(wait_time)
-                else:
-                    raise e
-            except anthropic.APIStatusError as e:
-                if e.status_code == 529 and attempt < max_retries - 1:
-                    wait_time = base_delay * (2 ** attempt)  # 30s, 60s, 120s
-                    st.warning(f"⏳ Claude surchargé (529). Attente {wait_time}s avant retry ({attempt + 1}/{max_retries})...")
-                    time.sleep(wait_time)
-                else:
-                    raise e
-        
-        # Stats
-        st.session_state.generation_stats['calls'] += 1
-        st.session_state.generation_stats['tokens'] += message.usage.input_tokens + message.usage.output_tokens
-        st.session_state.generation_stats['cost'] += (message.usage.input_tokens * 0.003 + message.usage.output_tokens * 0.015) / 1000
-        
-        result = message.content[0].text.strip()
-        subject_1, subject_2, m1, m2 = parse_messages(result)
-
-        return {
-            'subject_1': subject_1,
-            'subject_2': subject_2,
-            'subject_lines': f"Objet M1 : {subject_1}\nObjet M2 : {subject_2}",
-            'message_1': m1,
-            'message_2': m2,
-        }
-        
-    except Exception as e:
-        st.error(f"Erreur Claude: {e}")
-        return None
-
-
-def parse_messages(response):
-    """Parse la réponse Claude — extrait subject_1, subject_2, m1, m2"""
-    subject_1, subject_2, m1, m2 = "", "", "", ""
-
-    if '---SUBJECT_1---' in response:
-        parts = response.split('---SUBJECT_1---')
-        rest = parts[1] if len(parts) > 1 else ""
-        if '---SUBJECT_2---' in rest:
-            s1_raw, rest = rest.split('---SUBJECT_2---', 1)
-            subject_1 = s1_raw.strip()
-        if '---MESSAGE_1---' in rest:
-            s2_raw, rest = rest.split('---MESSAGE_1---', 1)
-            subject_2 = s2_raw.strip()
-        if '---MESSAGE_2---' in rest:
-            m1_raw, m2_raw = rest.split('---MESSAGE_2---', 1)
-            m1 = m1_raw.strip()
-            m2 = m2_raw.strip()
-        else:
-            m1 = rest.strip()
-    elif '---MESSAGE_1---' in response and '---MESSAGE_2---' in response:
-        parts = response.split('---MESSAGE_2---')
-        m1 = parts[0].replace('---MESSAGE_1---', '').strip()
-        m2 = parts[1].strip() if len(parts) > 1 else ""
-    else:
-        lines = response.split('\n\n')
-        mid = len(lines) // 2
-        m1 = '\n\n'.join(lines[:mid])
-        m2 = '\n\n'.join(lines[mid:])
-
-    return subject_1, subject_2, m1, m2
-
-
-def generate_message_3(prenom):
-    """Message 3 - Template fixe"""
-    return f"""Bonjour {prenom},
-
-Je comprends que vous n'ayez pas eu le temps de revenir vers moi — je sais à quel point vos fonctions sont sollicitées.
-
-Avant de clore le dossier de mon côté, une dernière question : Est-ce que le timing n'est simplement pas bon pour l'instant, ou bien travaillez-vous déjà avec d'autres cabinets/recruteurs sur ce poste ?
-
-Si c'est une question de timing, je serai ravi de reprendre contact dans quelques semaines.
-
-Si vous préférez gérer ce recrutement autrement, aucun souci — je vous souhaite de trouver la perle rare rapidement.
-
-Merci en tous cas pour votre attention,
-
-Bonne continuation,"""
-
-
-def generate_subject_lines(titre_poste):
-    """Génère les objets d'email"""
-    return f"""1. {titre_poste} - profils qualifiés ?
-2. Re: {titre_poste}
-3. Question rapide sur votre recrutement"""
-
-
-# ========================================
-# UTILITAIRES
-# ========================================
-
-def get_firstname(prospect_data):
-    """Extrait le prénom"""
-    for key in ['first_name', 'firstname', 'prénom']:
-        if prospect_data.get(key):
-            return str(prospect_data[key]).strip().capitalize()
-    
-    full_name = prospect_data.get('full_name') or prospect_data.get('user_full name', '')
-    if full_name and ' ' in str(full_name):
-        return str(full_name).split()[0].capitalize()
-    return "[Prénom]"
-
-
-def get_job_title(job_posting_data):
-    """Extrait le titre du poste — nettoie H/F, CDI/CDD, parenthèses, secteurs en queue"""
-    if not job_posting_data:
-        return "[Poste]"
-    title = job_posting_data.get('title', '')
-    # H/F, F/H, M/F, etc. (avec ou sans parenthèses)
-    title = re.sub(r'\s*\(?\s*[HhFfMm]\s*[/\-]\s*[HhFfMm]\s*\)?', '', title)
-    # Mentions de contrat
-    title = re.sub(r'\s*[-–—|·•]?\s*(CDI|CDD|Stage|Alternance|Freelance|Intérim|Contrat)\b', '', title, flags=re.IGNORECASE)
-    # Tout ce qui est entre parenthèses (secteurs, précisions)
-    title = re.sub(r'\s*\([^)]*\)', '', title)
-    # Tout après un séparateur (entreprise, ville, etc.)
-    title = re.sub(r'\s*[-–—|]\s*.*$', '', title)
-    # Espaces multiples
-    title = re.sub(r'\s+', ' ', title)
-    return title.strip() or "[Poste]"
-
-
-def format_posts(posts):
-    """Formate les posts LinkedIn pour le prompt"""
-    if not posts:
-        return "Aucun post LinkedIn récent trouvé."
-    
-    formatted = []
-    for i, post in enumerate(posts[:5], 1):
-        # Chercher le texte dans plusieurs champs possibles
-        text = (
-            post.get('text') or 
-            post.get('postText') or 
-            post.get('content') or 
-            post.get('commentary') or
-            post.get('description') or
-            post.get('body') or
-            ''
-        )[:500]
-        
-        # Chercher la date
-        ts_ms = post.get('postedAtTimestamp')
-        if ts_ms:
-            try:
-                date = datetime.fromtimestamp(int(ts_ms) / 1000).strftime('%Y-%m-%d')
-            except Exception:
-                date = 'Date inconnue'
-        else:
-            date = (
-                post.get('postedAtISO', '')[:10] or
-                post.get('date') or
-                post.get('postedDate') or
-                post.get('postedAt') or
-                post.get('time') or
-                post.get('timeSincePosted') or
-                'Date inconnue'
+            store().upload(
+                mandat_id, name, text.strip().encode("utf-8"), "text/plain",
+                {"ent_kind": "fiche", "format": "text"},
             )
-        
-        # Récupérer les interactions si disponibles
-        reactions = post.get('numLikes') or post.get('reactions') or post.get('likes') or ''
-        comments = post.get('numComments') or post.get('comments') or ''
-        
-        stats = ""
-        if reactions or comments:
-            stats = f" | 👍{reactions} 💬{comments}"
-        
-        if text:
-            formatted.append(f"POST {i} ({date}{stats}):\n{text}")
-    
-    if not formatted:
-        return "Aucun post LinkedIn avec contenu trouvé."
-    
-    return "\n\n".join(formatted)
 
 
-def format_web_results(web_data):
-    """Formate les résultats web pour le prompt"""
-    if not web_data:
-        return "Aucune actualité web récente trouvée."
-    
-    formatted = []
-    for i, item in enumerate(web_data[:5], 1):
-        title = item.get('title', '')
-        snippet = item.get('snippet', '')
-        date = item.get('date', '')
-        item_type = item.get('type', 'web')
-        formatted.append(f"[{item_type.upper()}] {title}\n{snippet}\n({date})")
-    return "\n\n".join(formatted)
+# ─────────────────────────────────────────────────────────────────────────────
+# Formulaires
+# ─────────────────────────────────────────────────────────────────────────────
 
 
-def format_profile(prospect_data):
-    """Formate le profil pour le prompt"""
-    return f"""Nom: {prospect_data.get('full_name') or prospect_data.get('user_full name', 'N/A')}
-Titre: {prospect_data.get('headline') or prospect_data.get('linkedin_headline', 'N/A')}
-Entreprise: {prospect_data.get('company') or prospect_data.get('linkedin_company', 'N/A')}"""
-
-
-def extract_prospect_data(leonar_entry):
-    """Extrait les données du prospect depuis un entry Leonar V2"""
-    # Format V2 : entry avec contact imbriqué
-    contact = leonar_entry.get('contact', leonar_entry)
-    contact_id = contact.get('id', leonar_entry.get('_id', ''))
-
-    first_name = contact.get('first_name', '')
-    last_name = contact.get('last_name', '')
-    full_name = f"{first_name} {last_name}".strip()
-    if not full_name:
-        full_name = contact.get('name', contact.get('user_full name', ''))
-    if not first_name and full_name and ' ' in full_name:
-        first_name = full_name.split()[0]
-
-    company = contact.get('company', contact.get('linkedin_company', ''))
-    linkedin_url = (
-        contact.get('linkedin_profile') or
-        contact.get('linkedin_url') or
-        contact.get('linkedin_profile_url') or ''
+def mandat_fields(prefix: str, m: dict | None = None) -> dict:
+    m = m or {}
+    c1, c2 = st.columns(2)
+    nom = c1.text_input("Nom du mandat *", value=m.get("nom", ""), placeholder="Ex : Contrôleur de gestion H/F", key=f"{prefix}_nom")
+    entreprise = c2.text_input("Entreprise *", value=m.get("entreprise", ""), placeholder="Ex : TD Williamson", key=f"{prefix}_ent")
+    c3, c4, c5 = st.columns(3)
+    try:
+        d = date.fromisoformat(m.get("date", "")) if m.get("date") else date.today()
+    except ValueError:
+        d = date.today()
+    the_date = c3.date_input("Date", value=d, format="DD/MM/YYYY", key=f"{prefix}_date")
+    resp = m.get("responsable", RESPONSABLES[0])
+    responsable = c4.selectbox(
+        "Responsable", RESPONSABLES,
+        index=RESPONSABLES.index(resp) if resp in RESPONSABLES else 0,
+        key=f"{prefix}_resp",
     )
-    headline = contact.get('headline', contact.get('linkedin_headline', ''))
-
+    stat = m.get("statut", STATUTS[0])
+    statut = c5.selectbox(
+        "Statut", STATUTS,
+        index=STATUTS.index(stat) if stat in STATUTS else 0,
+        key=f"{prefix}_statut",
+    )
+    notes = st.text_area(
+        "Notes internes", value=m.get("notes", ""), height=100,
+        placeholder="Contexte, points d'attention, interlocuteurs…", key=f"{prefix}_notes",
+    )
     return {
-        '_id': contact_id,
-        'contact_id': contact_id,
-        'full_name': full_name,
-        'user_full name': full_name,
-        'first_name': first_name,
-        'last_name': last_name,
-        'company': company,
-        'linkedin_company': company,
-        'linkedin_url': linkedin_url,
-        'headline': headline,
-        'linkedin_headline': headline,
-        'custom_text_1': contact.get('custom_text_1', leonar_entry.get('custom_text_1', ''))
+        "nom": nom.strip(),
+        "entreprise": entreprise.strip(),
+        "date": the_date.isoformat(),
+        "responsable": responsable,
+        "statut": statut,
+        "notes": notes.strip(),
     }
 
 
-# ========================================
-# INTERFACE
-# ========================================
+def render_create_form(mandats: list[dict]):
+    with st.container(border=True):
+        st.markdown("#### Nouveau mandat")
+        with st.form("mandat_create", clear_on_submit=False, border=False):
+            meta = mandat_fields("new")
 
-st.title("🎯 Icebreaker Generator V28.8")
-st.caption("Leonar + Scraping LinkedIn/Web + Génération IA | LinkedIn auto, autres copier-coller")
+            st.markdown("##### Fiche de poste")
+            fc1, fc2 = st.columns(2)
+            fiche_file = fc1.file_uploader("Fichier (PDF ou Word)", type=FICHE_TYPES, key="new_fiche_file")
+            fiche_text = fc2.text_area(
+                "…ou texte de l'annonce copié-collé", height=124, key="new_fiche_text",
+                placeholder="Collez ici le texte de la fiche de poste (HelloWork, LinkedIn, Apec…)",
+            )
 
-# Sidebar
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    
-    if ANTHROPIC_API_KEY:
-        st.success("✅ Anthropic API")
-    else:
-        st.error("❌ ANTHROPIC_API_KEY")
-    
-    if APIFY_API_TOKEN:
-        st.success("✅ Apify API")
-    else:
-        st.error("❌ APIFY_API_TOKEN")
-    
-    if SERPER_API_KEY:
-        st.success("✅ Serper API (web)")
-    else:
-        st.warning("⚠️ SERPER_API_KEY (optionnel)")
-    
-    if LEONAR_API_KEY:
-        st.success("✅ Leonar V2 connecté")
-    else:
-        st.warning("⚠️ LEONAR_API_KEY manquante")
-    
-    st.divider()
-    st.header("📊 Stats session")
-    st.metric("Appels API", st.session_state.generation_stats['calls'])
-    st.metric("Tokens", f"{st.session_state.generation_stats['tokens']:,}")
-    st.metric("Coût", f"${st.session_state.generation_stats['cost']:.4f}")
-    
-    st.divider()
-    st.header("ℹ️ Sources supportées")
-    st.markdown("""
-    | Source | Méthode |
-    |--------|---------|
-    | **LinkedIn Jobs** | Auto ✅ |
-    | **Indeed** | Copier-coller 📋 |
-    | **HelloWork** | Copier-coller 📋 |
-    | **Apec** | Copier-coller 📋 |
-    """)
+            st.markdown("##### Échanges audio")
+            audios = st.file_uploader(
+                "Enregistrements (manager, RH…) — chaque audio est transcrit intégralement",
+                type=AUDIO_TYPES, accept_multiple_files=True, key="new_audios",
+            )
+
+            force = st.checkbox(
+                "Créer même si un mandat du même nom existe déjà pour cette entreprise",
+                key="new_force",
+            )
+            with st.container(horizontal=True, gap="small"):
+                submitted = st.form_submit_button("Créer le mandat", type="primary")
+                cancelled = st.form_submit_button("Annuler")
+
+        if cancelled:
+            st.session_state["_mandats_creating"] = False
+            st.rerun()
+        if not submitted:
+            return
+
+        if not meta["nom"] or not meta["entreprise"]:
+            st.error("Le nom du mandat et l'entreprise sont obligatoires.")
+            return
+        dup = next(
+            (
+                x for x in mandats
+                if x.get("nom", "").strip().lower() == meta["nom"].lower()
+                and x.get("entreprise", "").strip().lower() == meta["entreprise"].lower()
+            ),
+            None,
+        )
+        if dup and not force:
+            st.warning(
+                f"Un mandat « {dup['nom']} » chez {dup['entreprise']} existe déjà "
+                f"(du {fmt_date(dup.get('date', ''))}). Ouvrez-le pour le compléter, ou cochez "
+                "« Créer même si… » pour créer un mandat distinct."
+            )
+            return
+
+        try:
+            with st.spinner("Création du mandat sur le Drive…"):
+                mandat_id = store().create_mandat(meta)
+                save_fiche(mandat_id, [], fiche_file, fiche_text)
+            mandat = {**meta, "id": mandat_id}
+            ok = True
+            for a in audios or []:
+                ok = add_audio(mandat, a) and ok
+        except StorageError as e:
+            st.error(str(e))
+            return
+
+        st.session_state["_mandats_creating"] = False
+        refresh_and_rerun(
+            "Mandat créé." if ok else "Mandat créé — une transcription a échoué, relancez-la depuis la fiche.",
+            mandat_id,
+        )
 
 
-# Onglets
-tab1, tab2, tab3 = st.tabs(["🚀 Génération Leonar", "🧪 Test Manuel", "🎯 Génération avec CV"])
+# ─────────────────────────────────────────────────────────────────────────────
+# Vue liste
+# ─────────────────────────────────────────────────────────────────────────────
 
 
-# ========================================
-# TAB 1 : GÉNÉRATION LEONAR
-# ========================================
-with tab1:
-    st.header("Génération automatique depuis Leonar")
-    
-    if not LEONAR_API_KEY:
-        st.error("❌ LEONAR_API_KEY manquante dans les secrets Streamlit")
-        st.stop()
+def view_list(snap: dict):
+    mandats = snap["mandats"]
+    files = snap["files"]
 
-    token = None  # Plus utilisé en V2 — auth via API key
-    
-    # Zone URLs fiches de poste - AGRANDIE
-    st.subheader("📄 URLs des fiches de poste (optionnel)")
-    st.caption("💡 Priorité : URL dans Leonar (`custom_text_1`) > URL ci-dessous. LinkedIn/HelloWork/Indeed sont scrapés automatiquement.")
-    
-    job_urls_input = st.text_area(
-        "URLs (une par ligne)",
-        height=200,
-        placeholder="https://www.hellowork.com/...\nhttps://www.indeed.fr/...\nhttps://www.linkedin.com/jobs/..."
+    with st.container(horizontal=True, vertical_alignment="bottom"):
+        with st.container():
+            st.title("🗂️ Mandats")
+            st.caption("Fiche de poste, échanges audio et transcriptions de chaque mandat — accessibles à toute l'équipe.")
+        if st.button("Nouveau mandat", type="primary", icon=":material/add:"):
+            st.session_state["_mandats_creating"] = not st.session_state.get("_mandats_creating", False)
+            st.rerun()
+
+    if st.session_state.get("_mandats_creating"):
+        render_create_form(mandats)
+
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        query = st.text_input(
+            "Rechercher", placeholder="Nom du mandat, entreprise…",
+            label_visibility="collapsed", icon=":material/search:", key="mandats_q", width=340,
+        )
+        statut = st.segmented_control(
+            "Statut", ["Tous"] + STATUTS, default="Tous",
+            label_visibility="collapsed", key="mandats_statut",
+        )
+        resp = st.selectbox(
+            "Responsable", ["Tous les responsables"] + RESPONSABLES,
+            label_visibility="collapsed", key="mandats_resp", width=210,
+        )
+        if st.button("Actualiser", icon=":material/refresh:", type="tertiary"):
+            refresh_and_rerun()
+
+    q = (query or "").strip().lower()
+    shown = [
+        m for m in mandats
+        if (not q or q in f"{m.get('nom', '')} {m.get('entreprise', '')} {m.get('responsable', '')}".lower())
+        and (statut in (None, "Tous") or m.get("statut") == statut)
+        and (resp == "Tous les responsables" or m.get("responsable") == resp)
+    ]
+    shown.sort(key=sort_key, reverse=True)
+
+    if not mandats:
+        st.markdown(
+            '<div class="mandat-empty"><b>Aucun mandat pour l\'instant</b>'
+            "Cliquez sur « Nouveau mandat » pour enregistrer le premier.</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    st.caption(
+        f"{len(shown)} mandat{'s' if len(shown) > 1 else ''}"
+        + (f" sur {len(mandats)}" if len(shown) != len(mandats) else "")
+        + " · du plus récent au plus ancien"
     )
 
-    # Parser les URLs avec validation HTTPS
-    job_urls_list = []
-    has_manual_urls = False
-    if job_urls_input:
-        raw_urls = [u.strip() for u in job_urls_input.strip().split('\n') if u.strip()]
-        job_urls_list = [sanitize_url(u) for u in raw_urls]
-        rejected = sum(1 for u in job_urls_list if not u)
-        job_urls_list = [u for u in job_urls_list if u]
-        if rejected:
-            st.warning(f"⚠️ {rejected} URL(s) ignorée(s) : seules les URLs HTTPS sont acceptées.")
-        st.info(f"✅ {len(job_urls_list)} URL(s) détectée(s)")
-        
-        # Détecter URLs nécessitant copier-coller (HelloWork, Apec, Indeed)
-        manual_urls = [u for u in job_urls_list if 'apec.fr' in u.lower() or 'hellowork.com' in u.lower() or 'indeed.' in u.lower()]
-        if manual_urls:
-            has_manual_urls = True
-            st.warning(f"⚠️ {len(manual_urls)} URL(s) HelloWork/Apec/Indeed détectée(s). Collez le texte ci-dessous.")
-    
-    # Champ fallback pour HelloWork/Apec/Indeed
-    manual_description = ""
-    if has_manual_urls:
-        raw_manual = st.text_area(
-            "📋 Description de la fiche de poste (copier-coller)",
-            height=300,
-            placeholder="Copiez-collez ici le contenu de la fiche de poste HelloWork, Apec ou Indeed...\n\nAstuce : Sur la page, sélectionnez tout le texte de la description et collez-le ici."
+    if not shown:
+        st.markdown(
+            '<div class="mandat-empty"><b>Aucun résultat</b>Modifiez la recherche ou les filtres.</div>',
+            unsafe_allow_html=True,
         )
-        manual_description = sanitize_text(raw_manual, MAX_MANUAL_DESC_LEN)
-        if raw_manual and len(raw_manual) > MAX_MANUAL_DESC_LEN:
-            st.info(f"ℹ️ Description tronquée à {MAX_MANUAL_DESC_LEN} caractères.")
-    
-    # Rafraîchir prospects
-    col1, col2, col3 = st.columns([1, 1, 2])
-    with col1:
-        if st.button("🔄 Rafraîchir", type="secondary"):
-            with st.spinner("Chargement du projet Leonar V2..."):
-                st.session_state.leonar_prospects = get_all_new_prospects()
-                st.session_state.leonar_loaded = True
+        return
 
-    with col2:
-        if st.button("🗑️ Reset traités", type="secondary"):
-            if os.path.exists(PROCESSED_FILE):
-                os.remove(PROCESSED_FILE)
-                st.success("✅ Liste des prospects traités effacée")
-            with st.spinner("Rechargement..."):
-                st.session_state.leonar_prospects = get_all_new_prospects()
-                st.session_state.leonar_loaded = True
-
-    with col3:
-        if st.session_state.leonar_prospects:
-            st.success(f"✅ {len(st.session_state.leonar_prospects)} prospect(s) à traiter (toutes campagnes)")
-        elif st.session_state.get('leonar_loaded'):
-            st.warning("⚠️ 0 prospect trouvé dans Leonar")
-        else:
-            st.info("ℹ️ Cliquez sur **🔄 Rafraîchir** pour charger les prospects depuis Leonar")
-    
-    # Liste des prospects
-    if st.session_state.leonar_prospects:
-        if 'skip_selection' not in st.session_state:
-            st.session_state.skip_selection = set()
-
-        with st.expander(f"👥 Voir les {len(st.session_state.leonar_prospects)} prospects", expanded=True):
-            for i, p in enumerate(st.session_state.leonar_prospects):
-                p_info = extract_prospect_data(p)
-                name = p_info.get('full_name', 'Inconnu')
-                company = p_info.get('company', 'N/A')
-                has_linkedin = "✅" if p_info.get('linkedin_url') else "❌"
-                family = p.get('_family', '')
-                contact_id = p.get('contact', {}).get('id', '') or p.get('id', '')
-
-                # URL fiche : priorité Leonar (custom_text_1) > manuelle
-                leonar_url = p_info.get('custom_text_1', '').strip()
-                manual_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
-
-                if leonar_url:
-                    has_url = "📄 URL Leonar ✅"
-                elif manual_url:
-                    has_url = "📄 URL manuelle"
-                else:
-                    has_url = "⚠️ Pas d'URL"
-
-                family_tag = f" | 🏷️ *{family}*" if family else ""
-                col_check, col_text = st.columns([0.05, 0.95])
-                with col_check:
-                    checked = st.checkbox("", key=f"skip_{contact_id}", label_visibility="collapsed")
-                    if checked:
-                        st.session_state.skip_selection.add(contact_id)
-                    else:
-                        st.session_state.skip_selection.discard(contact_id)
-                with col_text:
-                    st.write(f"{i+1}. **{name}** | {company} | LinkedIn: {has_linkedin} | {has_url}{family_tag}")
-
-        if st.session_state.skip_selection:
-            if st.button(f"🚫 Marquer {len(st.session_state.skip_selection)} prospect(s) comme déjà traités", type="secondary"):
-                for cid in st.session_state.skip_selection:
-                    save_processed(cid)
-                st.session_state.skip_selection = set()
-                with st.spinner("Rechargement..."):
-                    st.session_state.leonar_prospects = get_all_new_prospects()
-                    st.session_state.leonar_loaded = True
+    for m in shown:
+        with st.container(border=True, horizontal=True, vertical_alignment="center", gap="medium"):
+            with st.container(gap="small"):
+                st.markdown(f"**{md(m.get('nom', ''))}** &nbsp;·&nbsp; :material/apartment: {md(m.get('entreprise', ''))}")
+                st.markdown(badges(m))
+                st.caption(files_summary(files.get(m["id"], [])))
+            if st.button("Ouvrir", key=f"open_{m['id']}", icon=":material/arrow_forward:", icon_position="right"):
+                st.query_params["mandat"] = m["id"]
                 st.rerun()
-        
-        # Debug : voir les champs disponibles
-        with st.expander("🔍 Debug: voir les champs Leonar", expanded=False):
-            if st.session_state.leonar_prospects:
-                p = st.session_state.leonar_prospects[0]
-                st.write("**IDs du 1er prospect (pour diagnostic filtrage) :**")
-                st.write(f"- `entry._id` = `{p.get('_id', 'N/A')}`")
-                st.write(f"- `contact.id` = `{p.get('contact', {}).get('id', 'N/A')}`")
-                processed_ids = load_processed()
-                st.write(f"- Dans processed_prospects.txt : {len(processed_ids)} IDs")
-                if processed_ids:
-                    sample = list(processed_ids)[:3]
-                    st.write(f"- Exemples : {sample}")
-                st.write("---")
-                contact = p.get('contact', {})
-                st.write("**Champs LinkedIn dans contact :**")
-                for lk in ['linkedin_profile', 'linkedin_url', 'linkedin_profile_url', 'linkedin_identifier', 'linkedin']:
-                    st.write(f"- `contact.{lk}` = `{contact.get(lk, 'ABSENT')}`")
-                st.write("---")
-                st.write("**Tous les champs contact (brut) :**")
-                for key in sorted(contact.keys()):
-                    st.write(f"- `{key}` = `{str(contact.get(key, ''))[:120]}`")
 
-        # ── Enrichissement Full Enrich ──────────────────────────────────
-        st.divider()
-        col_enrich1, col_enrich2 = st.columns([2, 3])
-        with col_enrich1:
-            enrich_clicked = st.button(
-                "📞 Enrichir les numéros de téléphone",
-                type="secondary",
-                use_container_width=True,
-                help="Recherche les numéros manquants via Full Enrich API (~60s). Les prospects qui ont déjà un numéro sont skippés."
-            )
-        with col_enrich2:
-            prospects_sans_phone = [p for p in st.session_state.leonar_prospects if not p.get('phone')]
-            prospects_avec_phone = len(st.session_state.leonar_prospects) - len(prospects_sans_phone)
-            st.caption(
-                f"📊 {len(prospects_sans_phone)} sans numéro (à enrichir) · "
-                f"{prospects_avec_phone} déjà enrichis (skippés) · "
-                f"~10 crédits/numéro trouvé"
-            )
 
-        if enrich_clicked:
-            enrich_phones_fullenrich(st.session_state.leonar_prospects, LEONAR_API_KEY)
-        st.divider()
+# ─────────────────────────────────────────────────────────────────────────────
+# Vue détail
+# ─────────────────────────────────────────────────────────────────────────────
 
-        # Bouton génération
-        if st.button("🚀 LANCER LA GÉNÉRATION", type="primary", use_container_width=True):
-            
-            # Vérifier qu'on a des URLs (Leonar ou manuelles)
-            has_any_url = False
-            for i, p in enumerate(st.session_state.leonar_prospects):
-                leonar_url = p.get('custom_text_1', '').strip()
-                manual_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
-                if leonar_url or manual_url:
-                    has_any_url = True
-                    break
-            
-            if not has_any_url:
-                st.error("⚠️ Aucune URL de fiche de poste. Ajoutez-les dans Leonar (custom_text_1) ou collez-les ci-dessus.")
-                st.stop()
-            
-            # Init Apify
-            try:
-                apify_client = init_apify_client()
-            except Exception as e:
-                st.error(f"Erreur Apify: {e}")
-                st.stop()
-            
-            # Progress
-            progress = st.progress(0)
-            status = st.empty()
-            
-            # Traiter chaque prospect
-            for i, prospect in enumerate(st.session_state.leonar_prospects):
-                progress.progress((i + 1) / len(st.session_state.leonar_prospects))
 
-                name = 'Inconnu'
+def view_detail(m: dict, files: list[dict]):
+    if st.button("Tous les mandats", type="tertiary", icon=":material/arrow_back:"):
+        del st.query_params["mandat"]
+        st.session_state.pop("_mandats_editing", None)
+        st.rerun()
+
+    st.title(m.get("nom", ""))
+    st.markdown(f"#### :material/apartment: {md(m.get('entreprise', ''))}")
+    st.markdown(badges(m))
+
+    with st.container(horizontal=True, gap="small"):
+        if st.button("Modifier", icon=":material/edit:"):
+            st.session_state["_mandats_editing"] = not st.session_state.get("_mandats_editing", False)
+            st.rerun()
+        link = store().folder_link(m["id"])
+        if link:
+            st.link_button("Ouvrir dans Drive", link, icon=":material/folder_open:")
+        with st.popover("Supprimer", icon=":material/delete:"):
+            st.markdown("Supprimer ce mandat et **tous ses fichiers** ?")
+            st.caption("Ils iront dans la corbeille du Drive partagé (récupérables 30 jours).")
+            if st.button("Oui, supprimer", type="primary", key="del_mandat"):
                 try:
-                    # Extraire données prospect EN PREMIER (V2 : données imbriquées dans 'contact')
-                    p_data = extract_prospect_data(prospect)
-                    name = p_data.get('full_name', 'Inconnu')
-                    company = p_data.get('company', '')
-                    status.write(f"⚙️ Traitement de **{name}**...")
-
-                    # URL fiche de poste : priorité Leonar (custom_text_1) > manuelle
-                    leonar_url = p_data.get('custom_text_1', '').strip()
-                    manual_url = job_urls_list[i] if (job_urls_list and i < len(job_urls_list)) else None
-                    
-                    if leonar_url:
-                        job_url = leonar_url
-                        st.caption(f"   📄 URL depuis Leonar")
-                    elif manual_url:
-                        job_url = manual_url
-                        st.caption(f"   📄 URL manuelle")
-                    else:
-                        st.warning(f"   ⚠️ Pas d'URL pour ce prospect - ignoré")
-                        continue
-                    
-                    # 1. Scraper la fiche de poste (ou utiliser description manuelle pour HelloWork/Apec/Indeed)
-                    job_data = None
-                    is_manual_url = 'apec.fr' in job_url.lower() or 'hellowork.com' in job_url.lower() or 'indeed.' in job_url.lower()
-                    
-                    if is_manual_url and manual_description:
-                        # Utiliser la description manuelle
-                        # Extraire le titre depuis la première ligne non vide de la description
-                        first_line = next((l.strip() for l in manual_description.split('\n') if l.strip()), 'Poste')
-                        extracted_title = first_line[:80] if len(first_line) <= 80 else 'Poste'
-                        job_data = {
-                            'title': extracted_title,
-                            'description': manual_description,
-                            'source': 'Manuel (copier-coller)',
-                            'url': job_url
-                        }
-                        st.caption(f"   ✅ Description manuelle")
-                    elif is_manual_url and not manual_description:
-                        st.warning(f"   ⚠️ URL HelloWork/Apec/Indeed détectée mais pas de description manuelle")
-                    else:
-                        with st.spinner(f"📄 Scraping fiche de poste..."):
-                            job_data = scrape_job_posting(job_url)
-                            if job_data:
-                                st.caption(f"   ✅ Fiche ({job_data.get('source', 'N/A')}): {job_data.get('title', 'N/A')[:40]}...")
-                            else:
-                                st.warning(f"   ⚠️ Scraping échoué pour {job_url[:50]}...")
-                    
-                    if not job_data or len(job_data.get('description', '')) < 100:
-                        st.warning(f"   ⚠️ Pas de description valide - ignoré")
-                        continue
-                    
-                    # 2. Scraper LinkedIn posts
-                    # Si linkedin_url absent du entry, récupérer le contact complet
-                    if not p_data.get('linkedin_url'):
-                        full_contact = get_contact_full(p_data['_id'])
-                        linkedin_field = (
-                            full_contact.get('linkedin_profile') or
-                            full_contact.get('linkedin_url') or
-                            full_contact.get('linkedin_identifier') or ''
-                        )
-                        if linkedin_field:
-                            p_data['linkedin_url'] = linkedin_field
-                            st.caption(f"   🔗 LinkedIn récupéré")
-
-                    posts = []
-                    if p_data.get('linkedin_url'):
-                        with st.spinner(f"🔍 Scraping LinkedIn posts..."):
-                            posts = scrape_linkedin_posts(apify_client, p_data['linkedin_url'])
-                        st.caption(f"   ✅ {len(posts)} posts LinkedIn (<6 mois)")
-                        if posts:
-                            with st.expander("🔍 DEBUG posts (structure)", expanded=False):
-                                st.write("**Clés post[0] :**", list(posts[0].keys()))
-                                st.write("**Contenu post[0] :**", posts[0])
-                    else:
-                        st.caption(f"   ⚠️ Pas d'URL LinkedIn — hook désactivé")
-                    
-                    # 3. Recherche web
-                    web_results = []
-                    if SERPER_API_KEY and name != 'Inconnu':
-                        with st.spinner(f"🌐 Recherche web..."):
-                            web_results = search_web_prospect(name, company)
-                            st.caption(f"   ✅ {len(web_results)} résultats web")
-                    
-                    # 4. Générer séquence
-                    with st.spinner(f"✨ Génération messages..."):
-                        sequence = generate_sequence_v28(p_data, posts, web_results, job_data)
-                    
-                    if sequence:
-                        # Update Leonar (V2 : utiliser p_data['_id'] = contact UUID)
-                        if update_prospect_leonar(token, p_data['_id'], sequence):
-                            save_processed(p_data['_id'])
-                            st.toast(f"✅ {name}")
-                            with st.expander(f"📋 Messages générés — {name}", expanded=False):
-                                st.caption(f"📧 **Objet M1 :** {sequence.get('subject_1', '')}")
-                                st.caption(f"📧 **Objet M2 :** {sequence.get('subject_2', '')}")
-                                st.markdown("**Message 1 :**")
-                                st.info(sequence.get('message_1', ''))
-                                st.markdown("**Message 2 :**")
-                                st.info(sequence.get('message_2', ''))
-                        else:
-                            st.warning(f"⚠️ Erreur export Leonar pour {name}")
-                    else:
-                        st.error(f"❌ Erreur génération pour {name}")
-                
-                except Exception as e:
-                    st.error(f"❌ Erreur pour {name}: {e}")
-                
-                # Pause anti-rate-limit entre chaque prospect (sauf le dernier)
-                if i < len(st.session_state.leonar_prospects) - 1:
-                    status.write(f"⏳ Pause anti-rate-limit (3s)...")
-                    time.sleep(3)
-            
-            progress.progress(1.0)
-            status.empty()
-            st.success("✅ Génération terminée !")
-            st.balloons()
-            
-            # Reset liste
-            st.session_state.leonar_prospects = []
-
-
-# ========================================
-# TAB 2 : TEST MANUEL
-# ========================================
-with tab2:
-    st.header("Test manuel")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        t_prenom = st.text_input("Prénom", "Alexandre")
-        t_nom = st.text_input("Nom", "Dupont")
-        t_company = st.text_input("Entreprise", "CAMCA")
-        t_linkedin = st.text_input("URL LinkedIn (optionnel)")
-    
-    with col2:
-        t_job_url = st.text_input("URL fiche de poste")
-        t_headline = st.text_input("Titre LinkedIn", "Responsable Comptabilité")
-    
-    if st.button("🚀 Générer", type="primary"):
-        
-        # Préparer données
-        prospect = {
-            'first_name': t_prenom,
-            'full_name': f"{t_prenom} {t_nom}",
-            'company': t_company,
-            'headline': t_headline,
-            'linkedin_url': t_linkedin
-        }
-        
-        # Scraper fiche
-        job_data = None
-        if t_job_url:
-            with st.spinner("📄 Scraping fiche de poste..."):
-                job_data = scrape_job_posting(t_job_url)
-                if job_data:
-                    st.success(f"✅ Fiche ({job_data.get('source', 'N/A')}): {job_data.get('title', '')[:50]}")
+                    store().trash(m["id"])
+                except StorageError as e:
+                    st.error(str(e))
                 else:
-                    st.error("❌ Scraping échoué")
-        
-        if not job_data:
-            st.error("❌ Pas de fiche de poste valide")
-            st.stop()
-        
-        # Scraper LinkedIn
-        posts = []
-        if t_linkedin:
-            try:
-                apify_client = init_apify_client()
-                with st.spinner("🔍 Scraping LinkedIn..."):
-                    posts = scrape_linkedin_posts(apify_client, t_linkedin)
-                    st.success(f"✅ {len(posts)} posts LinkedIn (<6 mois)")
-            except Exception as e:
-                st.warning(f"Scraping LinkedIn échoué: {e}")
-        
-        # Recherche web
-        web_results = []
-        if SERPER_API_KEY:
-            with st.spinner("🌐 Recherche web..."):
-                web_results = search_web_prospect(f"{t_prenom} {t_nom}", t_company)
-                st.success(f"✅ {len(web_results)} résultats web")
-        
-        # Générer
-        with st.spinner("✨ Génération..."):
-            sequence = generate_sequence_v28(prospect, posts, web_results, job_data)
-        
-        if sequence:
-            st.divider()
-            
-            st.subheader("📧 Objet email 1")
-            st.code(sequence.get('subject_1', ''))
+                    del st.query_params["mandat"]
+                    refresh_and_rerun("Mandat supprimé.")
 
-            st.subheader("📧 Objet email 2")
-            st.code(sequence.get('subject_2', ''))
+    if st.session_state.get("_mandats_editing"):
+        with st.container(border=True):
+            with st.form("mandat_edit", border=False):
+                meta = mandat_fields("edit", m)
+                with st.container(horizontal=True, gap="small"):
+                    saved = st.form_submit_button("Enregistrer", type="primary")
+                    cancel = st.form_submit_button("Annuler")
+            if cancel:
+                st.session_state["_mandats_editing"] = False
+                st.rerun()
+            if saved:
+                if not meta["nom"] or not meta["entreprise"]:
+                    st.error("Le nom du mandat et l'entreprise sont obligatoires.")
+                else:
+                    try:
+                        store().save_meta({**m, **meta})
+                    except StorageError as e:
+                        st.error(str(e))
+                    else:
+                        st.session_state["_mandats_editing"] = False
+                        refresh_and_rerun("Mandat mis à jour.")
 
-            st.subheader("✉️ Message 1")
-            st.info(sequence['message_1'])
+    if m.get("notes"):
+        with st.container(border=True):
+            st.markdown("**:material/sticky_note_2: Notes**")
+            st.markdown(md(m["notes"]).replace("\n", "  \n"))
+    st.caption(
+        f"Créé le {fmt_datetime(m.get('created_at', ''))}"
+        + (f" · modifié le {fmt_datetime(m['updated_at'])}" if m.get("updated_at") else "")
+    )
 
-            st.subheader("✉️ Message 2")
-            st.info(sequence['message_2'])
+    st.divider()
+    render_fiche_section(m, files)
+    render_audio_section(m, files)
 
-# ========================================
-# TAB 3 : GÉNÉRATION AVEC CV
-# ========================================
-with tab3:
-    st.header("🎯 Génération avec CV anonymisé")
-    st.caption("Séquence 2 messages : Message 1 (CV joint) + Message 2 (relance douce)")
-    
-    if not LEONAR_API_KEY:
-        st.error("❌ LEONAR_API_KEY manquante dans les secrets Streamlit")
-        st.stop()
 
-    token = None  # Plus utilisé en V2
-    
-    # ========================================
-    # CONFIGURATION
-    # ========================================
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📋 Fiche de poste")
-        job_url_cv = st.text_input("URL fiche de poste", key="job_url_cv")
-        
-        # Fallback copier-coller
-        manual_desc_cv = st.text_area(
-            "📋 Ou collez la description (HelloWork/Indeed/Apec)",
-            height=200,
-            key="manual_desc_cv",
-            placeholder="Copiez-collez le contenu de la fiche..."
-        )
-    
-    with col2:
-        st.subheader("👤 Prospect")
-        
-        # Rafraîchir prospects
-        if st.button("🔄 Charger prospects", type="secondary", key="refresh_cv"):
-            with st.spinner("Chargement du projet Leonar V2..."):
-                st.session_state.leonar_prospects_cv = get_all_new_prospects()
-        
-        # Sélection prospect
-        if 'leonar_prospects_cv' not in st.session_state:
-            st.session_state.leonar_prospects_cv = []
-        
-        if st.session_state.leonar_prospects_cv:
-            prospect_cv = st.selectbox(
-                "Sélectionner un prospect",
-                options=st.session_state.leonar_prospects_cv,
-                format_func=lambda x: f"{x.get('user_full name', 'Inconnu')} - {x.get('linkedin_company', 'N/A')} [{x.get('_family', '?')}]",
-                key="prospect_select_cv"
+def render_fiche_section(m: dict, files: list[dict]):
+    st.subheader("Fiche de poste")
+    fiches = [f for f in files if f["kind"] == "fiche"]
+    if not fiches:
+        st.caption("Aucune fiche de poste pour l'instant.")
+    for f in sorted(fiches, key=lambda f: f["props"].get("format", "")):
+        is_text = f["props"].get("format") == "text"
+        with st.container(border=True):
+            with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+                st.markdown(
+                    f":material/{'notes' if is_text else 'description'}: **{md(strip_prefix(f['name']))}**"
+                    f" &nbsp; :gray[{fmt_size(f['size'])}]",
+                    width="stretch",
+                )
+                st.download_button(
+                    "Télécharger", data=lambda fid=f["id"]: store().download(fid),
+                    file_name=strip_prefix(f["name"]) if not is_text else "Fiche de poste.txt",
+                    mime=f["mime"], on_click="ignore", icon=":material/download:", key=f"dl_{f['id']}",
+                )
+                with st.popover("", icon=":material/delete:", help="Supprimer cette fiche"):
+                    st.markdown("Supprimer cette fiche de poste ?")
+                    if st.button("Oui, supprimer", type="primary", key=f"del_{f['id']}"):
+                        delete_file(f["id"], "Fiche de poste supprimée.")
+            if is_text:
+                with st.expander("Lire la fiche"):
+                    try:
+                        st.text(fetch_bytes(f["id"]).decode("utf-8", errors="replace"))
+                    except StorageError as e:
+                        st.error(str(e))
+
+    with st.expander("Ajouter ou remplacer la fiche de poste", icon=":material/upload_file:", expanded=not fiches):
+        with st.form(f"fiche_{m['id']}", border=False, clear_on_submit=True):
+            up = st.file_uploader("Fichier (PDF ou Word)", type=FICHE_TYPES)
+            txt = st.text_area("…ou texte de l'annonce copié-collé", height=140)
+            st.caption("Un nouveau fichier remplace l'ancien fichier ; un nouveau texte remplace l'ancien texte.")
+            if st.form_submit_button("Enregistrer la fiche", type="primary"):
+                if up is None and not txt.strip():
+                    st.error("Ajoutez un fichier ou collez un texte.")
+                else:
+                    try:
+                        with st.spinner("Envoi sur le Drive…"):
+                            save_fiche(m["id"], files, up, txt)
+                    except StorageError as e:
+                        st.error(str(e))
+                    else:
+                        refresh_and_rerun("Fiche de poste enregistrée.")
+
+
+def render_audio_section(m: dict, files: list[dict]):
+    st.subheader("Échanges audio")
+    audios = sorted([f for f in files if f["kind"] == "audio"], key=lambda f: f["created"])
+    transcripts = {f["props"].get("audio_id"): f for f in files if f["kind"] == "transcript"}
+    orphans = [t for aid, t in transcripts.items() if aid not in {a["id"] for a in audios}]
+
+    if not audios and not orphans:
+        st.caption("Aucun échange audio pour l'instant.")
+
+    for a in audios:
+        tr = transcripts.get(a["id"])
+        with st.container(border=True):
+            status_badge = (
+                ":green-badge[:material/check: Transcrit]" if tr
+                else ":orange-badge[:material/schedule: Pas encore transcrit]"
             )
-        else:
-            st.warning("Aucun prospect chargé. Cliquez sur 'Charger prospects'")
-            prospect_cv = None
-    
-    # ========================================
-    # GÉNÉRATION
-    # ========================================
-    
-    if st.button("🚀 GÉNÉRER CV + SÉQUENCE", type="primary", use_container_width=True):
-        
-        if not job_url_cv and not manual_desc_cv:
-            st.error("⚠️ Fournissez une URL ou collez la description")
-            st.stop()
-        
-        if not prospect_cv:
-            st.error("⚠️ Sélectionnez un prospect")
-            st.stop()
-        
-        # Extraire données prospect
-        p_data = extract_prospect_data(prospect_cv)
-        first_name = get_firstname(p_data)
-        
-        # ========================================
-        # ÉTAPE 1 : SCRAPER FICHE DE POSTE
-        # ========================================
-        
-        with st.spinner("📄 Scraping fiche de poste..."):
-            job_data = None
-            
-            if manual_desc_cv:
-                # Utiliser description manuelle
-                job_data = {
-                    'title': 'Poste',
-                    'description': manual_desc_cv,
-                    'source': 'Manuel',
-                    'url': job_url_cv or ''
-                }
-                st.success("✅ Description manuelle")
-            elif job_url_cv:
-                # Scraper l'URL
-                job_data = scrape_job_posting(job_url_cv)
-                if job_data:
-                    st.success(f"✅ Fiche scrapée : {job_data.get('title', 'N/A')[:50]}")
+            st.markdown(f":material/graphic_eq: **{md(audio_display_name(a))}** &nbsp; {status_badge}")
+            st.caption(
+                f"{strip_prefix(a['name'])} · {fmt_size(a['size'])} · ajouté le {fmt_datetime(a['created'])}"
+            )
+
+            play_key = f"play_{a['id']}"
+            with st.container(horizontal=True, gap="small"):
+                if st.button("Écouter", icon=":material/play_arrow:", key=f"btn_{play_key}"):
+                    st.session_state[play_key] = not st.session_state.get(play_key, False)
+                st.download_button(
+                    "Audio", data=lambda fid=a["id"]: store().download(fid),
+                    file_name=strip_prefix(a["name"]), mime=a["mime"], on_click="ignore",
+                    icon=":material/download:", key=f"dl_{a['id']}", help="Télécharger l'audio",
+                )
+                if tr:
+                    st.download_button(
+                        "Transcription .txt", data=lambda fid=tr["id"]: store().download(fid),
+                        file_name=strip_prefix(tr["name"]), mime="text/plain", on_click="ignore",
+                        icon=":material/download:", key=f"dl_{tr['id']}",
+                    )
+                    st.download_button(
+                        "Transcription Word",
+                        data=lambda fid=tr["id"], t=audio_display_name(a): transcript_to_docx(
+                            store().download(fid).decode("utf-8", errors="replace"),
+                            f"Transcription — {t}",
+                        ),
+                        file_name=os.path.splitext(strip_prefix(tr["name"]))[0] + ".docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        on_click="ignore", icon=":material/download:", key=f"docx_{tr['id']}",
+                    )
                 else:
-                    st.error("❌ Scraping échoué")
-                    st.stop()
-        
-        if not job_data or len(job_data.get('description', '')) < 100:
-            st.error("❌ Description trop courte ou invalide")
-            st.stop()
-        
-        # ========================================
-        # ÉTAPE 2 : GÉNÉRER LE CV
-        # ========================================
-        
-        with st.spinner("✨ Génération du CV (15-20 sec)..."):
-            try:
-                cv_content = generate_cv_content(job_data, p_data)
-                st.success(f"✅ CV généré : {cv_content['metadata']['job_title']}")
-                
-                # Vérifier longueur
-                if not estimate_cv_length(cv_content):
-                    st.warning("⚠️ CV trop long, condensation automatique...")
-                    cv_content = condense_cv_content(cv_content)
-                
-            except Exception as e:
-                st.error(f"❌ Erreur génération CV : {e}")
-                st.stop()
-        
-        # ========================================
-        # ÉTAPE 3 : CRÉER LE PDF
-        # ========================================
-        
-        with st.spinner("📄 Création du PDF..."):
-            try:
-                pdf_bytes = create_cv_pdf(cv_content, template_name='classic')
-                st.success("✅ PDF créé")
-            except Exception as e:
-                st.error(f"❌ Erreur création PDF : {e}")
-                st.stop()
-        
-        # ========================================
-        # ÉTAPE 4 : UPLOAD GOOGLE DRIVE
-        # ========================================
-        
-        with st.spinner("☁️ Upload Google Drive..."):
-            try:
-                upload_result = upload_cv(
-                    pdf_bytes,
-                    job_data['title'],
-                    prospect_name=p_data.get('full_name')
-                )
-                
-                if upload_result:
-                    cv_url = upload_result['url']
-                    st.success(f"✅ CV uploadé : [Voir le CV]({cv_url})")
+                    if st.button("Transcrire", type="primary", icon=":material/transcribe:", key=f"tr_{a['id']}"):
+                        st.session_state[f"do_tr_{a['id']}"] = True
+                with st.popover("", icon=":material/delete:", help="Supprimer cet audio"):
+                    st.markdown("Supprimer cet audio **et sa transcription** ?")
+                    if st.button("Oui, supprimer", type="primary", key=f"del_{a['id']}"):
+                        try:
+                            if tr:
+                                store().trash(tr["id"])
+                            store().trash(a["id"])
+                        except StorageError as e:
+                            st.error(str(e))
+                        else:
+                            refresh_and_rerun("Audio supprimé.")
+
+            if st.session_state.pop(f"do_tr_{a['id']}", False):
+                try:
+                    with st.spinner("Récupération de l'audio…"):
+                        data = store().download(a["id"])
+                except StorageError as e:
+                    st.error(str(e))
                 else:
-                    st.error("❌ Erreur upload Google Drive")
-                    st.stop()
-                    
-            except Exception as e:
-                st.error(f"❌ Erreur upload : {e}")
-                st.stop()
-        
-        # ========================================
-        # ÉTAPE 5 : GÉNÉRER LES MESSAGES
-        # ========================================
-        
-        with st.spinner("✉️ Génération des messages..."):
-            try:
-                sequence = generate_sequence_with_cv(
-                    prospect_data=p_data,
-                    job_posting_data=job_data,
-                    cv_url=cv_url,
-                    cv_gaps=cv_content.get('gaps_vs_fiche', [])
-                )
-                
-                subject_lines = generate_subject_lines_cv(job_data['title'])
-                
-                st.success("✅ Séquence générée")
-                
-            except Exception as e:
-                st.error(f"❌ Erreur génération messages : {e}")
-                st.stop()
-        
-        # ========================================
-        # ÉTAPE 6 : SAUVEGARDER DANS LEONAR
-        # ========================================
-        
-        with st.spinner("💾 Sauvegarde dans Leonar..."):
-            try:
-                # Format pour Leonar
-                formatted_notes = f'''═══════════════════════════════════════════════════════════════
-OBJETS SUGGÉRÉS
-═══════════════════════════════════════════════════════════════
+                    if transcribe_and_store(m, a, data):
+                        refresh_and_rerun("Transcription enregistrée.")
 
-{subject_lines}
+            if st.session_state.get(play_key):
+                try:
+                    with st.spinner("Chargement de l'audio…"):
+                        st.audio(fetch_bytes(a["id"]), format=a["mime"] or "audio/mpeg")
+                except StorageError as e:
+                    st.error(str(e))
 
-═══════════════════════════════════════════════════════════════
-MESSAGE 1 (CV JOINT - J+0)
-═══════════════════════════════════════════════════════════════
+            if tr:
+                with st.expander("Lire la transcription", icon=":material/article:"):
+                    try:
+                        text = fetch_bytes(tr["id"]).decode("utf-8", errors="replace")
+                    except StorageError as e:
+                        st.error(str(e))
+                    else:
+                        long_text = text.count("\n") > 20
+                        with st.container(height=460 if long_text else "content", border=False):
+                            render_transcript(text)
 
-{sequence['message_1']}
+    for t in orphans:
+        with st.container(border=True, horizontal=True, vertical_alignment="center"):
+            st.markdown(
+                f":material/article: **{md(strip_prefix(t['name']))}** &nbsp; :gray[audio supprimé]",
+                width="stretch",
+            )
+            st.download_button(
+                "Transcription .txt", data=lambda fid=t["id"]: store().download(fid),
+                file_name=strip_prefix(t["name"]), mime="text/plain", on_click="ignore",
+                icon=":material/download:", key=f"dl_{t['id']}",
+            )
 
-═══════════════════════════════════════════════════════════════
-MESSAGE 2 (RELANCE - J+7)
-═══════════════════════════════════════════════════════════════
+    with st.expander("Ajouter un échange audio", icon=":material/mic:", expanded=not audios):
+        with st.form(f"audio_{m['id']}", border=False, clear_on_submit=True):
+            up = st.file_uploader("Enregistrement audio", type=AUDIO_TYPES)
+            label = st.text_input("Intitulé (facultatif)", placeholder="Ex : Échange avec le manager, Échange RH…")
+            st.caption("L'audio est enregistré sur le Drive puis transcrit intégralement (locuteurs + horodatage).")
+            if st.form_submit_button("Ajouter et transcrire", type="primary", icon=":material/upload:"):
+                if up is None:
+                    st.error("Choisissez un fichier audio.")
+                else:
+                    try:
+                        ok = add_audio(m, up, label)
+                    except StorageError as e:
+                        st.error(str(e))
+                    else:
+                        refresh_and_rerun("Audio ajouté et transcrit." if ok else "Audio ajouté — transcription à relancer.")
 
-{sequence['message_2']}
 
-═══════════════════════════════════════════════════════════════
-LIEN CV
-═══════════════════════════════════════════════════════════════
-{cv_url}
-'''
-                
-                # Update Leonar
-                requests.patch(
-                    f'https://dashboard.leonar.app/api/1.1/obj/matching/{prospect_cv["_id"]}',
-                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-                    json={
-                        "notes": formatted_notes,
-                        "custom_variable_1": sequence['message_1'],
-                        "custom_variable_2": sequence['message_2'],
-                        "custom_text_2": cv_url  # Stocker l'URL du CV
-                    },
-                    timeout=10
-                )
-                
-                save_processed(prospect_cv['_id'])
-                st.success("✅ Sauvegardé dans Leonar")
-                
-            except Exception as e:
-                st.error(f"❌ Erreur Leonar : {e}")
-        
-        # ========================================
-        # AFFICHAGE DES RÉSULTATS
-        # ========================================
-        
-        st.divider()
-        st.balloons()
-        
-        # CV
-        st.subheader("📄 CV Généré")
-        st.markdown(f"**[👉 Voir le CV sur Google Drive]({cv_url})**")
-        
-        with st.expander("🔍 Détails du CV", expanded=False):
-            st.json(cv_content.get('gaps_vs_fiche', []))
-        
-        # Objets
-        st.subheader("📧 Objets d'email")
-        st.code(subject_lines)
-        
-        # Message 1
-        st.subheader("✉️ Message 1 (à envoyer maintenant)")
-        st.text_area("Message 1", value=sequence['message_1'], height=300, key="result_msg1")
-        if st.button("📋 Copier Message 1", key="copy_msg1"):
-            st.code(sequence['message_1'])
-        
-        # Message 2
-        st.subheader("✉️ Message 2 (à envoyer J+7)")
-        st.text_area("Message 2", value=sequence['message_2'], height=200, key="result_msg2")
-        if st.button("📋 Copier Message 2", key="copy_msg2"):
-            st.code(sequence['message_2'])
-        
-        st.info(f"📅 Dates d'envoi suggérées : {sequence['send_dates']['message_1']} et {sequence['send_dates']['message_2']}")
+def delete_file(file_id: str, flash: str):
+    try:
+        store().trash(file_id)
+    except StorageError as e:
+        st.error(str(e))
+    else:
+        refresh_and_rerun(flash)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Page
+# ─────────────────────────────────────────────────────────────────────────────
+
+flash = st.session_state.pop("_mandats_flash", None)
+if flash:
+    st.toast(flash, icon="✅")
+
+try:
+    with st.spinner("Chargement des mandats…"):
+        snapshot = load_snapshot()
+except StorageError as e:
+    st.title("🗂️ Mandats")
+    st.error(f"Impossible d'accéder au stockage des mandats : {e}")
+    st.stop()
+except Exception as e:
+    st.title("🗂️ Mandats")
+    st.error(f"Erreur inattendue lors du chargement des mandats : {e}")
+    st.stop()
+
+selected_id = st.query_params.get("mandat")
+selected = next((x for x in snapshot["mandats"] if x["id"] == selected_id), None) if selected_id else None
+
+if selected_id and not selected:
+    st.warning("Ce mandat est introuvable (supprimé ?). Retour à la liste.")
+    del st.query_params["mandat"]
+
+if selected:
+    view_detail(selected, snapshot["files"].get(selected["id"], []))
+else:
+    view_list(snapshot)

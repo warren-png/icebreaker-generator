@@ -1,18 +1,13 @@
 # API et services externes
 anthropic>=0.49.0
-apify-client==2.4.0
 requests==2.32.3
 
-# Google Sheets & Drive
-gspread==6.1.4
+# Google Drive
 google-auth==2.36.0
 google-api-python-client==2.154.0
 
 # Configuration
 python-dotenv==1.0.1
-
-# Web scraping
-beautifulsoup4==4.12.3
 
 # PDF generation
 reportlab==4.2.5
@@ -22,6 +17,8 @@ python-docx
 pymupdf>=1.23.0
 
 # UI / Auth persistence
+# >=1.50 : conteneurs horizontaux, téléchargements différés, badges (page Mandats)
+streamlit>=1.50
 extra-streamlit-components>=0.1.71
 
 # Coach Prospection (transcription d'appels)

@@ -563,7 +563,7 @@ _GLOBAL_CSS = """
         min-width: 0;
         max-width: none;
     }
-    [data-testid="stSidebarNavLink"] > span[label="app streamlit"]::before { content: 'bolt'; }
+    [data-testid="stSidebarNavLink"] > span[label="app streamlit"]::before { content: 'work'; }
     [data-testid="stSidebarNavLink"] > span[label="Scorecard"]::before { content: 'assignment'; }
     [data-testid="stSidebarNavLink"] > span[label="Contrat"]::before { content: 'contract'; }
     [data-testid="stSidebarNavLink"] > span[label="Temoignage Client"]::before { content: 'format_quote'; }
@@ -571,12 +571,12 @@ _GLOBAL_CSS = """
     [data-testid="stSidebarNavLink"] > span[label="Prise References"]::before { content: 'fact_check'; }
     [data-testid="stSidebarNavLink"] > span[label="Coach Prospection"]::before { content: 'record_voice_over'; }
 
-    /* La page principale s'appelle "app streamlit" (nom du fichier) */
+    /* La page d'accueil (app_streamlit.py) s'affiche "app streamlit" : on la renomme "Mandats" */
     [data-testid="stSidebarNavLink"] > span[label="app streamlit"] [data-testid="stMarkdownContainer"] p {
         font-size: 0 !important;
     }
     [data-testid="stSidebarNavLink"] > span[label="app streamlit"] [data-testid="stMarkdownContainer"] p::after {
-        content: 'Icebreaker';
+        content: 'Mandats';
         font-size: 0.9rem;
     }
 

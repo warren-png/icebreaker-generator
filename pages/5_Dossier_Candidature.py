@@ -443,6 +443,13 @@ if not HTML_MASTER_TEMPLATE:
     st.stop()
 
 # --- LOGO ---
+# Logo par défaut : logo_entourage.png du projet (l'upload ci-dessous permet de le remplacer)
+if not st.session_state.get("dossier_logo_b64"):
+    from utils.logo import load_default_logo_b64
+    _default_logo = load_default_logo_b64()
+    if _default_logo:
+        st.session_state["dossier_logo_b64"] = _default_logo
+
 with st.expander(
     "🖼 Logo Entourage" + (" ✓" if st.session_state.get("dossier_logo_b64") else " — à uploader une fois"),
     expanded=not st.session_state.get("dossier_logo_b64"),

@@ -257,7 +257,9 @@ def get_print_button_html(html_content, label="📄 Télécharger PDF"):
 # SIDEBAR
 with st.sidebar:
     st.markdown("### 🖼 Logo Entourage")
-    logo_file = st.file_uploader("Logo", type=["png", "jpg"], label_visibility="collapsed", key="logo_up_ref")
+    # Logo du projet chargé automatiquement ; l'upload sert seulement à le remplacer
+    with st.expander("Remplacer le logo", expanded=not load_logo_base64_cached()):
+        logo_file = st.file_uploader("Logo", type=["png", "jpg"], label_visibility="collapsed", key="logo_up_ref")
     if logo_file:
         try:
             from PIL import Image
