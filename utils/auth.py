@@ -61,16 +61,23 @@ LOGIN_HTML = """
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 50px 20px 30px;
+        padding: 64px 0 18px;
         font-family: 'Manrope', sans-serif;
     }
+    /* Même largeur que la colonne centrale (st.columns([1, 2, 1])) qui porte le champ */
+    .login-logo-bar, .login-card {
+        width: calc((100% - 2rem) / 2);
+        min-width: min(100%, 340px);
+    }
+    @media (max-width: 640px) {
+        .login-logo-bar, .login-card { width: 100%; }
+    }
     .login-logo-bar {
-        width: 100%;
-        max-width: 460px;
-        background: linear-gradient(135deg, #0A0A0A 0%, #1f1f1f 100%);
-        border-bottom: 3px solid #FFD700;
-        padding: 24px 32px;
-        border-radius: 12px 12px 0 0;
+        background:
+            radial-gradient(360px 160px at 100% 0%, rgba(255, 215, 0, 0.16), transparent 70%),
+            linear-gradient(135deg, #0A0A0A 0%, #1a1a1d 100%);
+        padding: 26px 32px;
+        border-radius: 18px 18px 0 0;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -78,39 +85,41 @@ LOGIN_HTML = """
     .login-brand {
         color: #fff;
         font-weight: 800;
-        font-size: 16pt;
-        letter-spacing: 1.2px;
+        font-size: 15pt;
+        letter-spacing: 0.12em;
     }
     .login-brand span {
         color: #FFD700;
     }
     .login-subtitle {
-        color: #aaa;
-        font-size: 8.5pt;
-        font-weight: 500;
-        letter-spacing: 1px;
+        color: #A1A1AA;
+        font-size: 8pt;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        border: 1px solid #2E2E33;
+        border-radius: 999px;
+        padding: 4px 10px;
     }
     .login-card {
-        width: 100%;
-        max-width: 460px;
         background: #fff;
-        border: 1px solid #ECECEC;
+        border: 1px solid #E4E4E0;
         border-top: none;
-        border-radius: 0 0 12px 12px;
-        padding: 32px;
-        box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+        border-radius: 0 0 18px 18px;
+        padding: 30px 32px 26px;
+        box-shadow: 0 2px 4px rgba(16,16,16,0.04), 0 18px 48px rgba(16,16,16,0.10);
     }
     .login-title {
-        font-family: 'Playfair Display', serif;
-        font-size: 22pt;
+        font-family: 'Manrope', sans-serif;
+        font-weight: 800;
+        font-size: 1.6rem;
         color: #0A0A0A;
         margin-bottom: 6px;
-        letter-spacing: -0.5px;
+        letter-spacing: -0.03em;
     }
     .login-caption {
-        color: #777;
-        font-size: 9.5pt;
-        margin-bottom: 22px;
+        color: #71717A;
+        font-size: 0.92rem;
+        margin-bottom: 0;
     }
 </style>
 <div class="login-wrap">
@@ -150,6 +159,9 @@ def check_password() -> bool:
             pass
 
     # Affichage du formulaire de connexion
+    # (styles globaux injectés ici aussi : la page principale vérifie l'auth avant inject_global_styles)
+    from utils.ui import inject_global_styles
+    inject_global_styles()
     st.markdown(LOGIN_HTML, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])

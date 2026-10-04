@@ -1,10 +1,52 @@
 [theme]
 base = "light"
+primaryColor = "#0A0A0A"
+backgroundColor = "#F6F6F3"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#18181B"
+linkColor = "#8A6D00"
+borderColor = "#E4E4E0"
+showWidgetBorder = true
+showSidebarBorder = false
+baseRadius = "10px"
+buttonRadius = "10px"
+baseFontSize = 15
+font = "Manrope:https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap, sans-serif"
+headingFont = "Manrope:https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap, sans-serif"
+headingFontSizes = ["2.1rem", "1.45rem", "1.15rem", "1rem", "0.95rem", "0.9rem"]
+headingFontWeights = [800, 800, 700, 700, 600, 600]
+codeBackgroundColor = "#F1F1EE"
+greenBackgroundColor = "#ECF8F0"
+greenTextColor = "#166534"
+blueBackgroundColor = "#F1F5FB"
+blueTextColor = "#1E3A5F"
+yellowBackgroundColor = "#FFF8DB"
+yellowTextColor = "#7A5B00"
+orangeBackgroundColor = "#FFF4E8"
+orangeTextColor = "#8A4B08"
+redBackgroundColor = "#FDF0F0"
+redTextColor = "#9B1C1C"
+
+[theme.sidebar]
+backgroundColor = "#0B0B0C"
+secondaryBackgroundColor = "#17171A"
+textColor = "#E4E4E7"
 primaryColor = "#FFD700"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#FAFAFA"
-textColor = "#1A1A1A"
-font = "sans serif"
+borderColor = "#2A2A2E"
+linkColor = "#FFD700"
+codeBackgroundColor = "#1F1F23"
+headingFontSizes = ["1rem", "0.78rem", "0.78rem", "0.78rem", "0.78rem", "0.78rem"]
+headingFontWeights = [800, 700, 700, 700, 700, 700]
+greenBackgroundColor = "#12241A"
+greenTextColor = "#86EFAC"
+yellowBackgroundColor = "#2A2410"
+yellowTextColor = "#FDE68A"
+orangeBackgroundColor = "#2A1C10"
+orangeTextColor = "#FDBA74"
+redBackgroundColor = "#2A1414"
+redTextColor = "#FCA5A5"
+blueBackgroundColor = "#141C2A"
+blueTextColor = "#93C5FD"
 
 [client]
 toolbarMode = "minimal"

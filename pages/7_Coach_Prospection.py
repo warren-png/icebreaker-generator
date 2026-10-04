@@ -50,21 +50,26 @@ st.markdown(
     """
     <style>
       .cp-header {
-          background: linear-gradient(180deg, #0A0A0A 0%, #181818 100%);
+          background:
+              radial-gradient(520px 220px at 100% 0%, rgba(255, 215, 0, 0.12), transparent 70%),
+              linear-gradient(180deg, #0A0A0A 0%, #181818 100%);
           color: #fff;
-          padding: 24px 32px;
-          border-radius: 6px;
-          margin-bottom: 22px;
-          border-left: 4px solid #C9A227;
+          padding: 28px 34px;
+          border-radius: 16px;
+          margin-bottom: 26px;
+          border: 1px solid #1F1F23;
+          box-shadow: 0 2px 4px rgba(16,16,16,0.06), 0 16px 40px rgba(16,16,16,0.12);
+          position: relative;
+          overflow: hidden;
       }
       .cp-header h1 {
           color: #fff !important;
-          font-family: 'Playfair Display', serif !important;
-          font-weight: 700 !important;
-          font-size: 28pt !important;
-          margin: 0 0 6px 0 !important;
+          font-family: 'Manrope', sans-serif !important;
+          font-weight: 800 !important;
+          font-size: 2.1rem !important;
+          margin: 0 0 8px 0 !important;
           padding: 0 !important;
-          letter-spacing: -0.5px !important;
+          letter-spacing: -0.035em !important;
       }
       .cp-header h1::after { display: none !important; }
       .cp-header .cp-tagline {
@@ -83,13 +88,12 @@ st.markdown(
           max-width: 760px;
       }
       .cp-section-title {
-          font-family: 'Playfair Display', serif;
-          font-size: 18pt;
+          font-family: 'Manrope', sans-serif;
+          font-weight: 800;
+          font-size: 1.3rem;
+          letter-spacing: -0.02em;
           color: #0A0A0A;
-          margin: 6px 0 4px 0;
-          padding-bottom: 6px;
-          border-bottom: 1.5px solid #C9A227;
-          display: inline-block;
+          margin: 10px 0 2px 0;
       }
       .cp-helper {
           color: #5a5a5a;
@@ -98,44 +102,19 @@ st.markdown(
           max-width: 720px;
       }
       .cp-result-frame {
-          background: #FAFAF8;
+          background: #FFFFFF;
+          border: 1px solid #E4E4E0;
           border-left: 3px solid #C9A227;
-          padding: 18px 26px;
-          border-radius: 4px;
+          padding: 20px 26px;
+          border-radius: 12px;
           margin-top: 8px;
+          box-shadow: 0 1px 2px rgba(16,16,16,0.04);
       }
       .cp-meta {
           color: #888;
           font-size: 9pt;
           margin-top: 12px;
           font-style: italic;
-      }
-      .stTabs [data-baseweb="tab-list"] {
-          gap: 6px;
-          border-bottom: 1px solid #e5e5e5;
-      }
-      .stTabs [data-baseweb="tab"] {
-          padding: 10px 18px;
-          font-weight: 600;
-          font-size: 10.5pt;
-          color: #555;
-      }
-      .stTabs [aria-selected="true"] {
-          color: #0A0A0A !important;
-          border-bottom: 3px solid #C9A227 !important;
-      }
-      div[data-testid="stDownloadButton"] button {
-          background: #0A0A0A;
-          color: #fff;
-          border: 1px solid #0A0A0A;
-          font-weight: 600;
-          font-size: 10pt;
-          letter-spacing: 0.3px;
-      }
-      div[data-testid="stDownloadButton"] button:hover {
-          background: #C9A227;
-          border-color: #C9A227;
-          color: #0A0A0A;
       }
     </style>
     """,
