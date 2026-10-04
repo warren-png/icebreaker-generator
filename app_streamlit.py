@@ -22,7 +22,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.auth import check_password
 from utils.ui import inject_global_styles
-from mandats_store import get_store, StorageError
+from mandats_store import StorageError
+from utils.mandats_data import store, load_snapshot, fetch_bytes
 
 
 st.set_page_config(page_title="Mandats | Entourage", page_icon="🗂️", layout="wide")
@@ -75,21 +76,6 @@ st.markdown(
 # ─────────────────────────────────────────────────────────────────────────────
 # Stockage
 # ─────────────────────────────────────────────────────────────────────────────
-
-
-@st.cache_resource(show_spinner=False)
-def store():
-    return get_store()
-
-
-@st.cache_data(ttl=120, show_spinner=False)
-def load_snapshot() -> dict:
-    return store().snapshot()
-
-
-@st.cache_data(max_entries=3, show_spinner=False)
-def fetch_bytes(file_id: str) -> bytes:
-    return store().download(file_id)
 
 
 def refresh_and_rerun(flash: str | None = None, mandat_id: str | None = None):
@@ -587,6 +573,7 @@ def view_detail(m: dict, files: list[dict]):
     st.divider()
     render_fiche_section(m, files)
     render_audio_section(m, files)
+    render_scorecard_section(m, files)
 
 
 def render_fiche_section(m: dict, files: list[dict]):
@@ -753,6 +740,95 @@ def render_audio_section(m: dict, files: list[dict]):
                         st.error(str(e))
                     else:
                         refresh_and_rerun("Audio ajouté et transcrit." if ok else "Audio ajouté — transcription à relancer.")
+
+
+def fiche_text_for_scorecard(f: dict) -> str:
+    """Texte de la fiche de poste (texte collé, PDF ou Word)."""
+    data = fetch_bytes(f["id"])
+    if f["props"].get("format") == "text":
+        return data.decode("utf-8", errors="replace")
+    name = f["name"].lower()
+    if name.endswith(".pdf"):
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            return "\n".join(page.extract_text() or "" for page in pdf.pages)
+    if name.endswith(".docx"):
+        from docx import Document
+        return "\n".join(p.text for p in Document(io.BytesIO(data)).paragraphs)
+    return ""
+
+
+def render_scorecard_section(m: dict, files: list[dict]):
+    st.subheader("Scorecard")
+    scorecards = sorted([f for f in files if f["kind"] == "scorecard"], key=lambda f: f["created"], reverse=True)
+    for sc in scorecards:
+        with st.container(border=True, horizontal=True, vertical_alignment="center", gap="small"):
+            st.markdown(
+                f":material/assignment: **{md(strip_prefix(sc['name']))}** &nbsp; "
+                f":gray[enregistrée le {fmt_datetime(sc['created'])}]",
+                width="stretch",
+            )
+            st.download_button(
+                "Télécharger", data=lambda fid=sc["id"]: store().download(fid),
+                file_name=sc["name"], mime="text/html", on_click="ignore",
+                icon=":material/download:", key=f"dl_{sc['id']}",
+                help="Fichier HTML : ouvrez-le dans le navigateur pour l'imprimer en PDF, "
+                     "ou chargez-le dans Dossier Candidature.",
+            )
+            with st.popover("", icon=":material/delete:", help="Supprimer cette scorecard"):
+                st.markdown("Supprimer cette scorecard ?")
+                if st.button("Oui, supprimer", type="primary", key=f"del_{sc['id']}"):
+                    delete_file(sc["id"], "Scorecard supprimée.")
+
+    transcripts = sorted([f for f in files if f["kind"] == "transcript"], key=lambda f: f["created"])
+    fiches = [f for f in files if f["kind"] == "fiche" and not f["name"].lower().endswith(".doc")]
+    sources = {f"Transcription — {f['props'].get('label') or strip_prefix(f['name'])}": f for f in transcripts}
+    sources.update({f"Fiche de poste — {strip_prefix(f['name'])}": f for f in fiches})
+
+    with st.container(border=True):
+        if not sources:
+            st.caption("Ajoutez une fiche de poste ou un échange audio transcrit pour générer la scorecard.")
+            return
+        st.markdown("**Générer la scorecard de ce mandat**")
+        st.caption(
+            "Ouvre la rubrique Scorecard avec l'entreprise, le responsable et les éléments "
+            "ci-dessous déjà chargés. La scorecard pourra ensuite être enregistrée dans ce mandat."
+        )
+        chosen = st.multiselect(
+            "Éléments à utiliser", list(sources), default=list(sources), key=f"sc_src_{m['id']}",
+        )
+        if st.button("Ouvrir dans Scorecard", type="primary", icon=":material/arrow_outward:",
+                     disabled=not chosen, key=f"sc_go_{m['id']}"):
+            parts = []
+            try:
+                with st.spinner("Préparation des éléments…"):
+                    for label in chosen:
+                        f = sources[label]
+                        text = (
+                            fetch_bytes(f["id"]).decode("utf-8", errors="replace")
+                            if f["kind"] == "transcript" else fiche_text_for_scorecard(f)
+                        )
+                        if text.strip():
+                            parts.append(f"══════ {label.upper()} ══════\n\n{text.strip()}")
+            except Exception as e:
+                st.error(f"Impossible de lire les éléments : {e}")
+                return
+            if not parts:
+                st.error("Les éléments choisis ne contiennent pas de texte exploitable.")
+                return
+            st.session_state["scorecard_mandat"] = {"id": m["id"], "nom": m.get("nom", "")}
+            st.session_state["scorecard_prefill"] = {
+                "mandat_id": m["id"],
+                "mandat_nom": m.get("nom", ""),
+                "client": m.get("entreprise", ""),
+                "commercial": m.get("responsable", ""),
+                "text": "\n\n".join(parts),
+                "sources": chosen,
+            }
+            for k in ["scorecard_html", "scorecard_raw_html", "scorecard_transcription",
+                      "scorecard_client", "scorecard_commercial", "scorecard_saved_id", "scorecard_client_input"]:
+                st.session_state.pop(k, None)
+            st.switch_page("pages/2_Scorecard.py")
 
 
 def delete_file(file_id: str, flash: str):

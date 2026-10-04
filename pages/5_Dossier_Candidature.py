@@ -486,21 +486,58 @@ with col_left:
 
 with col_right:
     st.markdown("**📊 Score Card du poste**")
-    st.caption("Upload la score card HTML générée par l'outil Entourage. Les critères seront extraits automatiquement.")
+
+    # Scorecards enregistrées dans les mandats (rubrique Mandats / Scorecard)
+    try:
+        from utils.mandats_data import list_saved_scorecards, fetch_bytes as fetch_mandat_file
+        saved_scorecards = list_saved_scorecards()
+    except Exception:
+        saved_scorecards = []
+    saved_idx = None
+    if saved_scorecards:
+        saved_idx = st.selectbox(
+            "Scorecard d'un mandat",
+            list(range(len(saved_scorecards))),
+            format_func=lambda i: saved_scorecards[i]["label"],
+            index=None,
+            placeholder="Choisir un mandat…",
+            key="dossier_scorecard_saved",
+        )
+        st.caption("…ou chargez le fichier de la score card (anciens mandats) :")
+    else:
+        st.caption("Upload la score card HTML générée par l'outil Entourage. Les critères seront extraits automatiquement.")
     scorecard_file = st.file_uploader(
         "Score Card (.html ou .pdf)",
         type=["html", "htm", "pdf"],
         key="dossier_scorecard",
     )
 
+    # Le fichier chargé est prioritaire ; sinon, la scorecard choisie dans la liste
+    sc_source = None
     if scorecard_file:
-        file_cache_key = f"sc_{scorecard_file.name}_{scorecard_file.size}"
+        sc_source = {
+            "key": f"sc_{scorecard_file.name}_{scorecard_file.size}",
+            "name": scorecard_file.name,
+            "ext": scorecard_file.name.rsplit(".", 1)[-1].lower(),
+            "read": scorecard_file.read,
+        }
+    elif saved_idx is not None:
+        _entry = saved_scorecards[saved_idx]
+        sc_source = {
+            "key": f"mandat_{_entry['file']['id']}",
+            "name": _entry["label"],
+            "ext": "html",
+            "read": lambda fid=_entry["file"]["id"]: fetch_mandat_file(fid),
+        }
+
+    if sc_source:
+        file_cache_key = sc_source["key"]
 
         if st.session_state.get("dossier_scorecard_cache_key") != file_cache_key:
             with st.spinner("Extraction des critères..."):
                 try:
-                    sc_bytes = scorecard_file.read()
-                    sc_ext = scorecard_file.name.rsplit(".", 1)[-1].lower()
+                    sc_bytes = sc_source["read"]()
+                    sc_ext = sc_source["ext"]
                     criteria = extract_criteria_from_scorecard(sc_bytes, sc_ext)
                     st.session_state["dossier_scorecard_bytes"] = sc_bytes
                     st.session_state["dossier_scorecard_ext"] = sc_ext
@@ -511,7 +548,7 @@ with col_right:
                     st.error(f"Erreur extraction critères : {e}")
         else:
             n = len(st.session_state.get("dossier_criteria", []))
-            st.success(f"{scorecard_file.name} ✓ — {n} critères extraits")
+            st.success(f"{sc_source['name']} ✓ — {n} critères extraits")
 
 st.divider()
 
@@ -519,7 +556,7 @@ st.divider()
 criteria = st.session_state.get("dossier_criteria", [])
 
 if not criteria:
-    st.info("⬆️ Upload la Score Card pour accéder au formulaire d'évaluation.")
+    st.info("⬆️ Choisis ou charge la Score Card pour accéder au formulaire d'évaluation.")
     st.stop()
 
 st.subheader("📝 Brief & Évaluation")

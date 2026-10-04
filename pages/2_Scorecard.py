@@ -451,6 +451,51 @@ def get_print_button_html(html_content: str, label: str = "📄 Télécharger PD
 
 
 # ---------------------------------------------------------------------------
+# SCORECARDS ENREGISTRÉES DANS LES MANDATS
+# ---------------------------------------------------------------------------
+
+import re as _re_img
+
+_DATA_URI_RE = _re_img.compile(r"data:image/[a-zA-Z+]+;base64,[A-Za-z0-9+/=]+")
+
+
+def stash_images(html: str) -> tuple[str, list[str]]:
+    """Remplace les images base64 (logo) par des jetons courts avant d'envoyer le HTML à Claude."""
+    images: list[str] = []
+
+    def repl(m):
+        images.append(m.group(0))
+        return f"__ENTOURAGE_IMG_{len(images) - 1}__"
+
+    return _DATA_URI_RE.sub(repl, html), images
+
+
+def restore_images(html: str, images: list[str]) -> str:
+    for i, uri in enumerate(images):
+        html = html.replace(f"__ENTOURAGE_IMG_{i}__", uri)
+    return html
+
+
+def open_saved_scorecard(entry: dict):
+    """Charge une scorecard enregistrée dans un mandat comme résultat courant (consultation / modifications)."""
+    from utils.mandats_data import fetch_bytes
+
+    html = fetch_bytes(entry["file"]["id"]).decode("utf-8", errors="replace")
+    raw, images = stash_images(html)
+    mandat = entry["mandat"]
+    st.session_state.scorecard_html = html
+    st.session_state.scorecard_raw_html = raw
+    st.session_state.scorecard_images = images
+    st.session_state.scorecard_transcription = ""
+    st.session_state.scorecard_client = mandat.get("entreprise", "")
+    resp = mandat.get("responsable", "")
+    st.session_state.scorecard_commercial = resp if resp in COMMERCIAUX else next(iter(COMMERCIAUX))
+    st.session_state.scorecard_saved_id = entry["file"]["id"]
+    st.session_state.scorecard_mandat = {"id": mandat["id"], "nom": mandat.get("nom", "")}
+    st.session_state.pop("scorecard_prefill", None)
+
+
+# ---------------------------------------------------------------------------
 # UI — SIDEBAR
 # ---------------------------------------------------------------------------
 
@@ -492,32 +537,86 @@ st.caption("Remplis les informations, uploade la retranscription → Brief de Mi
 
 st.divider()
 
+# Scorecards déjà enregistrées dans les mandats
+try:
+    from utils.mandats_data import list_saved_scorecards
+    saved_scorecards = list_saved_scorecards()
+except Exception:
+    saved_scorecards = []
+if saved_scorecards:
+    with st.expander(
+        f"📂 Rouvrir une scorecard enregistrée ({len(saved_scorecards)})",
+        expanded="scorecard_html" not in st.session_state and not st.session_state.get("scorecard_prefill"),
+    ):
+        st.caption("Consultez, imprimez ou modifiez une scorecard déjà rangée dans un mandat, sans la regénérer.")
+        with st.container(horizontal=True, vertical_alignment="bottom", gap="small"):
+            idx = st.selectbox(
+                "Scorecard", list(range(len(saved_scorecards))),
+                format_func=lambda i: saved_scorecards[i]["label"],
+                index=None, placeholder="Choisir un mandat…", key="scorecard_reopen_choice",
+            )
+            if st.button("Ouvrir", icon=":material/folder_open:", disabled=idx is None, key="scorecard_reopen_btn"):
+                try:
+                    open_saved_scorecard(saved_scorecards[idx])
+                except Exception as e:
+                    st.error(f"Impossible d'ouvrir la scorecard : {e}")
+                else:
+                    st.rerun()
+
+# Éléments importés depuis un mandat (rubrique Mandats → « Ouvrir dans Scorecard »)
+prefill = st.session_state.get("scorecard_prefill")
+if prefill:
+    with st.container(border=True):
+        with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
+            with st.container():
+                st.markdown(f"**Éléments importés depuis le mandat « {prefill['mandat_nom']} »** — {prefill['client']}")
+                st.caption(" · ".join(prefill["sources"]))
+            if st.button("Retirer", icon=":material/close:"):
+                for k in ["scorecard_prefill", "scorecard_client_input", "scorecard_commercial_input", "scorecard_mandat"]:
+                    st.session_state.pop(k, None)
+                st.rerun()
+    if "scorecard_client_input" not in st.session_state:
+        st.session_state["scorecard_client_input"] = prefill["client"]
+    if "scorecard_commercial_input" not in st.session_state and prefill["commercial"] in COMMERCIAUX:
+        st.session_state["scorecard_commercial_input"] = prefill["commercial"]
+
 # Informations client et commercial
 col1, col2 = st.columns([3, 1])
 with col1:
     client_name = st.text_input(
         "Nom du client *",
         placeholder="Ex : TD Williamson, BNP Paribas...",
-        help="Apparaît dans l'en-tête du document"
+        help="Apparaît dans l'en-tête du document",
+        key="scorecard_client_input",
     )
 with col2:
-    commercial = st.radio("Commercial", list(COMMERCIAUX.keys()), horizontal=False)
+    commercial = st.radio("Commercial", list(COMMERCIAUX.keys()), horizontal=False, key="scorecard_commercial_input")
+    if prefill and prefill["commercial"] and prefill["commercial"] not in COMMERCIAUX:
+        st.caption(f"{prefill['commercial']} n'a pas de coordonnées dans la Scorecard : choisissez le commercial du pied de page.")
 
 st.divider()
 
 # Upload retranscription
 uploaded_file = st.file_uploader(
-    "Retranscription de l'appel de qualification",
+    "Retranscription de l'appel de qualification"
+    + (" — facultatif : remplace les éléments importés du mandat" if prefill else ""),
     type=["pdf", "txt", "docx"],
     help="Formats acceptés : PDF, TXT, DOCX"
 )
 
-if uploaded_file:
-    transcription_text = extract_text(uploaded_file)
+if prefill and not uploaded_file:
+    with st.expander("Voir le texte importé du mandat"):
+        st.text(prefill["text"])
+
+if uploaded_file or prefill:
+    transcription_text = extract_text(uploaded_file) if uploaded_file else prefill["text"]
 
     if transcription_text:
         char_count = len(transcription_text)
-        st.success(f"✅ Fichier lu — {char_count:,} caractères extraits")
+        st.success(
+            f"✅ Fichier lu — {char_count:,} caractères extraits" if uploaded_file
+            else f"✅ Éléments du mandat prêts — {char_count:,} caractères"
+        )
 
         btn_disabled = not client_name.strip()
         if btn_disabled:
@@ -533,6 +632,10 @@ if uploaded_file:
                     st.session_state.scorecard_transcription = transcription_text
                     st.session_state.scorecard_client = client_name
                     st.session_state.scorecard_commercial = commercial
+                    st.session_state.pop("scorecard_saved_id", None)
+                    st.session_state.pop("scorecard_images", None)
+                    if not prefill:
+                        st.session_state.pop("scorecard_mandat", None)
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erreur lors de la génération : {e}")
@@ -553,9 +656,35 @@ if "scorecard_html" in st.session_state:
         )
     with col2:
         if st.button("🗑️ Réinitialiser", use_container_width=True):
-            for k in ["scorecard_html", "scorecard_transcription", "scorecard_client", "scorecard_commercial"]:
+            for k in ["scorecard_html", "scorecard_transcription", "scorecard_client", "scorecard_commercial",
+                      "scorecard_saved_id", "scorecard_images"] + ([] if prefill else ["scorecard_mandat"]):
                 st.session_state.pop(k, None)
             st.rerun()
+    target = st.session_state.get("scorecard_mandat")
+    if target:
+        st.caption(f"📁 Scorecard rattachée au mandat « {target['nom']} »")
+        with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
+            saved_id = st.session_state.get("scorecard_saved_id")
+            label = "Mettre à jour dans le mandat" if saved_id else "Enregistrer dans le mandat"
+            if st.button(label, icon=":material/save:", type="primary"):
+                from mandats_store import StorageError
+                from utils.mandats_data import store as mandats_store, load_snapshot
+                name = f"Scorecard — {st.session_state.scorecard_client}.html".replace("/", "-")
+                data = st.session_state.scorecard_html.encode("utf-8")
+                try:
+                    with st.spinner("Enregistrement dans le mandat…"):
+                        if saved_id:
+                            mandats_store().replace_content(saved_id, name, data, "text/html")
+                        else:
+                            f = mandats_store().upload(target["id"], name, data, "text/html", {"ent_kind": "scorecard"})
+                            st.session_state["scorecard_saved_id"] = f["id"]
+                except StorageError as e:
+                    st.error(str(e))
+                else:
+                    load_snapshot.clear()
+                    st.toast(f"Scorecard enregistrée dans le mandat « {target['nom']} »", icon="✅")
+            st.page_link("app_streamlit.py", label="Retour au mandat", icon=":material/arrow_back:",
+                         query_params={"mandat": target["id"]})
 
     st.caption("💡 Cliquez sur 📄 Télécharger PDF → une fenêtre s'ouvre → Fichier → Imprimer → Enregistrer en PDF.")
 
@@ -605,6 +734,7 @@ if "scorecard_html" in st.session_state:
                         st.session_state.scorecard_client,
                         st.session_state.scorecard_commercial
                     )
+                    final_html = restore_images(final_html, st.session_state.get("scorecard_images", []))
                     st.session_state.scorecard_html = final_html
                     st.session_state.scorecard_raw_html = raw_html
                     st.rerun()

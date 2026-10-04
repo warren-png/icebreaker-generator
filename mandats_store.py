@@ -14,7 +14,7 @@ Arborescence dans le Drive partagé (GOOGLE_DRIVE_FOLDER_ID) :
         Transcription — echange_manager.txt
 
 Chaque fichier créé par l'app porte des appProperties (ent_app=mandats,
-ent_kind=meta|fiche|audio|transcript) : une seule requête suffit pour lister
+ent_kind=meta|fiche|audio|transcript|scorecard) : une seule requête suffit pour lister
 tous les mandats et leurs fichiers.
 
 En développement, MANDATS_STORAGE=local stocke tout dans MANDATS_LOCAL_DIR
@@ -229,7 +229,7 @@ class DriveStore:
         by_mandat: dict[str, list[dict]] = {}
         for f in files:
             d = self._file_dict(f)
-            if d["kind"] in ("fiche", "audio", "transcript"):
+            if d["kind"] in ("fiche", "audio", "transcript", "scorecard"):
                 by_mandat.setdefault(d["mandat_id"], []).append(d)
         return {"mandats": mandats, "files": by_mandat}
 
