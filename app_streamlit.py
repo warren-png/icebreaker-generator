@@ -33,7 +33,7 @@ if not check_password():
     st.stop()
 
 
-RESPONSABLES = ["Warren", "Helder", "Bruno"]
+RESPONSABLES = ["Warren", "Helder"]
 STATUTS = ["En cours", "Pourvu", "Clos"]
 STATUT_COLORS = {"En cours": "orange", "Pourvu": "green", "Clos": "gray"}
 AUDIO_TYPES = ["m4a", "mp3", "wav", "mp4", "aac", "ogg", "webm", "flac", "mpeg", "mov"]
