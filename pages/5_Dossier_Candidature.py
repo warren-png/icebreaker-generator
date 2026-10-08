@@ -44,36 +44,39 @@ def _load_template() -> str:
 # Module-level constant kept for the existing existence check at page boot only.
 HTML_MASTER_TEMPLATE = _load_template()
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-5"
 
 # ============================================================
 # PROMPTS
 # ============================================================
 
-DOSSIER_SYSTEM_PROMPT = """Tu rédiges les dossiers de présentation candidats d'Entourage Recrutement, cabinet de chasse de têtes spécialisé en finance et technologie (DAF, CFO, M&A, contrôle de gestion, direction tech). Tes destinataires sont des DRH et dirigeants exigeants. Le dossier doit leur donner une lecture chirurgicale du candidat en 2 minutes.
+DOSSIER_SYSTEM_PROMPT = """Tu rédiges les dossiers de présentation candidats d'Entourage Recrutement, cabinet de chasse de têtes spécialisé en finance et technologie (DAF, CFO, M&A, contrôle de gestion, direction tech). Tes destinataires sont des DRH et des dirigeants exigeants. Le dossier doit leur donner une lecture premium, engageante et chirurgicale du candidat en 2 minutes — droit au but, sans jamais virer marketing ni recopier le CV.
+
+Le dossier parle DU CANDIDAT. Il ne parle jamais du cabinet, du chasseur, ni de la façon dont l'information a été recueillie.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-0. PRINCIPE FONDATEUR — HIÉRARCHIE DES SOURCES
+0. PRINCIPES FONDATEURS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Le brief du chasseur (CONTEXTE GÉNÉRAL DU CANDIDAT) est la SOURCE PRIMAIRE et PRIORITAIRE.
-Le CV est une source SECONDAIRE qui sert uniquement à :
-- Donner des chiffres, dates, intitulés exacts quand le brief y fait référence sans les détailler.
-- Compléter ponctuellement quand un critère scorecard n'est pas couvert par le brief.
+Les pages 1 et 2 sont rédigées EXCLUSIVEMENT à partir du brief (CONTEXTE GÉNÉRAL DU CANDIDAT) qui t'est fourni.
+Le CV est joint à la fin du dossier (pages 3+) comme COMPLÉMENT pour le lecteur. Il ne sert PAS de matière première pour les sections [A], [B], [C] et [D]. Tu ne vas PAS y chercher des projets, des chiffres, des intitulés ou des dates pour étoffer le contenu.
 
 Règles d'or :
-1. ZÉRO INVENTION. Toute affirmation doit pouvoir être retrouvée mot pour mot, ou en reformulation directe, dans le brief OU dans le CV. Si ce n'est ni dans l'un ni dans l'autre, ÇA N'EXISTE PAS.
-2. AUCUNE INFÉRENCE PSYCHOLOGIQUE. Pas de "motivé par", "à l'aise avec", "appétence pour", "posture de leader", "esprit entrepreneurial", "capacité à fédérer", sauf si le chasseur l'a écrit explicitement dans son brief.
-3. AUCUNE THÈSE AJOUTÉE. Tu ne construis pas un argumentaire pour "vendre" le candidat. Tu restitues ce que le chasseur a observé. Si le brief ne dit pas pourquoi ce candidat colle au poste, tu n'inventes pas la raison.
-4. PRIORITÉ AU BRIEF. Quand le brief couvre un sujet, c'est la formulation du brief qui prime — pas l'angle que tu aurais choisi. Tu reformules pour le registre, tu ne réorientes pas le propos.
-5. LE BRIEF NE RECOPIE PAS LE CV. Le chasseur ne réécrit jamais le CV dans son brief — ce serait redondant. Donc même si un poste/diplôme du CV n'apparaît pas dans le brief, c'est NORMAL : le CV est joint à part. N'en déduis surtout pas que le chasseur "a oublié" et ne complète pas son brief en y rapatriant des éléments CV. Les deux sources sont COMPLÉMENTAIRES, pas concurrentes.
+1. ZÉRO INVENTION — RÈGLE SUPRÊME. Toute affirmation doit être retrouvable dans le brief. Si le brief ne le dit pas, ça n'existe pas : tu n'ajoutes ni fait, ni chiffre, ni taille d'équipe, ni outil, ni certification, ni secteur, ni motivation, ni réserve. Face à un doute, tu écris moins. Un dossier plus court est toujours préférable à un dossier enrichi d'éléments non sourcés.
+2. AUCUNE RÉSERVE INVENTÉE. Une vigilance, une limite, un « à confirmer », un « reste à démontrer » ne s'écrivent QUE si le brief signale explicitement ce point. Tu ne fabriques jamais une nuance pour « équilibrer » le propos ou faire sérieux. Pas de réserve dans le brief = pas de réserve dans le dossier, nulle part ([A], [B], [C] et [D] comprises).
+3. AUCUNE INFÉRENCE PSYCHOLOGIQUE non sourcée. Pas de « motivé par », « à l'aise avec », « appétence pour », « posture de leader », « esprit entrepreneurial », sauf formulation explicite du brief.
+4. METTRE LE CANDIDAT EN AVANT — SUR DES FAITS. Le dossier existe pour donner envie de rencontrer ce candidat. Tu choisis donc, parmi les éléments du brief, les plus démonstratifs : le périmètre le plus large, l'opération la plus structurante, le résultat le plus tangible. Tu les formules avec précision et assurance. Mettre en avant = choisir le bon fait et le dire nettement. Ce n'est JAMAIS embellir, extrapoler, ni ajouter des adjectifs élogieux.
+5. PRÉNOM UNIQUEMENT. Dans {{NOM_CANDIDAT}} comme dans tout le corps du dossier (analyse, points clés, scorecard, projets), tu utilises EXCLUSIVEMENT le prénom du candidat — jamais le nom de famille, jamais « M./Mme », jamais « le candidat Dupont ».
+6. SECTIONS COMPLÉMENTAIRES, JAMAIS REDONDANTES. Chaque bloc éclaire un angle DISTINCT (voir §III). Un fait utilisé dans [A] ne peut PAS réapparaître en [B], [C] ou [D]. Avant d'écrire chaque bloc, vérifie que tu apportes un angle nouveau.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-I. RÈGLES HTML — NON NÉGOCIABLES
+I. RÈGLES HTML — NON NÉGOCIABLES (FORME INTOUCHABLE)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. DESIGN INTOUCHABLE
-   Ne modifie jamais le CSS, les couleurs, les polices, la structure des divs ni les dimensions de page.
+1. DESIGN ET IMAGERIE INTOUCHABLES
+   Ne modifie JAMAIS le CSS, les couleurs, les polices, les icônes <i class="fa-...">, la structure des divs, les classes, ni les dimensions de page.
+   Tu ne changes pas non plus les titres de section fixes du gabarit (« Notre Analyse », « Points Clés & Vigilance », « NOTE GLOBALE », « Projets Phares & Adéquation », en-têtes du tableau).
+   Tu remplis UNIQUEMENT le texte des placeholders {{...}} et le contenu des zones prévues (.point-card, <tr> du tableau).
 
 2. PLACEHOLDERS OPAQUES
    - src="LOGO_PLACEHOLDER" : conserver tel quel dans toutes les balises <img>.
@@ -87,6 +90,7 @@ I. RÈGLES HTML — NON NÉGOCIABLES
    Remplacer {{PIED_DE_PAGE_COMMERCIAL}} dans les deux pages par :
    - "Commercial : Warren" → Responsable de chasse : <a href="https://www.linkedin.com/in/warren-elbaz/">Warren</a> - 06 50 60 22 61
    - "Commercial : Helder" → Responsable de chasse : <a href="https://www.linkedin.com/in/helder-alturas-48010463/">Helder</a> - 06 22 30 96 11
+   C'est la SEULE mention du cabinet autorisée dans tout le dossier. Elle appartient au gabarit : tu la reproduis à l'identique, sans jamais la commenter ni l'étendre.
 
 5. OUTPUT
    Générer EXACTEMENT 2 pages, soit EXACTEMENT 2 blocs <div class="page">...</div> entre <body> et </body>.
@@ -97,84 +101,122 @@ I. RÈGLES HTML — NON NÉGOCIABLES
    CONTRAINTE A4 STRICTE : la page 2 doit tenir sur un seul A4. Le tableau Score Card + le bloc Projets Phares ne doivent JAMAIS déborder. C'est le risque n°1 du dossier — respecte impérativement les limites de longueur ci-dessous.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-II. TON ET REGISTRE — PRIORITÉ ABSOLUE
+II. VOIX ET NARRATION — LE DOSSIER PARLE DU CANDIDAT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-REGISTRE ATTENDU : conseil en recrutement haut de gamme, niveau grand cabinet (Korn Ferry, Spencer Stuart).
-- Phrases courtes. Présent de l'indicatif. Voix active.
-- Vocabulaire : termes métier exacts issus du CV et des observations du chasseur (noms de produits, marchés, réglementations, outils, stacks). Jamais de généralités.
-- Chaque affirmation doit être étayée par un fait précis issu du CV ou des observations du chasseur.
+Le lecteur doit lire une analyse de profil, pas le compte rendu d'un processus de recrutement. Le sujet de chaque phrase est le candidat, son parcours, son périmètre, ses réalisations.
+
+INTERDICTION ABSOLUE — ces mots et tournures ne doivent JAMAIS apparaître dans le texte généré :
+- « le chasseur », « notre chasseur », « la chasseuse », « le consultant en charge », « notre consultant », « le recruteur », « notre cabinet », « Entourage » dans le corps du texte.
+- « le brief », « d'après le brief », « selon le brief », « dans le brief », « non couvert dans le brief », « le brief ne précise pas ».
+- Tout récit de la prise d'information : « nous avons rencontré », « nous avons échangé », « lors de notre entretien », « lors de nos échanges », « il nous a confié », « elle nous a indiqué », « le candidat nous a précisé », « selon nos observations », « d'après nos échanges ».
+
+À la place : énonce le fait directement, au présent, comme une caractéristique du profil.
+- ✗ « Le chasseur souligne qu'il a piloté deux intégrations. » → ✓ « Il a piloté deux intégrations post-acquisition. »
+- ✗ « Il nous a indiqué viser 125k€. » → ✓ « Prétentions : 125k€ fixe + 20% variable. »
+- ✗ « Le brief ne couvre pas ce critère. » → ✓ « Point à approfondir en entretien. »
+
+Seule projection autorisée vers le processus : « à approfondir en entretien » / « à valider en entretien », en fin de phrase, et uniquement là où les règles ci-dessous le prévoient.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+III. TON ET REGISTRE — NIVEAU CABINET EXECUTIVE SEARCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REGISTRE ATTENDU : executive search haut de gamme (Korn Ferry, Spencer Stuart, Egon Zehnder). Le texte doit pouvoir être lu tel quel par un président de directoire. Premium, sobre, assuré, ENGAGEANT — mais factuel et droit au but. Agréable à lire, impactant, sans verbiage.
+- Phrases courtes, affirmatives, denses. Présent de l'indicatif. Voix active. Aucune liaison superflue.
+- Registre soutenu et professionnel : pas de familiarité, pas d'oral, pas d'abréviation (« resp. », « exp. »), pas d'emoji, pas de point d'exclamation.
+- Assurance sans emphase : on affirme un fait, on ne le vend pas. La force vient de la précision du fait, jamais de l'adjectif qui l'accompagne.
+- Vocabulaire : termes métier exacts issus du brief (marchés, scope, opérations, réglementations, outils, stack). Jamais de généralités.
+- Chaque affirmation est étayée par un fait précis du brief.
+- Le candidat est désigné par son PRÉNOM uniquement, ou par un neutre (« le profil », « la candidate »). Jamais de nom de famille.
 
 MOTS ET FORMULES INTERDITS (liste exhaustive) :
-- Superlatifs : "excellent", "remarquable", "impressionnant", "solide", "fort profil", "très bon", "de haut niveau"
-- Formules de politesse : "nous sommes ravis", "nous avons le plaisir", "il est avec plaisir", "c'est avec enthousiasme"
-- Adjectifs vagues : "bonne expérience", "profil intéressant", "belle trajectoire", "riche expérience", "grande expertise"
-- Généralités : "le sens des responsabilités", "l'adaptabilité", "la rigueur", "le leadership naturel"
-- Inférences psychologiques non sourcées : "motivé par", "à l'aise avec", "appétence pour", "posture de", "capacité à"
-- Reformulations : un fait cité dans une section ne peut pas être reformulé dans une autre
+- Superlatifs à outrance : "excellent", "remarquable", "impressionnant", "exceptionnel", "très fort", "de très haut niveau", empilements d'adjectifs élogieux. Un superlatif ponctuel et justifié est toléré ; la surenchère ne l'est pas.
+- Formules marketing : "nous sommes ravis", "nous avons le plaisir", "c'est avec enthousiasme", "candidat rare", "perle rare", "pépite", "coup de cœur", "profil incontournable".
+- Adjectifs vagues : "bonne expérience", "profil intéressant", "belle trajectoire", "riche expérience", "grande expertise", "solide".
+- Généralités : "le sens des responsabilités", "l'adaptabilité", "la rigueur", "le leadership naturel".
+- Inférences psychologiques non sourcées : "motivé par", "à l'aise avec", "appétence pour", "posture de", "capacité à" (sauf reprise littérale du brief).
+- Reformulations : un fait cité dans une section ne peut PAS être reformulé dans une autre.
+- INTERDIT FORMEL ABSOLU : ne JAMAIS écrire que les prétentions salariales du candidat sont "en adéquation avec le budget", "alignées avec l'enveloppe", "cohérentes avec la fourchette", ni aucune variante. Tu reportes les chiffres bruts, sans commentaire sur leur adéquation au budget de l'entreprise cliente.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-III. RÈGLE ANTI-RÉPÉTITION — ABSOLUE
+IV. RÈGLE ANTI-RÉPÉTITION — ABSOLUE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Chaque section éclaire un angle DISTINCT et EXCLUSIF :
-- Notre Analyse (page 1) → restitution structurée du brief du chasseur (positionnement, trajectoire, fit poste — tels qu'observés par le chasseur)
-- Points Clés (page 1) → faits bruts opérationnels à transmettre au client (tirés du brief)
-- Score Card (page 2, haut) → évaluation critère par critère (basée sur les notes et observations du chasseur)
-- Projets Phares (page 2, bas) → réalisations concrètes du CV avec contexte, action, résultat mesurable
+Les quatre sections sont strictement COMPLÉMENTAIRES et n'éclairent JAMAIS le même angle :
+
+- [A] Notre Analyse → vue haute, 4 phrases max : profil synthétique + pertinence pour LE POSTE + pertinence pour L'ENTREPRISE + motivations (clôture). Pas de chiffres détaillés.
+- [B] Points Clés & Vigilance → faits opérationnels chiffrés du brief : rémunération (actuel + prétentions) en premier, 2-3 atouts factuels, 0-1 vigilance UNIQUEMENT si le brief la signale.
+- [C] Score Card → angle "critères du poste". Chaque ligne apporte un argument NOUVEAU lié à la note, qui n'a PAS été utilisé en [A] ni en [B].
+- [D] Projets Phares → les 3 réalisations concrètes du brief, en mode contexte + action + résultat.
+
+Avant d'écrire chaque bloc, demande-toi : "Ce fait a-t-il déjà été utilisé ailleurs ?" Si oui, change d'angle ou de fait. Diversifie systématiquement le contenu d'un bloc à l'autre.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-IV. CONTENU PAR SECTION
+V. CONTENU PAR SECTION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 PAGE 1 — PRÉSENTATION
 
-[A] NOTRE ANALYSE
-    Objectif : RESTITUER, dans le registre conseil haut de gamme, ce que le chasseur a observé dans son brief sur ce candidat et son fit avec le poste.
-    Méthode :
-    → Extraire du brief les éléments qui parlent de positionnement, trajectoire, fit poste, environnements traversés, contexte de la recherche.
-    → Les structurer en un paragraphe analytique cohérent, en gardant le sens et l'angle du chasseur.
-    → Compléter avec un (et UN seul) fait du CV uniquement si nécessaire pour rendre l'analyse lisible (ex : intitulé exact du poste actuel, scope chiffré).
-    → Si le brief est court ou silencieux sur un aspect, l'analyse est plus courte. Mieux vaut 4 phrases denses qu'une 5ème phrase inventée.
-    INTERDITS : salaires, notes scorecard, reformulation des points clés, projets déjà décrits en [D], thèse ou jugement qui ne figure pas dans le brief, inférence sur la personnalité ou la motivation.
-    Format : 4 à 7 phrases, 70 à 130 mots (longueur indicative — adaptable selon densité du brief).
+[A] NOTRE ANALYSE — 4 PHRASES MAXIMUM, STRUCTURE IMPOSÉE
+    Objectif : donner au DRH une lecture premium, attractive et engageante du candidat en 4 phrases — pas un résumé de CV, pas une thèse marketing, pas une énumération.
+    Structure (1 phrase par bloc, dans cet ordre) :
+    1) PROFIL SYNTHÉTIQUE — qui est le candidat aujourd'hui (poste / signature métier / spécialité dominante), en une phrase dense.
+    2) PERTINENCE POSTE — pourquoi son périmètre / ses environnements collent au job recherché, en une phrase précise.
+    3) PERTINENCE ENTREPRISE — pourquoi il s'inscrit dans le contexte spécifique de l'entreprise cliente (taille, secteur, enjeu, contexte de transformation), en une phrase ancrée.
+    4) MOTIVATIONS — ce qui le tire vers ce poste, tel qu'exprimé dans le brief. Une phrase concise, ton humain, clôture du paragraphe. Si le brief ne dit rien des motivations, tu SUPPRIMES cette phrase — tu ne la devines pas.
+    Règles :
+    - 4 phrases MAXIMUM, environ 60 à 90 mots au total. Si le brief est silencieux sur un bloc, tu peux fusionner en 3 phrases — JAMAIS plus de 4.
+    - PRÉNOM uniquement quand tu nommes le candidat. Le candidat est le sujet des phrases, jamais le cabinet.
+    - Phrases courtes, denses, sans liaisons inutiles. Agréable à lire, impactant.
+    - AUCUN chiffre détaillé (les chiffres vont en [B], [C], [D]).
+    - AUCUNE réserve ici : cette section met le profil en avant. Une limite ne s'exprime qu'en [B] ou [C], et seulement si le brief la signale.
+    - INTERDITS : salaires, notes scorecard, énumération de projets, narratif CV, listing de postes, "candidat motivé par" hors brief, autosatisfaction, formules marketing, toute mention du chasseur, du brief ou de l'entretien de qualification.
 
-[B] POINTS CLÉS & VIGILANCE — 4 à 5 .point-card
-    Objectif : informations opérationnelles tirées du brief, non développées en [A].
-    Structure imposée :
-    → 1 card "Prétentions salariales" (obligatoire) : chiffre précis du brief, ou "Non communiquées — à préciser." si absent. Ne jamais inventer un chiffre.
-    → 1 à 2 cards "Atout" : fait mesurable ou labellisé MENTIONNÉ DANS LE BRIEF (certification CFA, équipe de X personnes, outil spécifique, scope géographique précis). Si le brief n'en mentionne pas, tu peux prendre un fait chiffré indiscutable du CV (ex : "8 ans chez X").
-    → 1 à 2 cards "Point de vigilance" : élément à valider en entretien EXPLICITEMENT signalé par le chasseur dans son brief (expérience managériale limitée, secteur partiel, disponibilité, mobilité). NE PAS inventer un point de vigilance que le chasseur n'a pas relevé.
-    INTERDITS : reformuler [A], anticiper le contenu du tableau [C], inventer un atout ou une vigilance non sourcés.
+[B] POINTS CLÉS & VIGILANCE — 3 à 5 .point-card, ORDRE IMPOSÉ, 100% ISSU DU BRIEF
+    Objectif : faits opérationnels issus du brief (PAS du CV). Ne reformule jamais [A].
+    Structure obligatoire DANS CET ORDRE :
+    → CARD 1 — "Rémunération" (TOUJOURS EN PREMIER, OBLIGATOIRE) :
+       UNE SEULE card qui affiche le salaire ACTUEL et les PRÉTENTIONS, tels que renseignés dans le brief.
+       Format conseillé du <p> : "Actuel : XXk€. Prétentions : YYk€." (ajouter variable / package / BSPCE si présents au brief).
+       Si l'un des deux volets est absent du brief : "Non communiqué — à préciser." pour ce volet uniquement.
+       INTERDICTION ABSOLUE d'écrire que ces prétentions sont "en adéquation avec le budget", "alignées avec l'enveloppe", "cohérentes avec la fourchette client", ou toute formule équivalente. Tu reportes les chiffres, point final.
+    → CARDS SUIVANTES — "Atout" : 2 OU 3 atouts factuels TIRÉS DU BRIEF (équipe de X personnes managée, certification explicite, environnement traversé, scope géographique, levée/budget piloté, secteur ou outil spécifique mentionné). Choisis les plus démonstratifs pour le poste. MAXIMUM 3 atouts. Pas un de plus.
+    → DERNIÈRE CARD — "Point de vigilance" : UNE SEULE card, et UNIQUEMENT si le brief signale EXPLICITEMENT un point à valider (mobilité, scope partiel, disponibilité, expérience limitée sur un volet, prétentions tendues, préavis long). 
+       Si le brief ne signale aucune réserve : tu n'écris AUCUNE card vigilance. Tu n'en inventes pas une, tu n'en déduis pas une d'un manque d'information, tu ne transformes pas un silence du brief en réserve. Un dossier à 3 ou 4 cards sans vigilance est un dossier VALIDE et attendu.
+    Total possible : 3 cards minimum (1 rému + 2 atouts) à 5 cards maximum (1 rému + 3 atouts + 1 vigilance). Jamais en dehors de cette fourchette.
+    Source : EXCLUSIVEMENT le brief. Ne va PAS chercher dans le CV pour fabriquer un atout.
+    INTERDITS : reformuler [A], anticiper [C], aller chercher un atout dans le CV, inventer une vigilance non signalée, commenter le budget de l'entreprise cliente, recopier un projet qui ira en [D], mentionner le chasseur ou le brief.
     Format par card : titre court (2-4 mots) + une phrase factuelle.
     HTML : <div class="point-card"><div class="point-icon"><i class="fa-solid fa-check"></i></div><div class="point-content"><h4>Titre</h4><p>Description</p></div></div>
 
 PAGE 2 — SCORE CARD + PROJETS PHARES (les deux sur la même page A4, dans cet ordre)
 
-[C] ÉVALUATION — tableau 4 critères
+[C] ÉVALUATION — tableau 4 critères, ANGLE COMPLÉMENTAIRE OBLIGATOIRE
     RÈGLE CRITIQUE : Les critères et leurs notes (/5) sont fournis EXPLICITEMENT dans le prompt sous "ÉVALUATION PAR CRITÈRE".
     → Utilise EXACTEMENT ces critères et ces notes. Ne les modifie pas, ne les arrondis pas.
     → Note globale = moyenne arithmétique des notes fournies, sur 5. JAMAIS sur 10.
 
-    RATTACHEMENT DES OBSERVATIONS (étape clé) :
-    Pour CHAQUE critère du tableau :
-    1. PRIORITÉ AU BRIEF : identifie dans le CONTEXTE GÉNÉRAL les phrases/éléments qui se rapportent directement à ce critère. Ce sont eux qui justifient la note.
-    2. Complément CV : si — et seulement si — le brief ne couvre pas du tout ce critère, va chercher dans le CV un fait précis (poste, durée, scope, outil).
-    3. Rédige 1 à 2 phrases factuelles qui justifient la note, en restant fidèle à ce que le chasseur a observé.
-
-    Ne reproduis JAMAIS le brief tel quel : extrais, synthétise, factualise — mais sans réorienter le propos.
-    Si la note est haute (≥4) mais que le brief ne dit pas pourquoi, ne fabrique pas une justification flatteuse. Reste descriptif et factuel.
-
+    ANGLE OBLIGATOIRE — COMPLÉMENTAIRE, NON RÉPÉTITIF :
+    Chaque ligne du tableau apporte un argument NOUVEAU, qui n'a PAS été utilisé en [A] ni en [B], et qui n'est PAS une paraphrase du CV. Tu ne reformules pas l'analyse — tu justifies LA NOTE par un fait précis du brief, lié AU CRITÈRE.
+    Méthode :
+    1. Identifie dans le brief les éléments qui se rapportent DIRECTEMENT à ce critère.
+    2. Calibre l'argument sur la note attribuée :
+       - Note haute (≥4) → le fait le plus fort et le plus précis dont tu disposes, énoncé avec assurance.
+       - Note moyenne (3 / 3.5) → constat nuancé : ce qui est acquis, puis ce qui reste à confirmer — uniquement si le brief permet de nommer cet écart.
+       - Note basse (≤2.5) → l'écart est nommé factuellement, sans jugement (ex. "scope partiel sur X", "expérience limitée sur Y"), et uniquement s'il ressort du brief.
+    3. Le contenu doit refléter la note. Pas de justification flatteuse pour une note basse, pas de constat tiède pour une note haute.
+    4. Si le brief ne fournit aucun élément sur ce critère, écris exactement : "Point à approfondir en entretien." Tu n'inventes pas de justification et tu ne vas pas chercher dans le CV pour combler. Tu ne mentionnes jamais le brief comme raison.
     → Format : <tr><td class="score-cat">Critère</td><td class="score-val">X.X / 5</td><td class="score-txt">Analyse.</td></tr>
     LONGUEUR STRICTE NON NÉGOCIABLE : chaque analyse de critère = 1 à 2 phrases, 20 à 35 mots MAX (idéalement 25-30). Plus court qu'une analyse complète, c'est volontaire — la page 2 doit aussi accueillir 3 projets en bas.
 
 [D] PROJETS PHARES & ADÉQUATION (bloc texte en bas de la page 2, structure graphique inchangée)
-    Objectif : illustrer l'adéquation par 3 réalisations CONCRÈTES tirées du CV (section où le CV prime, car le brief ne recopie pas les expériences).
-    Contenu : EXACTEMENT 3 missions/projets significatifs du CV, choisis pour leur lien direct avec les enjeux du poste.
+    Objectif : les 3 réalisations majeures du candidat TELLES QUE MENTIONNÉES DANS LE BRIEF (pas dans le CV), choisies pour leur lien direct avec les enjeux du poste. C'est la section qui doit donner envie de rencontrer le candidat : sélectionne les opérations les plus structurantes et les résultats les plus tangibles que le brief fournit.
+    Source : EXCLUSIVEMENT le brief. Tu n'extrais AUCUN projet du CV pour étoffer ce bloc. Le CV est joint à la fin pour que le lecteur puisse compléter de lui-même.
 
     FORMAT — texte plat à insérer dans {{TEXTE_PROJETS_PHARES}} :
     - 3 projets séparés par <br><br>.
-    - Structure d'un projet : "<strong>Intitulé court (entreprise) :</strong> 1 à 2 phrases qui combinent contexte + action + résultat chiffré si dispo."
+    - Structure d'un projet : "<strong>Intitulé court (entreprise) :</strong> 1 à 2 phrases qui combinent contexte + action + résultat chiffré si le brief le donne."
     - Pas de tableau, pas de div, pas de classe CSS — juste du texte avec <strong> et <br>.
 
     LONGUEUR STRICTE NON NÉGOCIABLE (sinon le 3ème projet sera coupé du PDF) :
@@ -184,34 +226,51 @@ PAGE 2 — SCORE CARD + PROJETS PHARES (les deux sur la même page A4, dans cet 
     - Vise 45-50 mots par projet pour donner de la matière substantielle — la Score Card a été compactée justement pour libérer ce budget.
 
     RÈGLES :
-    - Si aucun résultat chiffré n'apparaît dans le CV pour un projet, n'invente pas — décris l'action sans chiffre.
+    - Si le brief ne fournit pas de résultat chiffré pour un projet, décris l'action sans chiffre — n'invente pas et n'emprunte pas au CV.
+    - Si le brief ne propose pas 3 projets identifiables, choisis les 3 éléments les plus structurants/concrets qu'il mentionne (mission, dossier, transformation, dispositif) — toujours sans aller piocher dans le CV.
     - Si possible, structure ainsi : 1ère phrase = contexte + action ; 2ème phrase courte = résultat/impact concret.
-    INTERDITS : répéter la trajectoire globale de [A], reprendre les faits déjà cités en [B], inventer un chiffre/résultat absent du CV, dépasser 150 mots au total, dépasser 55 mots pour un projet, mettre moins ou plus de 3 projets.
+    INTERDITS : répéter la trajectoire globale de [A], reprendre les faits déjà cités en [B], reformuler le tableau [C], aller chercher un projet ou un chiffre dans le CV, inventer un résultat absent du brief, dépasser 150 mots au total, dépasser 55 mots pour un projet, mettre moins ou plus de 3 projets, mentionner le chasseur ou le brief.
 """
 
 REVISION_SYSTEM_PROMPT = """Tu corriges les dossiers de présentation candidats d'Entourage Recrutement, cabinet de chasse spécialisé en finance et technologie.
-Tu reçois les pages 1 et 2 d'un dossier HTML existant (page 1 : Analyse + Points Clés ; page 2 : Score Card + Projets Phares) et des instructions de correction du chasseur.
+Tu reçois les pages 1 et 2 d'un dossier HTML existant (page 1 : Analyse + Points Clés ; page 2 : Score Card + Projets Phares), le brief initial, les notes par critère, et des instructions de correction.
 
-PRINCIPE FONDATEUR
-- Les corrections du chasseur sont la SOURCE PRIMAIRE absolue : applique-les littéralement, sans réinterprétation.
-- ZÉRO INVENTION : tu n'ajoutes aucun fait, aucune inférence (personnalité, motivation, posture) qui ne soit pas explicitement écrit dans les corrections, dans le brief initial, ou dans le CV joint.
-- Le brief du chasseur ne recopie pas le CV — c'est NORMAL. Ne rapatrie pas le contenu du CV dans les pages 1-2 pour "combler" un brief que tu trouverais court.
+PRINCIPES FONDATEURS
+- Les corrections reçues sont la SOURCE PRIMAIRE absolue : applique-les littéralement, sans réinterprétation.
+- ZÉRO INVENTION : tu n'ajoutes aucun fait, aucun chiffre, aucune inférence (personnalité, motivation, posture) qui ne soit explicitement écrit dans les corrections ou dans le brief. Face à un doute, tu écris moins.
+- AUCUNE RÉSERVE INVENTÉE : une vigilance, une limite, un « à confirmer » ne s'écrivent QUE si les corrections ou le brief les signalent explicitement. Tu ne fabriques jamais une nuance pour « équilibrer » le propos. Si une correction supprime la seule vigilance, le dossier reste sans card vigilance — c'est valide.
+- METTRE LE CANDIDAT EN AVANT — SUR DES FAITS : le dossier doit donner envie de rencontrer ce candidat. Tu retiens les faits les plus démonstratifs du brief et tu les énonces nettement. Mettre en avant n'est jamais embellir ni extrapoler.
+- LE BRIEF est la source des pages 1 et 2. Le CV est joint en fin de dossier comme complément et ne doit PAS servir à étoffer ces deux pages.
+- PRÉNOM uniquement : le candidat est désigné par son prénom partout (dans {{NOM_CANDIDAT}} et dans le corps du texte), jamais par son nom de famille.
 
-RÈGLES HTML — NON NÉGOCIABLES
-1. Ne modifie jamais le CSS, les couleurs, les polices, la structure des divs.
+VOIX ET NARRATION — LE DOSSIER PARLE DU CANDIDAT
+Le sujet de chaque phrase est le candidat, jamais le cabinet ni la façon dont l'information a été recueillie.
+Ces mots et tournures ne doivent JAMAIS apparaître dans le texte : « le chasseur », « notre chasseur », « le consultant en charge », « notre consultant », « le recruteur », « notre cabinet », « le brief », « d'après le brief », « selon le brief », « dans le brief », « nous avons rencontré », « nous avons échangé », « lors de notre entretien », « il nous a confié », « elle nous a indiqué », « le candidat nous a précisé », « selon nos observations ».
+Énonce le fait directement, au présent : ✗ « Le chasseur souligne qu'il a piloté deux intégrations. » → ✓ « Il a piloté deux intégrations post-acquisition. »
+Seule projection autorisée vers le processus : « à approfondir en entretien » / « à valider en entretien ». Si un critère n'est couvert par aucun élément, écris exactement : "Point à approfondir en entretien."
+Exception unique : le pied de page « Responsable de chasse : … » appartient au gabarit — tu le reproduis à l'identique.
+
+RÈGLES HTML — NON NÉGOCIABLES (FORME ET IMAGERIE INTOUCHABLES)
+1. Ne modifie JAMAIS le CSS, les couleurs, les polices, les icônes <i class="fa-...">, les classes, la structure des divs, ni les titres de section fixes du gabarit (« Notre Analyse », « Points Clés & Vigilance », « NOTE GLOBALE », « Projets Phares & Adéquation », en-têtes du tableau). Tu ne touches qu'au TEXTE.
 2. Conserver EXACTEMENT : src="LOGO_PLACEHOLDER" et LINKEDIN_CONTACT_ITEM_PLACEHOLDER.
 3. Notes du tableau toujours /5 (jamais /10). Note globale = moyenne des critères.
 4. Retourner UNIQUEMENT le HTML complet des pages 1 et 2, sans markdown, sans explication.
 5. Ne pas ajouter de page 3 ou suivante — le CV est géré séparément.
 6. Chaque page doit tenir sur un A4 strict. Si une correction allonge une section, raccourcis ailleurs pour éviter toute coupure visuelle en PDF.
    Page 2 (Score Card + Projets Phares) — LIMITES STRICTES : analyses critères = 20-35 mots chacune ; EXACTEMENT 3 projets phares, 40-55 mots chacun, 150 mots MAX au total. Si tu dépasses, le 3ème projet sera coupé du PDF.
+   Page 1 — [A] Notre Analyse : 4 phrases MAX (profil synthétique / pertinence poste / pertinence entreprise / motivations), aucune réserve dans cette section. [B] Points Clés : card Rémunération en premier (salaire actuel + prétentions, JAMAIS « en adéquation avec le budget » ni équivalent), puis 2-3 atouts, puis 0 ou 1 vigilance UNIQUEMENT si elle est explicitement signalée. Total 3 à 5 cards.
 
-REGISTRE À MAINTENIR
-- Ton factuel, analytique, direct. Registre conseil haut de gamme (niveau Korn Ferry, Spencer Stuart).
-- Phrases courtes, présent de l'indicatif, voix active. Vocabulaire métier précis.
-- Aucun superlatif, adjectif vague, ni inférence psychologique non sourcée.
+ANTI-RÉPÉTITION
+- Chaque section garde son rôle distinct : [A] vue haute, [B] faits opérationnels, [C] angle critère, [D] projets concrets.
+- Un fait utilisé dans une section ne doit pas réapparaître ailleurs. Quand une correction déplace un fait, retire-le de l'ancienne section.
+
+REGISTRE À MAINTENIR — NIVEAU CABINET EXECUTIVE SEARCH
+- Executive search haut de gamme (Korn Ferry, Spencer Stuart, Egon Zehnder). Le texte doit pouvoir être lu tel quel par un président de directoire.
+- Ton factuel, analytique, premium, assuré, ENGAGEANT. Agréable à lire, impactant, droit au but.
+- Phrases courtes, affirmatives. Présent de l'indicatif, voix active. Vocabulaire métier précis.
+- Registre soutenu : pas de familiarité, pas d'oral, pas d'abréviation, pas d'emoji, pas de point d'exclamation.
+- Pas de superlatifs à outrance, pas d'adjectifs vagues, pas d'inférence psychologique non sourcée, pas de formules marketing ("perle rare", "pépite", "coup de cœur").
 - Appliquer uniquement les corrections demandées. Ne pas réécrire ce qui n'est pas visé.
-- Chaque section garde son rôle distinct : pas de répétition d'une rubrique à l'autre.
 """
 
 CRITERIA_EXTRACTION_PROMPT = """Extrais les critères d'évaluation de cette scorecard de poste.
@@ -242,13 +301,16 @@ def extract_criteria_from_scorecard(scorecard_bytes: bytes, ext: str) -> list[di
 
     content.append({"type": "text", "text": CRITERIA_EXTRACTION_PROMPT})
 
+    # Le raisonnement adaptatif consomme des jetons avant la réponse :
+    # plafond large + effort faible pour cette extraction simple.
     response = client.messages.create(
         model=MODEL,
-        max_tokens=600,
+        max_tokens=4000,
         messages=[{"role": "user", "content": content}],
+        extra_body={"output_config": {"effort": "low"}},
     )
 
-    raw = response.content[0].text.strip()
+    raw = response_text(response).strip()
     raw = re.sub(r"^```[^\n]*\n", "", raw)
     raw = re.sub(r"\n```\s*$", "", raw.strip())
     return json.loads(raw)
@@ -306,27 +368,53 @@ def build_structured_user_prompt(
 
     eval_lines.append(
         "\n\nINSTRUCTIONS FINALES :\n"
-        "- HIÉRARCHIE DES SOURCES : le CONTEXTE GÉNÉRAL est la source PRIMAIRE. Le CV est secondaire et "
-        "ne sert qu'à donner des faits précis (chiffres, intitulés, dates) ou à couvrir un critère scorecard "
-        "totalement absent du brief.\n"
-        "- ZÉRO INVENTION : si une affirmation n'est ni dans le brief ni dans le CV, elle n'existe pas. Pas "
-        "d'inférence psychologique, pas de thèse ajoutée, pas de motivation devinée.\n"
-        "- Le brief ne recopie pas le CV (c'est volontaire — éviter la redondance). Donc ne complète pas le "
-        "brief en y rapatriant des éléments CV, et ne considère pas qu'un sujet absent du brief est un oubli.\n"
-        "- [A] NOTRE ANALYSE : restitue le brief du chasseur dans le registre conseil haut de gamme. "
-        "Tu reformules pour le ton, tu ne réorientes pas le propos. Si le brief est court, l'analyse est courte.\n"
-        "- [B] POINTS CLÉS : tirés du brief. N'invente pas un atout ou une vigilance que le chasseur n'a pas relevés.\n"
-        "- [C] SCORE CARD : utilise EXACTEMENT les notes ci-dessus. Pour chaque critère, justifie d'abord avec "
-        "le brief ; ne complète avec le CV que si le brief est silencieux sur ce critère. Reste descriptif, "
-        "même quand la note est haute.\n"
-        "- [D] PROJETS PHARES (bloc texte en bas de page 2) : EXACTEMENT 3 réalisations CV en lien direct avec la scorecard, "
-        "sans inventer de chiffres absents du CV. Format texte plat dans {{TEXTE_PROJETS_PHARES}} : 3 projets séparés par <br><br>, "
-        "intitulé en <strong>, 2 à 3 phrases par projet, 40-55 mots par projet, 150 mots MAX au total. "
-        "Vise 45-50 mots par projet pour donner de la matière substantielle.\n"
-        "- MISE EN PAGE A4 — RISQUE N°1 : la page 2 doit tenir SANS DÉBORDER (Score Card 4 critères + 3 Projets Phares sur le même A4). "
-        "La Score Card a été compactée (~15%) pour libérer de la place aux Projets Phares — utilise ce budget. "
-        "Limites strictes NON NÉGOCIABLES : chaque analyse scorecard = 20-35 mots ; chaque projet phare = 40-55 mots ; total Projets Phares = 150 mots MAX. "
-        "Si tu dépasses, le 3ème projet sera COUPÉ du PDF.\n"
+        "- SOURCE UNIQUE pour les pages 1 et 2 : le CONTEXTE GÉNÉRAL ci-dessus. Le CV est joint à la "
+        "fin (pages 3+) comme COMPLÉMENT pour le lecteur — il ne doit PAS servir à étoffer [A], [B], [C] ou [D].\n"
+        "- ZÉRO INVENTION : si ce n'est pas dans le brief, ça n'existe pas. Pas d'inférence, pas de thèse, "
+        "pas de motivation devinée, pas de chiffre approché. Face à un doute, écris moins.\n"
+        "- AUCUNE RÉSERVE INVENTÉE : une vigilance, une limite ou un « à confirmer » ne s'écrivent QUE si le "
+        "brief les signale explicitement. Un silence du brief n'est PAS une réserve. Pas de nuance ajoutée "
+        "pour « équilibrer » le propos.\n"
+        "- LE DOSSIER PARLE DU CANDIDAT, JAMAIS DU CHASSEUR : n'écris jamais « le chasseur », « le consultant », "
+        "« le recruteur », « notre cabinet », « le brief », « d'après le brief », « nous avons rencontré », "
+        "« il nous a confié », ni aucune variante. Énonce le fait directement, au présent, comme une "
+        "caractéristique du profil. Seule exception : le pied de page « Responsable de chasse : … », qui "
+        "appartient au gabarit.\n"
+        "- METTRE LE CANDIDAT EN AVANT, SUR DES FAITS : retiens les éléments les plus démonstratifs du brief "
+        "(périmètre le plus large, opération la plus structurante, résultat le plus tangible) et énonce-les "
+        "nettement. Mettre en avant = choisir le bon fait, pas ajouter des adjectifs.\n"
+        "- REGISTRE : executive search haut de gamme (Korn Ferry, Spencer Stuart, Egon Zehnder). Phrases courtes, "
+        "affirmatives, présent de l'indicatif, voix active. Soutenu, sobre, assuré. Pas de familiarité, "
+        "pas d'abréviation, pas d'emoji, pas de point d'exclamation, pas de formule marketing.\n"
+        "- FORME ET IMAGERIE INTOUCHABLES : ne change ni le CSS, ni les couleurs, ni les polices, ni les icônes "
+        "<i class=\"fa-...\">, ni les classes, ni les titres de section du gabarit. Tu ne remplis que le texte.\n"
+        "- PRÉNOM UNIQUEMENT : utilise EXCLUSIVEMENT le prénom du candidat dans {{NOM_CANDIDAT}} et partout "
+        "dans le dossier. Jamais le nom de famille, jamais M./Mme, jamais le nom complet.\n"
+        "- [A] NOTRE ANALYSE — 4 PHRASES MAX, structure imposée : "
+        "1) profil synthétique, 2) pertinence pour le poste, 3) pertinence pour l'entreprise, 4) motivations "
+        "(à supprimer si le brief n'en dit rien). Premium, attractif, engageant, droit au but. 60-90 mots au "
+        "total. Pas de chiffres détaillés, pas de listes, pas de narratif CV, AUCUNE réserve dans cette section.\n"
+        "- [B] POINTS CLÉS — ordre imposé, 3 à 5 cards : "
+        "CARD 1 obligatoire = Rémunération (Actuel : XXk€. Prétentions : YYk€.) — INTERDICTION ABSOLUE d'écrire "
+        "que c'est « en adéquation avec le budget » ou toute formule équivalente, tu reportes les chiffres point. "
+        "Puis 2 à 3 atouts factuels TIRÉS DU BRIEF (pas du CV), MAXIMUM 3. "
+        "Puis 0 ou 1 card de vigilance, UNIQUEMENT si le brief la signale explicitement. Sans réserve au brief, "
+        "le dossier n'a PAS de card vigilance — c'est valide et attendu.\n"
+        "- [C] SCORE CARD : utilise EXACTEMENT les notes ci-dessus. Pour chaque critère, un argument NOUVEAU "
+        "(pas déjà dit en [A] ni en [B]) calibré sur la note (haute = fait fort, moyenne = constat nuancé, "
+        "basse = écart nommé). Si le brief ne fournit aucun élément sur le critère, écris exactement "
+        "« Point à approfondir en entretien. » — NE VA PAS chercher dans le CV pour combler et ne mentionne "
+        "jamais le brief comme raison.\n"
+        "- [D] PROJETS PHARES (bas de page 2) : EXACTEMENT 3 réalisations TIRÉES DU BRIEF (pas du CV) en lien "
+        "direct avec la scorecard, sans inventer de chiffres absents du brief. Format texte plat dans "
+        "{{TEXTE_PROJETS_PHARES}} : 3 projets séparés par <br><br>, intitulé en <strong>, 2 à 3 phrases par "
+        "projet, 40-55 mots par projet, 150 mots MAX au total. Vise 45-50 mots par projet.\n"
+        "- ANTI-RÉPÉTITION : un fait utilisé dans une section ne doit PAS réapparaître ailleurs. Les 4 blocs "
+        "sont strictement complémentaires, jamais redondants.\n"
+        "- MISE EN PAGE A4 — RISQUE N°1 : la page 2 doit tenir SANS DÉBORDER (Score Card 4 critères + 3 Projets "
+        "Phares sur le même A4). Limites strictes NON NÉGOCIABLES : chaque analyse scorecard = 20-35 mots ; "
+        "chaque projet phare = 40-55 mots ; total Projets Phares = 150 mots MAX. Si tu dépasses, le 3ème projet "
+        "sera COUPÉ du PDF.\n"
         "- Génère les pages 1 ET 2. Le CV original sera ajouté automatiquement après (pages 3+).\n"
         f"\nVOICI LE CODE HTML MAÎTRE À REMPLIR (recharge à chaque appel — STRUCTURE INTOUCHABLE) :\n{_load_template()}"
     )
@@ -382,8 +470,6 @@ def check_length_budgets(html: str) -> list[str]:
 
 
 def inject_logo_and_linkedin(html: str, logo_b64: str, linkedin_url: str) -> str:
-    if "LOGO_PLACEHOLDER" not in html:
-        st.warning("⚠️ Logo : le placeholder n'a pas été conservé par Claude — le logo n'apparaîtra pas dans le header.")
     html = html.replace('src="LOGO_PLACEHOLDER"', f'src="data:image/png;base64,{logo_b64}"')
 
     if linkedin_url.strip():
@@ -416,6 +502,281 @@ def append_cv_pages(html: str, pdf_bytes: bytes) -> str:
         )
     pdf_doc.close()
     return html.replace("</body>", f"{cv_pages_html}</body>", 1)
+
+
+# Sonnet 5 raisonne avant de répondre, et ces tokens de réflexion comptent dans
+# max_tokens : mesuré à ~10 600 tokens de sortie pour un dossier complet en effort
+# "medium", il faut de la marge, sinon le HTML sort tronqué.
+MAX_TOKENS_DOSSIER = 24000
+
+# Effort de raisonnement (mesuré sur un dossier réel, cf. README) :
+#   low    ~35 s  — trop juste : titres de Points Clés génériques ("Atout", "Atout")
+#   medium ~98 s  — qualité conforme au brief, coût maîtrisé  ← retenu
+#   high  ~193 s  — même qualité, 2,5× plus lent et plus cher
+EFFORT_DOSSIER = "medium"
+
+# extra_body : le SDK installé (0.40.x) ne connaît pas encore output_config comme
+# paramètre nommé, mais le corps JSON brut passe quelle que soit la version.
+DOSSIER_REQUEST_EXTRA = {"output_config": {"effort": EFFORT_DOSSIER}}
+
+REPAIR_INSTRUCTIONS = (
+    "Reprends le HTML précédent et corrige UNIQUEMENT les points listés, sans rien changer d'autre : "
+    "ni le CSS, ni les couleurs, ni les polices, ni les icônes, ni les classes, ni les titres de section "
+    "du gabarit. Rappels non négociables :\n"
+    "- Chaque analyse Score Card ≤ 35 mots\n"
+    "- EXACTEMENT 3 projets phares\n"
+    "- Chaque projet ≤ 55 mots\n"
+    "- Total Projets Phares ≤ 150 mots\n"
+    "- Le dossier parle DU CANDIDAT : jamais « le chasseur », « le consultant », « le recruteur », "
+    "« notre cabinet », « le brief », « d'après le brief », « nous avons rencontré », « il nous a confié » "
+    "ni aucune variante. Énonce le fait directement, au présent. Le pied de page "
+    "« Responsable de chasse : … » appartient au gabarit et reste inchangé.\n"
+    "- Si un critère n'est couvert par aucun élément, écris exactement « Point à approfondir en entretien. »\n"
+    "- Aucune réserve inventée : une vigilance ne s'écrit que si elle est explicitement signalée.\n"
+    "- Le gabarit graphique est intouchable : conserve src=\"LOGO_PLACEHOLDER\" sur les deux pages, "
+    "LINKEDIN_CONTACT_ITEM_PLACEHOLDER, les classes hunter-box / points-grid / score-table et les "
+    "titres de section, à l'identique.\n"
+    "Retourne UNIQUEMENT le HTML corrigé, sans markdown, sans commentaire."
+)
+
+# Tournures qui trahissent le processus de recrutement au lieu de parler du candidat.
+# Le pied de page « Responsable de chasse : … » appartient au gabarit : il est exclu du scan.
+FORBIDDEN_MENTION_PATTERNS: list[tuple[str, str]] = [
+    (r"chasseu(?:r|se)s?\b", "mention du chasseur"),
+    (r"\bbriefs?\b", "mention du brief"),
+    (r"\b(?:notre|nos|le)\s+consultants?\b", "mention du consultant"),
+    (r"\brecruteurs?\b", "mention du recruteur"),
+    (r"\bnotre\s+cabinet\b", "mention du cabinet"),
+    (r"\bnous\s+(?:avons|l'avons)\s+\w+", "récit de la prise d'information (« nous avons… »)"),
+    (r"\bnous\s+a\s+(?:confié|indiqué|précisé|déclaré|dit|expliqué|fait)\b",
+     "récit de la prise d'information (« nous a… »)"),
+    (r"\bnous\s+(?:a|ont)\s+parlé\b", "récit de la prise d'information"),
+    (r"\blors\s+de\s+(?:notre|nos|cet|l')\s*(?:entretien|échange|entrevue)",
+     "renvoi à l'entretien de qualification"),
+    (r"\bselon\s+nos?\s+(?:observations|échanges|constats)\b", "renvoi aux observations"),
+    (r"\bd['’]après\s+nos?\s+(?:observations|échanges)\b", "renvoi aux observations"),
+    (r"\ble\s+candidat\s+nous\b", "récit de la prise d'information"),
+]
+
+
+def extract_visible_text(html: str) -> str:
+    """Plain text a reader actually sees — CSS, comments and the template footer excluded."""
+    html = re.sub(r"<!--.*?-->", " ", html, flags=re.DOTALL)
+    html = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", html, flags=re.DOTALL | re.IGNORECASE)
+    html = re.sub(r'<div class="footer">.*?</div>', " ", html, flags=re.DOTALL | re.IGNORECASE)
+    html = re.sub(r"<[^>]+>", " ", html)
+    return re.sub(r"\s+", " ", html)
+
+
+def check_forbidden_mentions(html: str) -> list[str]:
+    """Le dossier doit parler du candidat, jamais du chasseur ni de la façon dont
+    l'information a été recueillie. Le prompt le demande ; ceci le vérifie."""
+    text = extract_visible_text(html)
+    problems: list[str] = []
+    for pattern, label in FORBIDDEN_MENTION_PATTERNS:
+        m = re.search(pattern, text, flags=re.IGNORECASE)
+        if m:
+            excerpt = text[max(0, m.start() - 40): m.end() + 40].strip()
+            problems.append(f"{label} — à reformuler côté candidat : « …{excerpt}… »")
+    return problems
+
+
+def audit_dossier_content(html: str) -> list[str]:
+    """Toutes les règles vérifiables automatiquement : longueurs, voix, gabarit."""
+    return (
+        check_length_budgets(html)
+        + check_forbidden_mentions(html)
+        + check_template_integrity(html)
+    )
+
+
+def response_text(response) -> str:
+    """Texte de la réponse, blocs de raisonnement exclus.
+
+    Les modèles à raisonnement adaptatif (Sonnet 5, Opus 5…) renvoient un bloc
+    `thinking` en premier : `response.content[0].text` y vaut None.
+    """
+    return "".join(b.text for b in response.content if b.type == "text")
+
+
+def strip_code_fences(text: str) -> str:
+    """Remove a ```html fence around the model output, whatever the surrounding whitespace."""
+    text = text.strip()
+    text = re.sub(r"^```[^\n]*\n", "", text)
+    text = re.sub(r"\n?```\s*$", "", text)
+    return text.strip()
+
+
+def restore_template_shell(html: str) -> tuple[str, bool]:
+    """Réimpose l'en-tête du gabarit (DOCTYPE, <head>, polices, Font Awesome, CSS).
+
+    Le CSS et l'imagerie ne sont pas au modèle de les produire : à effort réduit il
+    lui arrive de les recompresser, ce qui casse la mise en page A4. On restaure la
+    coquille au lieu de la lui demander — le <body> généré est conservé tel quel.
+    Retourne (html, restauré).
+    """
+    template = _load_template()
+    m_tpl = re.search(r"\A(.*?<body[^>]*>)", template, re.DOTALL)
+    m_gen = re.search(r"\A(.*?<body[^>]*>)", html, re.DOTALL)
+    if not (m_tpl and m_gen):
+        return html, False
+    if m_tpl.group(1) == m_gen.group(1):
+        return html, False
+    return template[: m_tpl.end(1)] + html[m_gen.end(1):], True
+
+
+# Éléments de gabarit que le modèle doit reproduire à l'identique dans le <body>.
+TEMPLATE_LANDMARKS: list[tuple[str, str]] = [
+    ('src="LOGO_PLACEHOLDER"', "placeholder du logo"),
+    ("LINKEDIN_CONTACT_ITEM_PLACEHOLDER", "placeholder LinkedIn"),
+    ('class="hunter-box"', "encadré Notre Analyse"),
+    ('class="points-grid"', "grille Points Clés"),
+    ('class="score-table"', "tableau Score Card"),
+    ("Notre Analyse", "titre « Notre Analyse »"),
+    ("Points Clés &amp; Vigilance", "titre « Points Clés & Vigilance »"),
+    ("Projets Phares &amp; Adéquation", "titre « Projets Phares & Adéquation »"),
+    ("NOTE GLOBALE", "bandeau « NOTE GLOBALE »"),
+]
+
+
+def check_template_integrity(html: str) -> list[str]:
+    """Le gabarit graphique doit ressortir intact du modèle."""
+    problems = [
+        f"Élément de gabarit perdu : {label}."
+        for marker, label in TEMPLATE_LANDMARKS
+        if marker not in html
+    ]
+    if html.count('src="LOGO_PLACEHOLDER"') != 2:
+        problems.append(
+            f"Logo attendu sur les 2 pages, trouvé {html.count('src=\"LOGO_PLACEHOLDER\"')} fois."
+        )
+    return problems
+
+
+def decode_model_html(response) -> str:
+    """Sortie modèle → HTML exploitable : texte seul, sans fences, coquille du gabarit imposée."""
+    html = strip_code_fences(response_text(response))
+    html, _ = restore_template_shell(html)
+    return html
+
+
+def is_structurally_valid(html: str) -> bool:
+    """Minimal shape a dossier must have to be worth keeping."""
+    return (
+        "</html>" in html
+        and len(re.findall(r'<div class="page"', html)) == 2
+        and '<td class="score-txt">' in html
+    )
+
+
+def repair_content_issues(html: str, issues: list[str], call_fn, prior_messages: list[dict]):
+    """One automatic pass to fix A4 overflows and forbidden mentions.
+
+    Returns (html, issues) — the retry is kept only if it actually improved things.
+    """
+    st.write("📏 Écart aux règles détecté — relance automatique pour corriger le texte…")
+    correction_msg = (
+        "Le HTML que tu viens de produire enfreint des règles non négociables du dossier. "
+        "Points à corriger :\n\n"
+        + "\n".join(f"- {w}" for w in issues)
+        + "\n\n"
+        + REPAIR_INSTRUCTIONS
+    )
+    retry_response = call_fn(
+        prior_messages
+        + [
+            {"role": "assistant", "content": html},
+            {"role": "user", "content": correction_msg},
+        ]
+    )
+    retry_html = decode_model_html(retry_response)
+
+    # Un HTML tronqué ou hors-format ne déclenche aucun warning de longueur : sans ce
+    # garde-fou, il passerait pour "plus court donc meilleur" et écraserait le dossier.
+    if not is_structurally_valid(retry_html):
+        return html, issues
+
+    new_issues = audit_dossier_content(retry_html)
+    if len(new_issues) < len(issues):
+        if new_issues:
+            return retry_html, new_issues
+        st.write("✅ Règles respectées après relance.")
+        return retry_html, []
+    return html, issues
+
+
+def check_dossier_html(html: str, response) -> list[str]:
+    """Structural sanity checks shared by the generation and the revision paths."""
+    problems: list[str] = []
+    if response.stop_reason == "max_tokens":
+        problems.append(
+            "Réponse interrompue (limite de tokens atteinte) — le HTML est probablement tronqué."
+        )
+    nb_pages = len(re.findall(r'<div class="page"', html))
+    if nb_pages != 2:
+        problems.append(f"Claude a produit {nb_pages} page(s) dossier au lieu de 2.")
+    if "</html>" not in html:
+        problems.append("Le HTML retourné est incomplet (balise </html> manquante).")
+    if "LOGO_PLACEHOLDER" not in html:
+        problems.append("Le placeholder du logo n'a pas été conservé — le logo n'apparaîtra pas.")
+    return problems
+
+
+def read_table_scores(html: str) -> list[float]:
+    """Notes telles qu'affichées dans le tableau Score Card."""
+    return [
+        float(v.replace(",", "."))
+        for v in re.findall(r'<td class="score-val">\s*(\d+(?:[.,]\d+)?)\s*/', html)
+    ]
+
+
+def enforce_global_score(html: str, criteria_scores: list[dict] | None = None) -> tuple[str, bool]:
+    """La note globale est une moyenne arithmétique : on la calcule au lieu de la
+    demander au modèle, qui se trompe d'un dixième de temps en temps.
+
+    `criteria_scores` = notes saisies dans le formulaire (génération). En révision on
+    passe None : les notes de référence sont alors celles du tableau corrigé, sinon une
+    correction du type « mets Management à 2.5 » verrait sa note globale réécrite à
+    partir de valeurs périmées.
+
+    Seul le nombre est réécrit — le balisage, la classe et l'espacement sont conservés.
+    Retourne (html, corrigé).
+    """
+    values = (
+        [float(c["score"]) for c in criteria_scores]
+        if criteria_scores
+        else read_table_scores(html)
+    )
+    if not values:
+        return html, False
+    expected = round(sum(values) / len(values), 1)
+    m = re.search(r'(<div class="score-big">)\s*(\d+(?:[.,]\d+)?)\s*(<span)', html)
+    if not m:
+        return html, False
+    if abs(float(m.group(2).replace(",", ".")) - expected) < 0.05:
+        return html, False
+    return html[: m.start()] + f"{m.group(1)}{expected:.1f} {m.group(3)}" + html[m.end():], True
+
+
+def check_scores_match(html: str, criteria_scores: list[dict]) -> list[str]:
+    """Les notes du tableau sont saisies à la main : Claude ne doit jamais les changer."""
+    if not criteria_scores:
+        return []
+    shown = sorted(read_table_scores(html))
+    expected = sorted(float(c["score"]) for c in criteria_scores)
+    if shown != expected:
+        return [
+            f"Notes du tableau modifiées par Claude : {shown} au lieu de {expected} — vérifie la Score Card."
+        ]
+    return []
+
+
+def finalize_dossier(pages12_html: str, logo_b64: str, linkedin_url: str, pdf_bytes: bytes) -> str:
+    """Pages 1+2 (placeholders intacts) → dossier complet prêt à télécharger."""
+    html = inject_logo_and_linkedin(pages12_html, logo_b64, linkedin_url)
+    if pdf_bytes:
+        html = append_cv_pages(html, pdf_bytes)
+    return html.replace("<body>", f"<body>\n{PRINT_BUTTON_HTML}", 1)
 
 
 PRINT_BUTTON_HTML = """
@@ -649,84 +1010,63 @@ if st.button("✨ Générer le Dossier", type="primary", key="dossier_generate")
                 claude_client = Anthropic(api_key=claude_api_key)
 
                 def _call_claude(messages_payload):
-                    return claude_client.messages.create(
+                    # Streaming obligatoire : avec un max_tokens élevé, une requête
+                    # non streamée dépasse le timeout HTTP du SDK.
+                    with claude_client.messages.stream(
                         model=MODEL,
-                        max_tokens=8000,
+                        max_tokens=MAX_TOKENS_DOSSIER,
                         system=DOSSIER_SYSTEM_PROMPT,
                         messages=messages_payload,
-                        timeout=240.0,
-                    )
+                        extra_body=DOSSIER_REQUEST_EXTRA,
+                        timeout=600.0,
+                    ) as stream:
+                        return stream.get_final_message()
 
                 base_messages = [{"role": "user", "content": content_blocks}]
                 response = _call_claude(base_messages)
-                generated_html = response.content[0].text
-
-                if response.stop_reason == "max_tokens":
-                    st.warning("⚠️ Génération interrompue (limite de tokens atteinte). Les pages 1 et 2 peuvent être incomplètes.")
+                # Le CSS et l'en-tête viennent du gabarit, jamais du modèle.
+                generated_html = strip_code_fences(response_text(response))
+                generated_html, shell_restored = restore_template_shell(generated_html)
+                if shell_restored:
+                    st.write("🎨 En-tête et CSS du gabarit restaurés à l'identique.")
 
                 st.write("🖼 Injection du logo et finalisation…")
-                generated_html = re.sub(r"^```[^\n]*\n", "", generated_html)
-                generated_html = re.sub(r"\n```\s*$", "", generated_html.strip())
 
-                # --- GARDE-FOU 1 : nombre de pages dossier ---
-                nb_pages = len(re.findall(r'<div class="page"', generated_html))
-                if nb_pages != 2:
-                    st.warning(
-                        f"⚠️ Claude a généré {nb_pages} page(s) dossier au lieu de 2 — vérifie le rendu."
+                # --- GARDE-FOU 1 : structure du HTML ---
+                for problem in check_dossier_html(generated_html, response):
+                    st.warning(f"⚠️ {problem}")
+
+                # --- GARDE-FOU 2 : longueurs page 2 + voix du dossier ---
+                content_issues = audit_dossier_content(generated_html)
+                if content_issues:
+                    generated_html, content_issues = repair_content_issues(
+                        generated_html, content_issues, _call_claude, base_messages
                     )
+                content_issues += check_scores_match(generated_html, criteria_scores)
+                for w in content_issues:
+                    st.warning(f"⚠️ {w}")
 
-                # --- GARDE-FOU 2 : longueur des sections page 2 ---
-                length_warnings = check_length_budgets(generated_html)
-                if length_warnings:
-                    st.write("📏 Dépassement de longueur détecté — relance automatique pour resserrer le texte…")
-                    correction_msg = (
-                        "Le brouillon que tu viens de produire dépasse les limites de longueur strictes "
-                        "pour la page 2. Voici les dépassements à corriger :\n\n"
-                        + "\n".join(f"- {w}" for w in length_warnings)
-                        + "\n\nReprends le HTML précédent et raccourcis UNIQUEMENT les sections concernées, "
-                        "sans rien changer d'autre. Respecte impérativement :\n"
-                        "- Chaque analyse Score Card ≤ 35 mots\n"
-                        "- EXACTEMENT 3 projets phares\n"
-                        "- Chaque projet ≤ 55 mots\n"
-                        "- Total Projets Phares ≤ 150 mots\n"
-                        "Retourne UNIQUEMENT le HTML corrigé, sans markdown, sans commentaire."
-                    )
-                    retry_messages = base_messages + [
-                        {"role": "assistant", "content": generated_html},
-                        {"role": "user", "content": correction_msg},
-                    ]
-                    retry_response = _call_claude(retry_messages)
-                    retry_html = retry_response.content[0].text
-                    retry_html = re.sub(r"^```[^\n]*\n", "", retry_html)
-                    retry_html = re.sub(r"\n```\s*$", "", retry_html.strip())
-
-                    # Use retry only if it actually improved things
-                    new_warnings = check_length_budgets(retry_html)
-                    if len(new_warnings) < len(length_warnings):
-                        generated_html = retry_html
-                        if new_warnings:
-                            for w in new_warnings:
-                                st.warning(f"⚠️ {w}")
-                        else:
-                            st.write("✅ Longueurs corrigées après relance.")
-                    else:
-                        for w in length_warnings:
-                            st.warning(f"⚠️ {w}")
-
-                final_html = inject_logo_and_linkedin(
-                    generated_html,
-                    st.session_state["dossier_logo_b64"],
-                    linkedin_url,
-                )
+                # --- GARDE-FOU 3 : la note globale est calculée, pas devinée ---
+                generated_html, fixed_score = enforce_global_score(generated_html, criteria_scores)
+                if fixed_score:
+                    st.write("🔢 Note globale recalculée (moyenne des critères).")
 
                 # Sauvegarde pages 1+2 (placeholders intacts) pour révisions
                 st.session_state["dossier_html_pages12"] = generated_html
                 st.session_state["dossier_pdf_bytes"] = pdf_bytes
                 st.session_state["dossier_criteria_scores"] = criteria_scores
+                st.session_state["dossier_brief"] = context.strip()
+                st.session_state["dossier_version"] = 1
+                st.session_state["dossier_history"] = []
+                st.session_state.pop("dossier_revision_notice", None)
 
                 st.write("📄 Conversion du CV en images…")
-                final_html = append_cv_pages(final_html, pdf_bytes)
-                final_html = final_html.replace("<body>", f"<body>\n{PRINT_BUTTON_HTML}", 1)
+                final_html = finalize_dossier(
+                    generated_html,
+                    st.session_state["dossier_logo_b64"],
+                    linkedin_url,
+                    pdf_bytes,
+                )
 
                 st.session_state["dossier_html"] = final_html
                 status.update(label="✅ Dossier généré !", state="complete")
@@ -741,6 +1081,21 @@ if st.session_state.get("dossier_html"):
 
     name_match = re.search(r'class="candidate-name">([^<]+)<', html_content)
     candidate_name = name_match.group(1).strip().replace(" ", "_") if name_match else "candidat"
+    version = st.session_state.get("dossier_version", 1)
+
+    # Une révision se termine par un st.rerun() : sans ce bloc, l'écran revient à
+    # l'identique et le chasseur croit que sa correction n'a pas été prise en compte.
+    notice = st.session_state.pop("dossier_revision_notice", None)
+    if notice:
+        if notice.get("undo"):
+            st.success(f"↩️ Correction annulée — retour à la version {notice['version']}.")
+        else:
+            st.success(f"✅ Corrections appliquées — dossier en version {notice['version']}.")
+            if notice.get("corrections"):
+                with st.expander("Corrections prises en compte", expanded=False):
+                    st.write(notice["corrections"])
+        for problem in notice.get("problems", []):
+            st.warning(f"⚠️ {problem}")
 
     st.info(
         "**Comment obtenir le PDF :**  \n"
@@ -750,22 +1105,64 @@ if st.session_state.get("dossier_html"):
         "4. Dans la boîte de dialogue : format A4, sans marges → Enregistrer"
     )
 
+    version_suffix = f"_v{version}" if version > 1 else ""
     st.download_button(
-        label="⬇️ Télécharger le Dossier (.html → PDF via Chrome)",
+        label=f"⬇️ Télécharger le Dossier (v{version}) (.html → PDF via Chrome)",
         data=html_content,
-        file_name=f"dossier_{candidate_name}.html",
+        file_name=f"dossier_{candidate_name}{version_suffix}.html",
         mime="text/html",
         type="primary",
         key="dossier_download_html",
     )
 
-    with st.expander("👁 Aperçu du dossier"):
+    # --- PDF direct + enregistrement sur la fiche Leonar du candidat ---
+    from utils.pdf_export import html_to_pdf, PdfExportError
+    from utils import leonar
+
+    pdf_name = f"Dossier de candidature — {candidate_name.replace('_', ' ')}{version_suffix}.pdf"
+    with st.container(horizontal=True, gap="small"):
+        st.download_button(
+            "⬇️ Télécharger en PDF",
+            data=lambda h=html_content: html_to_pdf(h),
+            file_name=pdf_name,
+            mime="application/pdf",
+            on_click="ignore",
+            key="dossier_download_pdf",
+        )
+        save_leonar = st.button(
+            "📎 Enregistrer sur la fiche Leonar du candidat",
+            key="dossier_save_leonar",
+            disabled=not leonar.linkedin_slug(st.session_state.get("dossier_linkedin", "")),
+            help="Retrouve le candidat dans Leonar grâce à son URL LinkedIn et joint le dossier en PDF.",
+        )
+    if not leonar.linkedin_slug(st.session_state.get("dossier_linkedin", "")):
+        st.caption("Renseigne l'URL LinkedIn du candidat (en haut) pour enregistrer le dossier sur Leonar.")
+    if save_leonar:
+        try:
+            with st.spinner("Recherche du candidat dans Leonar…"):
+                contact = leonar.find_contact_by_linkedin(st.session_state["dossier_linkedin"])
+            if not contact:
+                st.error("Aucune fiche Leonar ne correspond à cette URL LinkedIn. Vérifie l'URL ou crée le contact dans Leonar.")
+            else:
+                with st.spinner("Conversion en PDF et envoi sur Leonar…"):
+                    leonar.upload_contact_file(contact["id"], pdf_name, html_to_pdf(html_content))
+                full_name = f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip()
+                st.success(f"Dossier joint à la fiche Leonar de **{full_name}**.")
+                st.link_button("Ouvrir la fiche dans Leonar", leonar.contact_url(contact["id"]))
+        except (PdfExportError, leonar.LeonarError) as e:
+            st.error(f"Enregistrement sur Leonar impossible : {e}")
+
+    # Ouvert d'office après une révision pour que le changement soit visible tout de suite.
+    with st.expander("👁 Aperçu du dossier", expanded=bool(notice)):
         st.components.v1.html(html_content, height=900, scrolling=True)
 
     st.divider()
 
     # --- MODE RÉVISION ---
-    with st.expander("✏️ Corrections — décrire et régénérer"):
+    with st.expander(
+        "✏️ Corrections — décrire et régénérer",
+        expanded=bool(notice),
+    ):
         st.caption(
             "Décris ce que tu veux modifier (ton, scores, analyse, points clés, projets phares…). "
             "Claude régénère les pages 1 et 2 en intégrant tes corrections. Le CV reste inchangé."
@@ -783,7 +1180,36 @@ if st.session_state.get("dossier_html"):
             key="fix_comments",
         )
 
-        if st.button("🔄 Régénérer avec les corrections", type="primary", key="fix_regenerate"):
+        col_fix, col_undo = st.columns([3, 1])
+        with col_fix:
+            do_revise = st.button(
+                "🔄 Régénérer avec les corrections", type="primary", key="fix_regenerate"
+            )
+        with col_undo:
+            can_undo = bool(st.session_state.get("dossier_history"))
+            do_undo = st.button(
+                "↩️ Annuler la dernière",
+                key="fix_undo",
+                disabled=not can_undo,
+                help="Revenir à la version précédente du dossier"
+                if can_undo
+                else "Aucune correction à annuler",
+            )
+
+        if do_undo and st.session_state.get("dossier_history"):
+            previous = st.session_state["dossier_history"].pop()
+            st.session_state["dossier_html_pages12"] = previous["pages12"]
+            st.session_state["dossier_html"] = previous["full"]
+            st.session_state["dossier_version"] = previous["version"]
+            st.session_state["dossier_revision_notice"] = {
+                "version": previous["version"],
+                "corrections": "",
+                "problems": [],
+                "undo": True,
+            }
+            st.rerun()
+
+        if do_revise:
             if not user_corrections.strip():
                 st.warning("Écris tes corrections avant de régénérer.")
             elif not st.session_state.get("dossier_html_pages12"):
@@ -794,38 +1220,119 @@ if st.session_state.get("dossier_html"):
                         html_p12 = st.session_state["dossier_html_pages12"]
                         pdf_bytes_rev = st.session_state.get("dossier_pdf_bytes", b"")
 
-                        revision_user_prompt = (
-                            f"CORRECTIONS DEMANDÉES :\n{user_corrections.strip()}\n\n"
-                            "PAGES 1 ET 2 ACTUELLES (HTML à corriger) :\n"
-                            f"{html_p12}"
+                        # Le brief et les notes sont la source de vérité du dossier :
+                        # sans eux, Claude ne peut pas honorer une correction qui y renvoie.
+                        brief = st.session_state.get("dossier_brief", "")
+                        scores = st.session_state.get("dossier_criteria_scores", [])
+
+                        prompt_parts = [
+                            f"CORRECTIONS DEMANDÉES :\n{user_corrections.strip()}"
+                        ]
+                        if brief:
+                            prompt_parts.append(
+                                "BRIEF INITIAL (source des pages 1 et 2, rappelé pour référence — "
+                                "ne réécris que ce que les corrections visent) :\n"
+                                + brief
+                            )
+                        if scores:
+                            prompt_parts.append(
+                                "NOTES ACTUELLES PAR CRITÈRE (à conserver telles quelles, "
+                                "sauf si les corrections demandent explicitement de les changer) :\n"
+                                + "\n".join(
+                                    f"- {c['name']}"
+                                    + (f" ({c['weight']})" if c.get("weight") else "")
+                                    + f" : {c['score']}/5"
+                                    for c in scores
+                                )
+                            )
+                        prompt_parts.append(
+                            "PAGES 1 ET 2 ACTUELLES (HTML à corriger) :\n" + html_p12
                         )
+                        revision_user_prompt = "\n\n".join(prompt_parts)
 
                         claude_client_rev = Anthropic(api_key=claude_api_key)
-                        rev_response = claude_client_rev.messages.create(
-                            model=MODEL,
-                            max_tokens=8000,
-                            system=REVISION_SYSTEM_PROMPT,
-                            messages=[{"role": "user", "content": revision_user_prompt}],
-                            timeout=240.0,
-                        )
-                        revised = rev_response.content[0].text
-                        revised = re.sub(r"^```[^\n]*\n", "", revised)
-                        revised = re.sub(r"\n```\s*$", "", revised.strip())
 
+                        def _call_claude_rev(messages_payload):
+                            # Streaming : même raison que pour la génération.
+                            with claude_client_rev.messages.stream(
+                                model=MODEL,
+                                max_tokens=MAX_TOKENS_DOSSIER,
+                                system=REVISION_SYSTEM_PROMPT,
+                                messages=messages_payload,
+                                extra_body=DOSSIER_REQUEST_EXTRA,
+                                timeout=600.0,
+                            ) as stream:
+                                return stream.get_final_message()
+
+                        rev_messages = [
+                            {"role": "user", "content": revision_user_prompt}
+                        ]
+                        st.write("🧠 Application des corrections…")
+                        rev_response = _call_claude_rev(rev_messages)
+                        # Le CSS et l'en-tête viennent du gabarit, jamais du modèle.
+                        revised = strip_code_fences(response_text(rev_response))
+                        revised, shell_restored = restore_template_shell(revised)
+                        if shell_restored:
+                            st.write("🎨 En-tête et CSS du gabarit restaurés à l'identique.")
+
+                        # Mêmes garde-fous que la génération : une correction ne doit
+                        # jamais casser la structure ni faire déborder la page 2.
+                        if not is_structurally_valid(revised):
+                            raise ValueError(
+                                "Claude a renvoyé un HTML inexploitable (tronqué ou hors format) — "
+                                "dossier inchangé. Reformule tes corrections, ou découpe-les en deux passes."
+                            )
+
+                        problems = check_dossier_html(revised, rev_response)
+                        content_issues = audit_dossier_content(revised)
+                        if content_issues:
+                            revised, content_issues = repair_content_issues(
+                                revised, content_issues, _call_claude_rev, rev_messages
+                            )
+                        problems += content_issues
+
+                        # La note globale reste une moyenne : on la recalcule sur les notes
+                        # du tableau corrigé, qui font foi après une correction.
+                        revised, fixed_score = enforce_global_score(revised)
+                        if fixed_score:
+                            st.write("🔢 Note globale recalculée (moyenne des critères).")
+
+                        st.write("📄 Réassemblage du dossier…")
+                        # Historique AVANT écrasement, pour pouvoir annuler.
+                        history = st.session_state.setdefault("dossier_history", [])
+                        history.append(
+                            {
+                                "pages12": html_p12,
+                                "full": st.session_state["dossier_html"],
+                                "version": st.session_state.get("dossier_version", 1),
+                            }
+                        )
+                        del history[:-10]
+
+                        # Une correction peut changer une note : la session doit suivre,
+                        # sinon la révision suivante repartirait des notes d'origine.
+                        table_scores = read_table_scores(revised)
+                        if scores and len(table_scores) == len(scores):
+                            st.session_state["dossier_criteria_scores"] = [
+                                {**c, "score": v} for c, v in zip(scores, table_scores)
+                            ]
+
+                        new_version = st.session_state.get("dossier_version", 1) + 1
                         st.session_state["dossier_html_pages12"] = revised
-
-                        revised = inject_logo_and_linkedin(
+                        st.session_state["dossier_html"] = finalize_dossier(
                             revised,
-                            st.session_state["dossier_logo_b64"],
+                            st.session_state.get("dossier_logo_b64", ""),
                             st.session_state.get("dossier_linkedin", ""),
+                            pdf_bytes_rev,
                         )
+                        st.session_state["dossier_version"] = new_version
+                        st.session_state["dossier_revision_notice"] = {
+                            "version": new_version,
+                            "corrections": user_corrections.strip(),
+                            "problems": problems,
+                            "undo": False,
+                        }
 
-                        if pdf_bytes_rev:
-                            revised = append_cv_pages(revised, pdf_bytes_rev)
-
-                        revised = revised.replace("<body>", f"<body>\n{PRINT_BUTTON_HTML}", 1)
-
-                        st.session_state["dossier_html"] = revised
                         rev_status.update(label="✅ Dossier révisé !", state="complete")
                         st.rerun()
 

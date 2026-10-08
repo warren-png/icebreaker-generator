@@ -24,6 +24,7 @@ from utils.auth import check_password
 from utils.ui import inject_global_styles
 from mandats_store import StorageError
 from utils.mandats_data import store, load_snapshot, fetch_bytes
+from utils import leonar
 
 
 st.set_page_config(page_title="Mandats | Entourage", page_icon="🗂️", layout="wide")
@@ -33,7 +34,8 @@ if not check_password():
     st.stop()
 
 
-RESPONSABLES = ["Warren", "Helder"]
+RESPONSABLES = ["Warren", "Helder"]          # commerciaux (pied de page scorecard / dossier)
+PROPRIETAIRES = ["Warren", "Helder", "Bruno"]  # propriétaires possibles du projet Leonar
 STATUTS = ["En cours", "Pourvu", "Clos"]
 STATUT_COLORS = {"En cours": "orange", "Pourvu": "green", "Clos": "gray"}
 AUDIO_TYPES = ["m4a", "mp3", "wav", "mp4", "aac", "ogg", "webm", "flac", "mpeg", "mov"]
@@ -156,6 +158,8 @@ def badges(m: dict) -> str:
     if m.get("responsable"):
         parts.append(f":gray-badge[:material/person: {md(m['responsable'])}]")
     parts.append(f":gray-badge[:material/calendar_today: {fmt_date(m.get('date', ''))}]")
+    if m.get("leonar_project_id"):
+        parts.append(":violet-badge[:material/link: Leonar]")
     return " ".join(parts)
 
 
@@ -319,31 +323,43 @@ def save_fiche(mandat_id: str, files: list[dict], uploaded=None, text: str = "")
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def mandat_fields(prefix: str, m: dict | None = None) -> dict:
+def init_mandat_fields(prefix: str, m: dict | None = None):
+    """Valeurs initiales des champs (avant leur affichage) ; n'écrase pas une saisie en cours."""
     m = m or {}
-    c1, c2 = st.columns(2)
-    nom = c1.text_input("Nom du mandat *", value=m.get("nom", ""), placeholder="Ex : Contrôleur de gestion H/F", key=f"{prefix}_nom")
-    entreprise = c2.text_input("Entreprise *", value=m.get("entreprise", ""), placeholder="Ex : TD Williamson", key=f"{prefix}_ent")
-    c3, c4, c5 = st.columns(3)
     try:
         d = date.fromisoformat(m.get("date", "")) if m.get("date") else date.today()
     except ValueError:
         d = date.today()
-    the_date = c3.date_input("Date", value=d, format="DD/MM/YYYY", key=f"{prefix}_date")
-    resp = m.get("responsable", RESPONSABLES[0])
-    responsable = c4.selectbox(
-        "Responsable", RESPONSABLES,
-        index=RESPONSABLES.index(resp) if resp in RESPONSABLES else 0,
-        key=f"{prefix}_resp",
-    )
-    stat = m.get("statut", STATUTS[0])
-    statut = c5.selectbox(
-        "Statut", STATUTS,
-        index=STATUTS.index(stat) if stat in STATUTS else 0,
-        key=f"{prefix}_statut",
+    resp = m.get("responsable") if m.get("responsable") in RESPONSABLES else RESPONSABLES[0]
+    proprios = [p for p in (m.get("proprietaires") or [resp]) if p in PROPRIETAIRES]
+    defaults = {
+        "nom": m.get("nom", ""),
+        "ent": m.get("entreprise", ""),
+        "date": d,
+        "resp": resp,
+        "statut": m.get("statut") if m.get("statut") in STATUTS else STATUTS[0],
+        "proprio": proprios,
+        "notes": m.get("notes", ""),
+    }
+    for k, v in defaults.items():
+        st.session_state.setdefault(f"{prefix}_{k}", v)
+
+
+def mandat_fields(prefix: str, m: dict | None = None) -> dict:
+    init_mandat_fields(prefix, m)
+    c1, c2 = st.columns(2)
+    nom = c1.text_input("Nom du mandat *", placeholder="Ex : Contrôleur de gestion H/F", key=f"{prefix}_nom")
+    entreprise = c2.text_input("Entreprise *", placeholder="Ex : TD Williamson", key=f"{prefix}_ent")
+    c3, c4, c5 = st.columns(3)
+    the_date = c3.date_input("Date", format="DD/MM/YYYY", key=f"{prefix}_date")
+    responsable = c4.selectbox("Responsable", RESPONSABLES, key=f"{prefix}_resp")
+    statut = c5.selectbox("Statut", STATUTS, key=f"{prefix}_statut")
+    proprietaires = st.multiselect(
+        "Propriétaires du projet Leonar", PROPRIETAIRES, key=f"{prefix}_proprio",
+        help="Membres propriétaires du projet dans Leonar (le responsable commercial, et le sourceur si besoin).",
     )
     notes = st.text_area(
-        "Notes internes", value=m.get("notes", ""), height=100,
+        "Notes internes", height=100,
         placeholder="Contexte, points d'attention, interlocuteurs…", key=f"{prefix}_notes",
     )
     return {
@@ -352,13 +368,65 @@ def mandat_fields(prefix: str, m: dict | None = None) -> dict:
         "date": the_date.isoformat(),
         "responsable": responsable,
         "statut": statut,
+        "proprietaires": proprietaires,
         "notes": notes.strip(),
     }
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def leonar_mandate_projects() -> list[dict]:
+    return leonar.list_mandate_projects()
+
+
+def leonar_owner_names(project: dict) -> list[str]:
+    return [o.get("first_name") for o in project.get("owners") or [] if o.get("first_name") in PROPRIETAIRES]
+
+
+def _apply_leonar_import():
+    """Remplit le formulaire « Nouveau mandat » avec le projet Leonar choisi."""
+    idx = st.session_state.get("new_leonar_choice")
+    projects = st.session_state.get("_leonar_import_options") or []
+    if idx is None or idx >= len(projects):
+        st.session_state.pop("new_leonar_project_id", None)
+        return
+    p = projects[idx]
+    owners = leonar_owner_names(p)
+    st.session_state["new_leonar_project_id"] = p["id"]
+    st.session_state["new_nom"] = p.get("name", "")
+    st.session_state["new_ent"] = leonar.project_client(p)
+    try:
+        st.session_state["new_date"] = date.fromisoformat((p.get("created_at") or "")[:10])
+    except ValueError:
+        pass
+    st.session_state["new_resp"] = next((o for o in owners if o in RESPONSABLES), RESPONSABLES[0])
+    st.session_state["new_proprio"] = owners or [st.session_state["new_resp"]]
 
 
 def render_create_form(mandats: list[dict]):
     with st.container(border=True):
         st.markdown("#### Nouveau mandat")
+
+        # Import d'un projet Leonar existant (hors projets déjà liés à un mandat)
+        linked = {x.get("leonar_project_id") for x in mandats if x.get("leonar_project_id")}
+        try:
+            options = [p for p in leonar_mandate_projects() if p["id"] not in linked]
+        except leonar.LeonarError as e:
+            options = []
+            st.caption(f"Projets Leonar indisponibles : {e}")
+        st.session_state["_leonar_import_options"] = options
+        if options:
+            st.selectbox(
+                "Importer un projet Leonar (facultatif)",
+                list(range(len(options))),
+                format_func=lambda i: (
+                    f"{options[i].get('name', '')} — {leonar.project_client(options[i])} · "
+                    f"{fmt_date((options[i].get('created_at') or '')[:10])}"
+                ),
+                index=None, placeholder="Choisir un projet Leonar pour remplir le formulaire…",
+                key="new_leonar_choice", on_change=_apply_leonar_import,
+            )
+        imported_id = st.session_state.get("new_leonar_project_id")
+
         with st.form("mandat_create", clear_on_submit=False, border=False):
             meta = mandat_fields("new")
 
@@ -376,6 +444,14 @@ def render_create_form(mandats: list[dict]):
                 type=AUDIO_TYPES, accept_multiple_files=True, key="new_audios",
             )
 
+            if imported_id:
+                st.caption(":material/link: Le mandat sera lié au projet Leonar importé.")
+                create_in_leonar = False
+            else:
+                create_in_leonar = st.checkbox(
+                    "Créer aussi le projet dans Leonar", value=True, key="new_create_leonar",
+                    help="Même nom, entreprise en client (fiche créée si besoin) et propriétaires choisis.",
+                )
             force = st.checkbox(
                 "Créer même si un mandat du même nom existe déjà pour cette entreprise",
                 key="new_force",
@@ -386,6 +462,7 @@ def render_create_form(mandats: list[dict]):
 
         if cancelled:
             st.session_state["_mandats_creating"] = False
+            st.session_state.pop("new_leonar_project_id", None)
             st.rerun()
         if not submitted:
             return
@@ -393,6 +470,8 @@ def render_create_form(mandats: list[dict]):
         if not meta["nom"] or not meta["entreprise"]:
             st.error("Le nom du mandat et l'entreprise sont obligatoires.")
             return
+        if not meta["proprietaires"]:
+            meta["proprietaires"] = [meta["responsable"]]
         dup = next(
             (
                 x for x in mandats
@@ -409,6 +488,18 @@ def render_create_form(mandats: list[dict]):
             )
             return
 
+        leonar_warning = None
+        if imported_id:
+            meta["leonar_project_id"] = imported_id
+        elif create_in_leonar:
+            try:
+                with st.spinner("Création du projet dans Leonar…"):
+                    project = leonar.create_project(meta["nom"], meta["entreprise"], meta["proprietaires"])
+                meta["leonar_project_id"] = project["id"]
+                leonar_mandate_projects.clear()
+            except leonar.LeonarError as e:
+                leonar_warning = f"Projet Leonar non créé : {e}"
+
         try:
             with st.spinner("Création du mandat sur le Drive…"):
                 mandat_id = store().create_mandat(meta)
@@ -422,10 +513,11 @@ def render_create_form(mandats: list[dict]):
             return
 
         st.session_state["_mandats_creating"] = False
-        refresh_and_rerun(
-            "Mandat créé." if ok else "Mandat créé — une transcription a échoué, relancez-la depuis la fiche.",
-            mandat_id,
-        )
+        st.session_state.pop("new_leonar_project_id", None)
+        flash = "Mandat créé." if ok else "Mandat créé — une transcription a échoué, relancez-la depuis la fiche."
+        if leonar_warning:
+            flash += " " + leonar_warning
+        refresh_and_rerun(flash, mandat_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -527,6 +619,10 @@ def view_detail(m: dict, files: list[dict]):
         link = store().folder_link(m["id"])
         if link:
             st.link_button("Ouvrir dans Drive", link, icon=":material/folder_open:")
+        if m.get("leonar_project_id"):
+            st.link_button("Ouvrir dans Leonar", leonar.project_url(m["leonar_project_id"]), icon=":material/open_in_new:")
+        else:
+            render_leonar_link_popover(m)
         with st.popover("Supprimer", icon=":material/delete:"):
             st.markdown("Supprimer ce mandat et **tous ses fichiers** ?")
             st.caption("Ils iront dans la corbeille du Drive partagé (récupérables 30 jours).")
@@ -561,6 +657,8 @@ def view_detail(m: dict, files: list[dict]):
                         st.session_state["_mandats_editing"] = False
                         refresh_and_rerun("Mandat mis à jour.")
 
+    if m.get("proprietaires"):
+        st.caption(f"Propriétaires du projet Leonar : {', '.join(m['proprietaires'])}")
     if m.get("notes"):
         with st.container(border=True):
             st.markdown("**:material/sticky_note_2: Notes**")
@@ -574,6 +672,47 @@ def view_detail(m: dict, files: list[dict]):
     render_fiche_section(m, files)
     render_audio_section(m, files)
     render_scorecard_section(m, files)
+
+
+def render_leonar_link_popover(m: dict):
+    """Mandat sans projet Leonar : le créer, ou le lier à un projet existant."""
+    with st.popover("Lier à Leonar", icon=":material/link:"):
+        owners = m.get("proprietaires") or [m.get("responsable") or RESPONSABLES[0]]
+        st.markdown("**Créer le projet dans Leonar**")
+        st.caption(f"« {m.get('nom', '')} », client {m.get('entreprise', '')}, propriétaires : {', '.join(owners)}.")
+        if st.button("Créer dans Leonar", type="primary", key="leonar_create_existing"):
+            try:
+                with st.spinner("Création du projet dans Leonar…"):
+                    project = leonar.create_project(m.get("nom", ""), m.get("entreprise", ""), owners)
+                store().save_meta({**m, "leonar_project_id": project["id"]})
+            except (leonar.LeonarError, StorageError) as e:
+                st.error(str(e))
+            else:
+                leonar_mandate_projects.clear()
+                refresh_and_rerun("Projet créé dans Leonar et lié au mandat.")
+        st.divider()
+        st.markdown("**…ou lier un projet Leonar existant**")
+        try:
+            snap = load_snapshot()
+            linked = {x.get("leonar_project_id") for x in snap["mandats"] if x.get("leonar_project_id")}
+            options = [p for p in leonar_mandate_projects() if p["id"] not in linked]
+        except leonar.LeonarError as e:
+            st.caption(f"Projets Leonar indisponibles : {e}")
+            return
+        idx = st.selectbox(
+            "Projet Leonar", list(range(len(options))),
+            format_func=lambda i: f"{options[i].get('name', '')} — {leonar.project_client(options[i])}",
+            index=None, placeholder="Choisir un projet…", key="leonar_link_choice",
+        )
+        if st.button("Lier ce projet", disabled=idx is None, key="leonar_link_btn"):
+            p = options[idx]
+            try:
+                store().save_meta({**m, "leonar_project_id": p["id"],
+                                   "proprietaires": leonar_owner_names(p) or owners})
+            except StorageError as e:
+                st.error(str(e))
+            else:
+                refresh_and_rerun("Mandat lié au projet Leonar.")
 
 
 def render_fiche_section(m: dict, files: list[dict]):
@@ -816,7 +955,9 @@ def render_scorecard_section(m: dict, files: list[dict]):
             if not parts:
                 st.error("Les éléments choisis ne contiennent pas de texte exploitable.")
                 return
-            st.session_state["scorecard_mandat"] = {"id": m["id"], "nom": m.get("nom", "")}
+            st.session_state["scorecard_mandat"] = {
+                "id": m["id"], "nom": m.get("nom", ""), "leonar_project_id": m.get("leonar_project_id"),
+            }
             st.session_state["scorecard_prefill"] = {
                 "mandat_id": m["id"],
                 "mandat_nom": m.get("nom", ""),

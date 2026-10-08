@@ -476,6 +476,21 @@ def restore_images(html: str, images: list[str]) -> str:
     return html
 
 
+def save_scorecard_to_leonar(project_id: str, filename: str):
+    """Joint la scorecard (PDF) au projet Leonar du mandat, en remplaçant la version précédente."""
+    from utils import leonar
+    from utils.pdf_export import html_to_pdf, PdfExportError
+
+    try:
+        with st.spinner("Conversion en PDF et envoi sur Leonar…"):
+            pdf = html_to_pdf(st.session_state.scorecard_html)
+            leonar.replace_project_file(project_id, filename, pdf)
+    except (PdfExportError, leonar.LeonarError) as e:
+        st.warning(f"Scorecard enregistrée sur le Drive, mais pas sur Leonar : {e}")
+    else:
+        st.toast("Scorecard (PDF) jointe au projet Leonar", icon="✅")
+
+
 def open_saved_scorecard(entry: dict):
     """Charge une scorecard enregistrée dans un mandat comme résultat courant (consultation / modifications)."""
     from utils.mandats_data import fetch_bytes
@@ -491,7 +506,9 @@ def open_saved_scorecard(entry: dict):
     resp = mandat.get("responsable", "")
     st.session_state.scorecard_commercial = resp if resp in COMMERCIAUX else next(iter(COMMERCIAUX))
     st.session_state.scorecard_saved_id = entry["file"]["id"]
-    st.session_state.scorecard_mandat = {"id": mandat["id"], "nom": mandat.get("nom", "")}
+    st.session_state.scorecard_mandat = {
+        "id": mandat["id"], "nom": mandat.get("nom", ""), "leonar_project_id": mandat.get("leonar_project_id"),
+    }
     st.session_state.pop("scorecard_prefill", None)
 
 
@@ -656,8 +673,9 @@ if "scorecard_html" in st.session_state:
         )
     with col2:
         if st.button("🗑️ Réinitialiser", use_container_width=True):
-            for k in ["scorecard_html", "scorecard_transcription", "scorecard_client", "scorecard_commercial",
-                      "scorecard_saved_id", "scorecard_images"] + ([] if prefill else ["scorecard_mandat"]):
+            for k in (["scorecard_html", "scorecard_transcription", "scorecard_client", "scorecard_commercial",
+                       "scorecard_saved_id", "scorecard_images"]
+                      + ([] if prefill else ["scorecard_mandat"])):
                 st.session_state.pop(k, None)
             st.rerun()
     target = st.session_state.get("scorecard_mandat")
@@ -683,6 +701,8 @@ if "scorecard_html" in st.session_state:
                 else:
                     load_snapshot.clear()
                     st.toast(f"Scorecard enregistrée dans le mandat « {target['nom']} »", icon="✅")
+                    if target.get("leonar_project_id"):
+                        save_scorecard_to_leonar(target["leonar_project_id"], name.replace(".html", ".pdf"))
             st.page_link("app_streamlit.py", label="Retour au mandat", icon=":material/arrow_back:",
                          query_params={"mandat": target["id"]})
 
