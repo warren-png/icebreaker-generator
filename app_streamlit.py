@@ -622,7 +622,7 @@ def view_detail(m: dict, files: list[dict]):
         if m.get("leonar_project_id"):
             st.link_button("Ouvrir dans Leonar", leonar.project_url(m["leonar_project_id"]), icon=":material/open_in_new:")
         else:
-            render_leonar_link_popover(m)
+            render_leonar_link_popover(m, files)
         with st.popover("Supprimer", icon=":material/delete:"):
             st.markdown("Supprimer ce mandat et **tous ses fichiers** ?")
             st.caption("Ils iront dans la corbeille du Drive partagé (récupérables 30 jours).")
@@ -674,7 +674,35 @@ def view_detail(m: dict, files: list[dict]):
     render_scorecard_section(m, files)
 
 
-def render_leonar_link_popover(m: dict):
+def push_scorecards_to_leonar(project_id: str, scorecards: list[dict]) -> tuple[int, list[str]]:
+    """Envoie les scorecards (HTML du Drive → PDF) sur le projet Leonar, en remplaçant les versions précédentes."""
+    from utils.pdf_export import html_to_pdf, PdfExportError
+
+    sent, errors = 0, []
+    for f in scorecards:
+        try:
+            pdf = html_to_pdf(fetch_bytes(f["id"]).decode("utf-8", errors="replace"))
+            leonar.replace_project_file(project_id, f["name"].replace(".html", ".pdf"), pdf)
+            sent += 1
+        except (PdfExportError, leonar.LeonarError, StorageError) as e:
+            errors.append(f"{f['name']} : {e}")
+    return sent, errors
+
+
+def link_flash(base: str, project_id: str, files: list[dict]) -> str:
+    """Après liaison : envoie les scorecards existantes et complète le message affiché."""
+    scorecards = [f for f in files if f["kind"] == "scorecard"]
+    if not scorecards:
+        return base
+    with st.spinner("Envoi des scorecards existantes sur Leonar…"):
+        sent, errors = push_scorecards_to_leonar(project_id, scorecards)
+    msg = base + (f" {sent} scorecard(s) envoyée(s) sur Leonar." if sent else "")
+    if errors:
+        msg += " Envoi Leonar impossible pour : " + " ; ".join(errors)
+    return msg
+
+
+def render_leonar_link_popover(m: dict, files: list[dict]):
     """Mandat sans projet Leonar : le créer, ou le lier à un projet existant."""
     with st.popover("Lier à Leonar", icon=":material/link:"):
         owners = m.get("proprietaires") or [m.get("responsable") or RESPONSABLES[0]]
@@ -689,7 +717,7 @@ def render_leonar_link_popover(m: dict):
                 st.error(str(e))
             else:
                 leonar_mandate_projects.clear()
-                refresh_and_rerun("Projet créé dans Leonar et lié au mandat.")
+                refresh_and_rerun(link_flash("Projet créé dans Leonar et lié au mandat.", project["id"], files))
         st.divider()
         st.markdown("**…ou lier un projet Leonar existant**")
         try:
@@ -712,7 +740,7 @@ def render_leonar_link_popover(m: dict):
             except StorageError as e:
                 st.error(str(e))
             else:
-                refresh_and_rerun("Mandat lié au projet Leonar.")
+                refresh_and_rerun(link_flash("Mandat lié au projet Leonar.", p["id"], files))
 
 
 def render_fiche_section(m: dict, files: list[dict]):
@@ -914,6 +942,15 @@ def render_scorecard_section(m: dict, files: list[dict]):
                 help="Fichier HTML : ouvrez-le dans le navigateur pour l'imprimer en PDF, "
                      "ou chargez-le dans Dossier Candidature.",
             )
+            if m.get("leonar_project_id"):
+                if st.button("Envoyer sur Leonar", icon=":material/cloud_upload:", key=f"sc_leonar_{sc['id']}",
+                             help="Joint cette scorecard en PDF au projet Leonar (remplace la version précédente)."):
+                    with st.spinner("Conversion en PDF et envoi sur Leonar…"):
+                        sent, errors = push_scorecards_to_leonar(m["leonar_project_id"], [sc])
+                    if sent:
+                        st.toast("Scorecard jointe au projet Leonar", icon="✅")
+                    for err in errors:
+                        st.error(f"Envoi impossible — {err}")
             with st.popover("", icon=":material/delete:", help="Supprimer cette scorecard"):
                 st.markdown("Supprimer cette scorecard ?")
                 if st.button("Oui, supprimer", type="primary", key=f"del_{sc['id']}"):
