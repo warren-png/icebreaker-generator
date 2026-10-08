@@ -13,6 +13,10 @@ BASE_URL = "https://app.leonar.app/api/v1"
 DASHBOARD_URL = "https://app.leonar.app/dashboard/4c56aa38"
 TIMEOUT = 30
 
+# Pipeline imposée à tout projet créé depuis l'outil : le site internet dépend de ses colonnes.
+PIPELINE_TEMPLATE_ID = "20608b9d-1107-4857-ae70-37a250cbdcbe"  # « Process Bruno »
+PIPELINE_TEMPLATE_NAME = "Process Bruno"
+
 
 class LeonarError(Exception):
     """Erreur Leonar lisible par l'utilisateur."""
@@ -106,13 +110,24 @@ def find_or_create_company(name: str) -> str:
 
 
 def create_project(name: str, company_name: str, owner_first_names: list[str]) -> dict:
-    """Crée le projet Leonar du mandat, rattaché à l'entreprise et à ses propriétaires."""
+    """Crée le projet Leonar du mandat (pipeline « Process Bruno »), rattaché à l'entreprise et à ses propriétaires."""
     ids = members()
     owner_ids = [ids[n] for n in owner_first_names if n in ids]
-    body = {"name": name[:100], "client_company_id": find_or_create_company(company_name)}
+    body = {
+        "name": name[:100],
+        "client_company_id": find_or_create_company(company_name),
+        "template_id": PIPELINE_TEMPLATE_ID,
+    }
     if owner_ids:
         body["owner_ids"] = owner_ids
-    return _request("POST", "/projects", json=body)
+    project = _request("POST", "/projects", json=body)
+    applied = (project or {}).get("template_id") or (_request("GET", f"/projects/{project['id']}") or {}).get("template_id")
+    if applied != PIPELINE_TEMPLATE_ID:
+        raise LeonarError(
+            f"Projet créé dans Leonar mais sans la pipeline « {PIPELINE_TEMPLATE_NAME} » : "
+            f"changez-la à la main dans Leonar ({project_url(project['id'])})."
+        )
+    return project
 
 
 def upload_project_file(project_id: str, filename: str, data: bytes, content_type: str = "application/pdf") -> dict:
