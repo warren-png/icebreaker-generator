@@ -553,238 +553,212 @@ with st.sidebar:
 # UI — PAGE PRINCIPALE
 # ---------------------------------------------------------------------------
 
-st.title("🎯 Générateur de Scorecard")
-st.caption("Remplis les informations, uploade la retranscription → Brief de Mission généré automatiquement")
+@st.cache_data(max_entries=8, show_spinner=False)
+def scorecard_pdf(html: str) -> bytes:
+    from utils.pdf_export import html_to_pdf
+    return html_to_pdf(html)
 
-st.divider()
 
-# Scorecards déjà enregistrées dans les mandats
-try:
-    from utils.mandats_data import list_saved_scorecards
-    saved_scorecards = list_saved_scorecards()
-except Exception:
-    saved_scorecards = []
-if saved_scorecards:
-    with st.expander(
-        f"📂 Rouvrir une scorecard enregistrée ({len(saved_scorecards)})",
-        expanded="scorecard_html" not in st.session_state and not st.session_state.get("scorecard_prefill"),
-    ):
-        st.caption("Consultez, imprimez ou modifiez une scorecard déjà rangée dans un mandat, sans la regénérer.")
-        with st.container(horizontal=True, vertical_alignment="bottom", gap="small"):
-            idx = st.selectbox(
-                "Scorecard", list(range(len(saved_scorecards))),
-                format_func=lambda i: saved_scorecards[i]["label"],
-                index=None, placeholder="Choisir un mandat…", key="scorecard_reopen_choice",
-            )
-            if st.button("Ouvrir", icon=":material/folder_open:", disabled=idx is None, key="scorecard_reopen_btn"):
-                try:
-                    open_saved_scorecard(saved_scorecards[idx])
-                except Exception as e:
-                    st.error(f"Impossible d'ouvrir la scorecard : {e}")
-                else:
-                    st.rerun()
+RESULT_KEYS = ["scorecard_html", "scorecard_raw_html", "scorecard_transcription", "scorecard_client",
+               "scorecard_commercial", "scorecard_saved_id", "scorecard_images", "scorecard_validated_hash"]
 
-# Éléments importés depuis un mandat (rubrique Mandats → « Ouvrir dans Scorecard »)
+st.title("Scorecard")
+
 prefill = st.session_state.get("scorecard_prefill")
-if prefill:
-    with st.container(border=True):
-        with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
-            with st.container():
-                st.markdown(f"**Éléments importés depuis le mandat « {prefill['mandat_nom']} »** — {prefill['client']}")
-                st.caption(" · ".join(prefill["sources"]))
-            if st.button("Retirer", icon=":material/close:"):
+has_result = "scorecard_html" in st.session_state
+
+# ---------------------------------------------------------------------------
+# SAISIE (masquée pendant l'affichage d'une scorecard)
+# ---------------------------------------------------------------------------
+
+if not has_result:
+    # Rouvrir une scorecard déjà validée dans un mandat
+    if not prefill:
+        try:
+            from utils.mandats_data import list_saved_scorecards
+            saved_scorecards = list_saved_scorecards()
+        except Exception:
+            saved_scorecards = []
+        if saved_scorecards:
+            with st.container(horizontal=True, vertical_alignment="bottom", gap="small"):
+                idx = st.selectbox(
+                    "Rouvrir une scorecard validée", list(range(len(saved_scorecards))),
+                    format_func=lambda i: saved_scorecards[i]["label"],
+                    index=None, placeholder="Choisir un mandat…", key="scorecard_reopen_choice",
+                )
+                if st.button("Ouvrir", disabled=idx is None, key="scorecard_reopen_btn"):
+                    try:
+                        open_saved_scorecard(saved_scorecards[idx])
+                    except Exception as e:
+                        st.error(f"Impossible d'ouvrir la scorecard : {e}")
+                    else:
+                        st.rerun()
+            st.caption("…ou créez-en une nouvelle :")
+
+    # Éléments importés depuis un mandat
+    if prefill:
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.markdown(
+                f":material/folder_open: Mandat **{prefill['mandat_nom']}** · {prefill['client']}",
+                width="stretch",
+            )
+            if st.button("Retirer", icon=":material/close:", type="tertiary"):
                 for k in ["scorecard_prefill", "scorecard_client_input", "scorecard_commercial_input", "scorecard_mandat"]:
                     st.session_state.pop(k, None)
                 st.rerun()
-    if "scorecard_client_input" not in st.session_state:
-        st.session_state["scorecard_client_input"] = prefill["client"]
-    if "scorecard_commercial_input" not in st.session_state and prefill["commercial"] in COMMERCIAUX:
-        st.session_state["scorecard_commercial_input"] = prefill["commercial"]
+        if "scorecard_client_input" not in st.session_state:
+            st.session_state["scorecard_client_input"] = prefill["client"]
+        if "scorecard_commercial_input" not in st.session_state and prefill["commercial"] in COMMERCIAUX:
+            st.session_state["scorecard_commercial_input"] = prefill["commercial"]
 
-# Informations client et commercial
-col1, col2 = st.columns([3, 1])
-with col1:
-    client_name = st.text_input(
-        "Nom du client *",
-        placeholder="Ex : TD Williamson, BNP Paribas...",
-        help="Apparaît dans l'en-tête du document",
-        key="scorecard_client_input",
-    )
-with col2:
-    commercial = st.radio("Commercial", list(COMMERCIAUX.keys()), horizontal=False, key="scorecard_commercial_input")
-    if prefill and prefill["commercial"] and prefill["commercial"] not in COMMERCIAUX:
-        st.caption(f"{prefill['commercial']} n'a pas de coordonnées dans la Scorecard : choisissez le commercial du pied de page.")
-
-st.divider()
-
-# Upload retranscription
-uploaded_file = st.file_uploader(
-    "Retranscription de l'appel de qualification"
-    + (" — facultatif : remplace les éléments importés du mandat" if prefill else ""),
-    type=["pdf", "txt", "docx"],
-    help="Formats acceptés : PDF, TXT, DOCX"
-)
-
-if prefill and not uploaded_file:
-    with st.expander("Voir le texte importé du mandat"):
-        st.text(prefill["text"])
-
-if uploaded_file or prefill:
-    transcription_text = extract_text(uploaded_file) if uploaded_file else prefill["text"]
-
-    if transcription_text:
-        char_count = len(transcription_text)
-        st.success(
-            f"✅ Fichier lu — {char_count:,} caractères extraits" if uploaded_file
-            else f"✅ Éléments du mandat prêts — {char_count:,} caractères"
+    with st.container(horizontal=True, vertical_alignment="bottom", gap="medium"):
+        client_name = st.text_input(
+            "Client", placeholder="Ex : TD Williamson", key="scorecard_client_input",
+            help="Apparaît dans l'en-tête du document",
+        )
+        commercial = st.radio(
+            "Commercial", list(COMMERCIAUX.keys()), horizontal=True, key="scorecard_commercial_input", width="content",
         )
 
-        btn_disabled = not client_name.strip()
-        if btn_disabled:
-            st.warning("⚠️ Renseigne le nom du client avant de générer.")
+    if prefill:
+        with st.expander(f"Texte du mandat · {len(prefill['text']):,} caractères".replace(",", " ")):
+            st.text(prefill["text"][:20000])
+            uploaded_file = st.file_uploader("Remplacer par un fichier", type=["pdf", "txt", "docx"])
+    else:
+        uploaded_file = st.file_uploader("Retranscription de l'appel de qualification", type=["pdf", "txt", "docx"])
 
-        if st.button("🚀 Générer la Scorecard", type="primary", disabled=btn_disabled):
-            with st.spinner("Claude analyse la retranscription et génère le Brief de Mission..."):
-                try:
-                    raw_html = generate_scorecard(transcription_text)
-                    final_html = inject_metadata(raw_html, client_name, commercial)
-                    st.session_state.scorecard_html = final_html
-                    st.session_state.scorecard_raw_html = raw_html
-                    st.session_state.scorecard_transcription = transcription_text
-                    st.session_state.scorecard_client = client_name
-                    st.session_state.scorecard_commercial = commercial
-                    st.session_state.pop("scorecard_saved_id", None)
-                    st.session_state.pop("scorecard_images", None)
-                    st.session_state.pop("scorecard_validated_hash", None)
-                    if not prefill:
-                        st.session_state.pop("scorecard_mandat", None)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erreur lors de la génération : {e}")
+    transcription_text = extract_text(uploaded_file) if uploaded_file else (prefill or {}).get("text")
+    if st.button("Générer la scorecard", type="primary", icon=":material/auto_awesome:",
+                 disabled=not (transcription_text and client_name.strip())):
+        with st.spinner("Génération du brief de mission…"):
+            try:
+                raw_html = generate_scorecard(transcription_text)
+                final_html = inject_metadata(raw_html, client_name, commercial)
+                for k in RESULT_KEYS:
+                    st.session_state.pop(k, None)
+                st.session_state.scorecard_html = final_html
+                st.session_state.scorecard_raw_html = raw_html
+                st.session_state.scorecard_transcription = transcription_text
+                st.session_state.scorecard_client = client_name
+                st.session_state.scorecard_commercial = commercial
+                if not prefill:
+                    st.session_state.pop("scorecard_mandat", None)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erreur lors de la génération : {e}")
+    if not client_name.strip() and transcription_text:
+        st.caption("Renseignez le client pour générer.")
 
 # ---------------------------------------------------------------------------
 # RÉSULTAT
 # ---------------------------------------------------------------------------
 
-if "scorecard_html" in st.session_state:
-    st.divider()
+else:
+    import hashlib
 
-    # Boutons d'action
-    col1, col2, col3 = st.columns([2, 2, 6])
-    with col1:
-        st.components.v1.html(
-            get_print_button_html(st.session_state.scorecard_html),
-            height=50
-        )
-    with col2:
-        if st.button("🗑️ Réinitialiser", use_container_width=True):
-            for k in (["scorecard_html", "scorecard_transcription", "scorecard_client", "scorecard_commercial",
-                       "scorecard_saved_id", "scorecard_images", "scorecard_validated_hash"]
-                      + ([] if prefill else ["scorecard_mandat"])):
-                st.session_state.pop(k, None)
-            st.rerun()
     target = st.session_state.get("scorecard_mandat")
+    html_now = st.session_state.scorecard_html
+    current_hash = hashlib.sha1(html_now.encode("utf-8")).hexdigest()
+    validated = st.session_state.get("scorecard_validated_hash") == current_hash
+    saved_id = st.session_state.get("scorecard_saved_id")
+
     if target:
-        import hashlib
-        current_hash = hashlib.sha1(st.session_state.scorecard_html.encode("utf-8")).hexdigest()
-        validated = st.session_state.get("scorecard_validated_hash") == current_hash
-        st.caption(
-            f"📁 Scorecard rattachée au mandat « {target['nom']} ». "
-            "Rien n'est enregistré tant que la version finale n'est pas validée : "
-            "la validation l'enregistre dans le mandat et l'envoie sur Leonar."
-        )
-        notice = st.session_state.pop("scorecard_validation_notice", None)
-        if notice:
-            getattr(st, notice[0])(notice[1])
-        with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
-            saved_id = st.session_state.get("scorecard_saved_id")
+        st.markdown(f":material/folder_open: Mandat **{target['nom']}** · {st.session_state.scorecard_client}")
+
+    notice = st.session_state.pop("scorecard_validation_notice", None)
+    if notice:
+        getattr(st, notice[0])(notice[1])
+
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        if target:
             label = (
                 "Version finale validée" if validated
                 else "Valider la nouvelle version finale" if saved_id
                 else "Valider la version finale"
             )
-            if st.button(label, icon=":material/task_alt:", type="primary", disabled=validated):
-                from mandats_store import StorageError
-                from utils.mandats_data import store as mandats_store, load_snapshot
-                name = f"Scorecard — {st.session_state.scorecard_client}.html".replace("/", "-")
-                data = st.session_state.scorecard_html.encode("utf-8")
-                try:
-                    with st.spinner("Enregistrement de la version finale dans le mandat…"):
-                        if saved_id:
-                            mandats_store().replace_content(saved_id, name, data, "text/html")
-                        else:
-                            f = mandats_store().upload(target["id"], name, data, "text/html", {"ent_kind": "scorecard"})
-                            st.session_state["scorecard_saved_id"] = f["id"]
-                except StorageError as e:
-                    st.error(str(e))
-                else:
-                    st.session_state["scorecard_validated_hash"] = current_hash
-                    load_snapshot.clear()
-                    # Projet Leonar lu à jour (le mandat a pu être lié depuis l'ouverture)
-                    mandat = next((x for x in load_snapshot()["mandats"] if x["id"] == target["id"]), {})
-                    project_id = mandat.get("leonar_project_id") or target.get("leonar_project_id")
-                    if project_id:
-                        err = save_scorecard_to_leonar(project_id, name.replace(".html", ".pdf"))
-                        notice = (
-                            ("success", "Version finale enregistrée dans le mandat et envoyée sur Leonar (PDF).")
-                            if not err else
-                            ("warning", f"Version finale enregistrée dans le mandat, mais pas envoyée sur Leonar : {err}")
-                        )
-                    else:
-                        notice = ("info", "Version finale enregistrée dans le mandat. Ce mandat n'est pas lié à Leonar : "
-                                          "liez-le depuis sa fiche (« Lier à Leonar ») et la scorecard y sera envoyée.")
-                    st.session_state["scorecard_validation_notice"] = notice
-                    st.rerun()
+            validate = st.button(label, icon=":material/task_alt:", type="primary", disabled=validated,
+                                 help="Enregistre dans le mandat et envoie le PDF sur Leonar. Rien n'est enregistré avant.")
+        else:
+            validate = False
+        try:
+            with st.spinner("Préparation du PDF…"):
+                pdf_bytes = scorecard_pdf(html_now)
+            st.download_button(
+                "PDF", data=pdf_bytes, mime="application/pdf", icon=":material/download:",
+                file_name=f"Scorecard — {st.session_state.scorecard_client}.pdf".replace("/", "-"),
+                on_click="ignore", key="scorecard_pdf_dl", type="tertiary" if target else "primary",
+            )
+        except Exception:
+            # Repli : impression depuis le navigateur
+            st.components.v1.html(get_print_button_html(html_now), height=50, width=200)
+        if st.button("Recommencer", icon=":material/restart_alt:", type="tertiary"):
+            for k in RESULT_KEYS:
+                st.session_state.pop(k, None)
+            if not prefill:
+                st.session_state.pop("scorecard_mandat", None)
+            st.rerun()
+        if target:
             st.page_link("app_streamlit.py", label="Retour au mandat", icon=":material/arrow_back:",
                          query_params={"mandat": target["id"]})
 
-    st.caption("💡 Cliquez sur 📄 Télécharger PDF → une fenêtre s'ouvre → Fichier → Imprimer → Enregistrer en PDF.")
+    if validate:
+        from mandats_store import StorageError
+        from utils.mandats_data import store as mandats_store, load_snapshot
+        name = f"Scorecard — {st.session_state.scorecard_client}.html".replace("/", "-")
+        data = html_now.encode("utf-8")
+        try:
+            with st.spinner("Enregistrement de la version finale dans le mandat…"):
+                if saved_id:
+                    mandats_store().replace_content(saved_id, name, data, "text/html")
+                else:
+                    f = mandats_store().upload(target["id"], name, data, "text/html", {"ent_kind": "scorecard"})
+                    st.session_state["scorecard_saved_id"] = f["id"]
+        except StorageError as e:
+            st.error(str(e))
+        else:
+            st.session_state["scorecard_validated_hash"] = current_hash
+            load_snapshot.clear()
+            # Projet Leonar lu à jour (le mandat a pu être lié depuis l'ouverture)
+            mandat = next((x for x in load_snapshot()["mandats"] if x["id"] == target["id"]), {})
+            project_id = mandat.get("leonar_project_id") or target.get("leonar_project_id")
+            if project_id:
+                err = save_scorecard_to_leonar(project_id, name.replace(".html", ".pdf"))
+                notice = (
+                    ("success", "Version finale enregistrée dans le mandat et envoyée sur Leonar.")
+                    if not err else
+                    ("warning", f"Version finale enregistrée dans le mandat, mais pas envoyée sur Leonar : {err}")
+                )
+            else:
+                notice = ("info", "Version finale enregistrée dans le mandat. Liez le mandat à Leonar "
+                                  "depuis sa fiche : la scorecard y sera envoyée.")
+            st.session_state["scorecard_validation_notice"] = notice
+            st.rerun()
 
-    # Aperçu
-    st.subheader("Aperçu")
-    st.components.v1.html(st.session_state.scorecard_html, height=1250, scrolling=True)
+    st.components.v1.html(html_now, height=1150, scrolling=True)
 
-    # Zone modifications
-    st.divider()
-    st.subheader("✏️ Demander des modifications")
-    st.caption("Une information manquante ou incorrecte ? Décris la correction ici.")
-
-    modification = st.text_area(
-        "Modifications souhaitées",
-        placeholder=(
-            "Exemples :\n"
-            "• \"Ajoute un critère sur l'expérience internationale à 15%\"\n"
-            "• \"Le package est 90-100k fixe + 20% variable\"\n"
-            "• \"Le processus a 3 étapes : Entourage, DRH, CEO\"\n"
-            "• \"Modifie le contexte : l'entreprise est en phase de croissance externe\""
-        ),
-        height=130,
-        label_visibility="collapsed"
-    )
-
-    if st.button("🔄 Appliquer les modifications", type="secondary"):
-        if modification.strip():
-            with st.spinner("Application des modifications..."):
+    # Modifications
+    with st.container(border=True):
+        modification = st.text_area(
+            "Demander une modification",
+            placeholder="Ex : « Le package est 90-100 k€ fixe + 20 % variable »",
+            height=80,
+        )
+        if st.button("Appliquer", icon=":material/edit:", disabled=not modification.strip()):
+            with st.spinner("Application des modifications…"):
                 try:
-                    # Sauvegarde de sécurité avant toute modification
-                    backup_raw = st.session_state.scorecard_raw_html
-                    backup_html = st.session_state.scorecard_html
-
                     raw_html = generate_scorecard(
                         st.session_state.scorecard_transcription,
                         modification=modification,
-                        previous_html=backup_raw
+                        previous_html=st.session_state.scorecard_raw_html,
                     )
-
                     # Validation : HTML non vide et structure minimale présente
                     if not raw_html or len(raw_html) < 200 or "</html>" not in raw_html.lower():
-                        st.error("❌ La réponse de Claude est incomplète. Le document original est conservé.")
+                        st.error("La réponse est incomplète : la version actuelle est conservée.")
                         st.stop()
-
                     final_html = inject_metadata(
                         raw_html,
                         st.session_state.scorecard_client,
-                        st.session_state.scorecard_commercial
+                        st.session_state.scorecard_commercial,
                     )
                     final_html = restore_images(final_html, st.session_state.get("scorecard_images", []))
                     st.session_state.scorecard_html = final_html
@@ -792,5 +766,3 @@ if "scorecard_html" in st.session_state:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erreur : {e}")
-        else:
-            st.warning("Décris d'abord les modifications souhaitées.")

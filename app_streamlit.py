@@ -159,20 +159,22 @@ def badges(m: dict) -> str:
         parts.append(f":gray-badge[:material/person: {md(m['responsable'])}]")
     parts.append(f":gray-badge[:material/calendar_today: {fmt_date(m.get('date', ''))}]")
     if m.get("leonar_project_id"):
-        parts.append(":violet-badge[:material/link: Leonar]")
+        owners = ", ".join(m.get("proprietaires") or [])
+        parts.append(f":violet-badge[:material/link: Leonar{' · ' + md(owners) if owners else ''}]")
     return " ".join(parts)
 
 
 def files_summary(files: list[dict]) -> str:
+    """Avancement du mandat : fiche de poste, audios, scorecard."""
     n_fiche = sum(1 for f in files if f["kind"] == "fiche")
     n_audio = sum(1 for f in files if f["kind"] == "audio")
-    n_tr = sum(1 for f in files if f["kind"] == "transcript")
-    bits = [
-        "Fiche de poste ✓" if n_fiche else "Pas de fiche",
-        f"{n_audio} audio{'s' if n_audio > 1 else ''}",
-        f"{n_tr} transcription{'s' if n_tr > 1 else ''}",
-    ]
-    return " · ".join(bits)
+    n_sc = sum(1 for f in files if f["kind"] == "scorecard")
+    ok, ko = ":green[✓]", ":gray[○]"
+    return (
+        f"Fiche {ok if n_fiche else ko} · "
+        f"{n_audio} audio{'s' if n_audio > 1 else ''} · "
+        f"Scorecard {ok if n_sc else ko}"
+    )
 
 
 def sort_key(m: dict):
@@ -530,9 +532,7 @@ def view_list(snap: dict):
     files = snap["files"]
 
     with st.container(horizontal=True, vertical_alignment="bottom"):
-        with st.container():
-            st.title("🗂️ Mandats")
-            st.caption("Fiche de poste, échanges audio et transcriptions de chaque mandat — accessibles à toute l'équipe.")
+        st.title("Mandats", width="stretch")
         if st.button("Nouveau mandat", type="primary", icon=":material/add:"):
             st.session_state["_mandats_creating"] = not st.session_state.get("_mandats_creating", False)
             st.rerun()
@@ -553,7 +553,7 @@ def view_list(snap: dict):
             "Responsable", ["Tous les responsables"] + RESPONSABLES,
             label_visibility="collapsed", key="mandats_resp", width=210,
         )
-        if st.button("Actualiser", icon=":material/refresh:", type="tertiary"):
+        if st.button("", icon=":material/refresh:", type="tertiary", help="Actualiser la liste"):
             refresh_and_rerun()
 
     q = (query or "").strip().lower()
@@ -573,12 +573,6 @@ def view_list(snap: dict):
         )
         return
 
-    st.caption(
-        f"{len(shown)} mandat{'s' if len(shown) > 1 else ''}"
-        + (f" sur {len(mandats)}" if len(shown) != len(mandats) else "")
-        + " · du plus récent au plus ancien"
-    )
-
     if not shown:
         st.markdown(
             '<div class="mandat-empty"><b>Aucun résultat</b>Modifiez la recherche ou les filtres.</div>',
@@ -588,10 +582,9 @@ def view_list(snap: dict):
 
     for m in shown:
         with st.container(border=True, horizontal=True, vertical_alignment="center", gap="medium"):
-            with st.container(gap="small"):
-                st.markdown(f"**{md(m.get('nom', ''))}** &nbsp;·&nbsp; :material/apartment: {md(m.get('entreprise', ''))}")
-                st.markdown(badges(m))
-                st.caption(files_summary(files.get(m["id"], [])))
+            with st.container(gap=None):
+                st.markdown(f"**{md(m.get('nom', ''))}** &nbsp;·&nbsp; {md(m.get('entreprise', ''))}")
+                st.markdown(badges(m) + " &nbsp; " + files_summary(files.get(m["id"], [])))
             if st.button("Ouvrir", key=f"open_{m['id']}", icon=":material/arrow_forward:", icon_position="right"):
                 st.query_params["mandat"] = m["id"]
                 st.rerun()
@@ -603,29 +596,28 @@ def view_list(snap: dict):
 
 
 def view_detail(m: dict, files: list[dict]):
-    if st.button("Tous les mandats", type="tertiary", icon=":material/arrow_back:"):
+    if st.button("Mandats", type="tertiary", icon=":material/arrow_back:"):
         del st.query_params["mandat"]
         st.session_state.pop("_mandats_editing", None)
         st.rerun()
 
     st.title(m.get("nom", ""))
-    st.markdown(f"#### :material/apartment: {md(m.get('entreprise', ''))}")
-    st.markdown(badges(m))
-
-    with st.container(horizontal=True, gap="small"):
-        if st.button("Modifier", icon=":material/edit:"):
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.markdown(f"**{md(m.get('entreprise', ''))}** &nbsp; {badges(m)}", width="stretch")
+        if st.button("Modifier", icon=":material/edit:", type="tertiary"):
             st.session_state["_mandats_editing"] = not st.session_state.get("_mandats_editing", False)
             st.rerun()
         link = store().folder_link(m["id"])
         if link:
-            st.link_button("Ouvrir dans Drive", link, icon=":material/folder_open:")
+            st.link_button("Drive", link, icon=":material/folder_open:", type="tertiary")
         if m.get("leonar_project_id"):
-            st.link_button("Ouvrir dans Leonar", leonar.project_url(m["leonar_project_id"]), icon=":material/open_in_new:")
+            st.link_button("Leonar", leonar.project_url(m["leonar_project_id"]),
+                           icon=":material/open_in_new:", type="tertiary")
         else:
             render_leonar_link_popover(m, files)
-        with st.popover("Supprimer", icon=":material/delete:"):
+        with st.popover("", icon=":material/delete:", help="Supprimer le mandat", type="tertiary"):
             st.markdown("Supprimer ce mandat et **tous ses fichiers** ?")
-            st.caption("Ils iront dans la corbeille du Drive partagé (récupérables 30 jours).")
+            st.caption("Corbeille du Drive partagé, récupérables 30 jours.")
             if st.button("Oui, supprimer", type="primary", key="del_mandat"):
                 try:
                     store().trash(m["id"])
@@ -657,18 +649,9 @@ def view_detail(m: dict, files: list[dict]):
                         st.session_state["_mandats_editing"] = False
                         refresh_and_rerun("Mandat mis à jour.")
 
-    if m.get("proprietaires"):
-        st.caption(f"Propriétaires du projet Leonar : {', '.join(m['proprietaires'])}")
     if m.get("notes"):
-        with st.container(border=True):
-            st.markdown("**:material/sticky_note_2: Notes**")
-            st.markdown(md(m["notes"]).replace("\n", "  \n"))
-    st.caption(
-        f"Créé le {fmt_datetime(m.get('created_at', ''))}"
-        + (f" · modifié le {fmt_datetime(m['updated_at'])}" if m.get("updated_at") else "")
-    )
+        st.caption(md(m["notes"]).replace("\n", "  \n"))
 
-    st.divider()
     render_fiche_section(m, files)
     render_audio_section(m, files)
     render_scorecard_section(m, files)
@@ -704,7 +687,7 @@ def link_flash(base: str, project_id: str, files: list[dict]) -> str:
 
 def render_leonar_link_popover(m: dict, files: list[dict]):
     """Mandat sans projet Leonar : le créer, ou le lier à un projet existant."""
-    with st.popover("Lier à Leonar", icon=":material/link:"):
+    with st.popover("Lier à Leonar", icon=":material/link:", type="tertiary"):
         owners = m.get("proprietaires") or [m.get("responsable") or RESPONSABLES[0]]
         st.markdown("**Créer le projet dans Leonar**")
         st.caption(f"« {m.get('nom', '')} », client {m.get('entreprise', '')}, propriétaires : {', '.join(owners)}.")
@@ -743,28 +726,52 @@ def render_leonar_link_popover(m: dict, files: list[dict]):
                 refresh_and_rerun(link_flash("Mandat lié au projet Leonar.", p["id"], files))
 
 
+def fiche_form(m: dict, files: list[dict]):
+    with st.form(f"fiche_{m['id']}", border=False, clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        up = c1.file_uploader("Fichier PDF ou Word", type=FICHE_TYPES)
+        txt = c2.text_area("ou texte de l'annonce", height=96, placeholder="Collez le texte de l'annonce…")
+        if st.form_submit_button("Enregistrer la fiche", type="primary"):
+            if up is None and not txt.strip():
+                st.error("Ajoutez un fichier ou collez un texte.")
+            else:
+                try:
+                    with st.spinner("Envoi sur le Drive…"):
+                        save_fiche(m["id"], files, up, txt)
+                except StorageError as e:
+                    st.error(str(e))
+                else:
+                    refresh_and_rerun("Fiche de poste enregistrée.")
+
+
 def render_fiche_section(m: dict, files: list[dict]):
-    st.subheader("Fiche de poste")
-    fiches = [f for f in files if f["kind"] == "fiche"]
+    fiches = sorted([f for f in files if f["kind"] == "fiche"], key=lambda f: f["props"].get("format", ""))
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.subheader("1 · Fiche de poste", width="stretch")
+        if fiches:
+            with st.popover("Remplacer", icon=":material/upload_file:", type="tertiary"):
+                fiche_form(m, files)
     if not fiches:
-        st.caption("Aucune fiche de poste pour l'instant.")
-    for f in sorted(fiches, key=lambda f: f["props"].get("format", "")):
+        with st.container(border=True):
+            fiche_form(m, files)
+        return
+    for f in fiches:
         is_text = f["props"].get("format") == "text"
         with st.container(border=True):
             with st.container(horizontal=True, vertical_alignment="center", gap="small"):
                 st.markdown(
-                    f":material/{'notes' if is_text else 'description'}: **{md(strip_prefix(f['name']))}**"
+                    f":material/{'notes' if is_text else 'description'}: {md(strip_prefix(f['name']))}"
                     f" &nbsp; :gray[{fmt_size(f['size'])}]",
                     width="stretch",
                 )
                 st.download_button(
-                    "Télécharger", data=lambda fid=f["id"]: store().download(fid),
+                    "", data=lambda fid=f["id"]: store().download(fid),
                     file_name=strip_prefix(f["name"]) if not is_text else "Fiche de poste.txt",
                     mime=f["mime"], on_click="ignore", icon=":material/download:", key=f"dl_{f['id']}",
+                    help="Télécharger", type="tertiary",
                 )
-                with st.popover("", icon=":material/delete:", help="Supprimer cette fiche"):
-                    st.markdown("Supprimer cette fiche de poste ?")
-                    if st.button("Oui, supprimer", type="primary", key=f"del_{f['id']}"):
+                with st.popover("", icon=":material/delete:", help="Supprimer cette fiche", type="tertiary"):
+                    if st.button("Supprimer la fiche", type="primary", key=f"del_{f['id']}"):
                         delete_file(f["id"], "Fiche de poste supprimée.")
             if is_text:
                 with st.expander("Lire la fiche"):
@@ -773,76 +780,78 @@ def render_fiche_section(m: dict, files: list[dict]):
                     except StorageError as e:
                         st.error(str(e))
 
-    with st.expander("Ajouter ou remplacer la fiche de poste", icon=":material/upload_file:", expanded=not fiches):
-        with st.form(f"fiche_{m['id']}", border=False, clear_on_submit=True):
-            up = st.file_uploader("Fichier (PDF ou Word)", type=FICHE_TYPES)
-            txt = st.text_area("…ou texte de l'annonce copié-collé", height=140)
-            st.caption("Un nouveau fichier remplace l'ancien fichier ; un nouveau texte remplace l'ancien texte.")
-            if st.form_submit_button("Enregistrer la fiche", type="primary"):
-                if up is None and not txt.strip():
-                    st.error("Ajoutez un fichier ou collez un texte.")
+
+def audio_form(m: dict):
+    with st.form(f"audio_{m['id']}", border=False, clear_on_submit=True):
+        up = st.file_uploader("Enregistrement audio", type=AUDIO_TYPES)
+        label = st.text_input("Intitulé (facultatif)", placeholder="Ex : Échange manager, Échange RH…")
+        if st.form_submit_button("Ajouter et transcrire", type="primary", icon=":material/upload:"):
+            if up is None:
+                st.error("Choisissez un fichier audio.")
+            else:
+                try:
+                    ok = add_audio(m, up, label)
+                except StorageError as e:
+                    st.error(str(e))
                 else:
-                    try:
-                        with st.spinner("Envoi sur le Drive…"):
-                            save_fiche(m["id"], files, up, txt)
-                    except StorageError as e:
-                        st.error(str(e))
-                    else:
-                        refresh_and_rerun("Fiche de poste enregistrée.")
+                    refresh_and_rerun("Audio ajouté et transcrit." if ok else "Audio ajouté — transcription à relancer.")
 
 
 def render_audio_section(m: dict, files: list[dict]):
-    st.subheader("Échanges audio")
     audios = sorted([f for f in files if f["kind"] == "audio"], key=lambda f: f["created"])
     transcripts = {f["props"].get("audio_id"): f for f in files if f["kind"] == "transcript"}
     orphans = [t for aid, t in transcripts.items() if aid not in {a["id"] for a in audios}]
 
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.subheader("2 · Échanges audio", width="stretch")
+        if audios or orphans:
+            with st.popover("Ajouter", icon=":material/add:", type="tertiary"):
+                audio_form(m)
     if not audios and not orphans:
-        st.caption("Aucun échange audio pour l'instant.")
+        with st.container(border=True):
+            audio_form(m)
+        return
 
     for a in audios:
         tr = transcripts.get(a["id"])
+        play_key = f"play_{a['id']}"
         with st.container(border=True):
-            status_badge = (
-                ":green-badge[:material/check: Transcrit]" if tr
-                else ":orange-badge[:material/schedule: Pas encore transcrit]"
-            )
-            st.markdown(f":material/graphic_eq: **{md(audio_display_name(a))}** &nbsp; {status_badge}")
-            st.caption(
-                f"{strip_prefix(a['name'])} · {fmt_size(a['size'])} · ajouté le {fmt_datetime(a['created'])}"
-            )
-
-            play_key = f"play_{a['id']}"
-            with st.container(horizontal=True, gap="small"):
-                if st.button("Écouter", icon=":material/play_arrow:", key=f"btn_{play_key}"):
-                    st.session_state[play_key] = not st.session_state.get(play_key, False)
-                st.download_button(
-                    "Audio", data=lambda fid=a["id"]: store().download(fid),
-                    file_name=strip_prefix(a["name"]), mime=a["mime"], on_click="ignore",
-                    icon=":material/download:", key=f"dl_{a['id']}", help="Télécharger l'audio",
+            with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+                st.markdown(
+                    f":material/graphic_eq: **{md(audio_display_name(a))}** &nbsp; "
+                    f":gray[{fmt_size(a['size'])} · {fmt_date(a['created'][:10])}]",
+                    width="stretch",
                 )
-                if tr:
+                if st.button("", icon=":material/play_arrow:", key=f"btn_{play_key}", type="tertiary",
+                             help="Écouter"):
+                    st.session_state[play_key] = not st.session_state.get(play_key, False)
+                with st.popover("", icon=":material/download:", help="Télécharger", type="tertiary"):
                     st.download_button(
-                        "Transcription .txt", data=lambda fid=tr["id"]: store().download(fid),
-                        file_name=strip_prefix(tr["name"]), mime="text/plain", on_click="ignore",
-                        icon=":material/download:", key=f"dl_{tr['id']}",
+                        "Audio", data=lambda fid=a["id"]: store().download(fid),
+                        file_name=strip_prefix(a["name"]), mime=a["mime"], on_click="ignore",
+                        key=f"dl_{a['id']}", width="stretch",
                     )
-                    st.download_button(
-                        "Transcription Word",
-                        data=lambda fid=tr["id"], t=audio_display_name(a): transcript_to_docx(
-                            store().download(fid).decode("utf-8", errors="replace"),
-                            f"Transcription — {t}",
-                        ),
-                        file_name=os.path.splitext(strip_prefix(tr["name"]))[0] + ".docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        on_click="ignore", icon=":material/download:", key=f"docx_{tr['id']}",
-                    )
-                else:
-                    if st.button("Transcrire", type="primary", icon=":material/transcribe:", key=f"tr_{a['id']}"):
-                        st.session_state[f"do_tr_{a['id']}"] = True
-                with st.popover("", icon=":material/delete:", help="Supprimer cet audio"):
-                    st.markdown("Supprimer cet audio **et sa transcription** ?")
-                    if st.button("Oui, supprimer", type="primary", key=f"del_{a['id']}"):
+                    if tr:
+                        st.download_button(
+                            "Transcription (Word)",
+                            data=lambda fid=tr["id"], t=audio_display_name(a): transcript_to_docx(
+                                store().download(fid).decode("utf-8", errors="replace"),
+                                f"Transcription — {t}",
+                            ),
+                            file_name=os.path.splitext(strip_prefix(tr["name"]))[0] + ".docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            on_click="ignore", key=f"docx_{tr['id']}", width="stretch",
+                        )
+                        st.download_button(
+                            "Transcription (.txt)", data=lambda fid=tr["id"]: store().download(fid),
+                            file_name=strip_prefix(tr["name"]), mime="text/plain", on_click="ignore",
+                            key=f"dl_{tr['id']}", width="stretch",
+                        )
+                if not tr and st.button("Transcrire", type="primary", icon=":material/transcribe:",
+                                        key=f"tr_{a['id']}"):
+                    st.session_state[f"do_tr_{a['id']}"] = True
+                with st.popover("", icon=":material/delete:", help="Supprimer", type="tertiary"):
+                    if st.button("Supprimer l'audio et sa transcription", type="primary", key=f"del_{a['id']}"):
                         try:
                             if tr:
                                 store().trash(tr["id"])
@@ -870,7 +879,7 @@ def render_audio_section(m: dict, files: list[dict]):
                     st.error(str(e))
 
             if tr:
-                with st.expander("Lire la transcription", icon=":material/article:"):
+                with st.expander("Lire la transcription"):
                     try:
                         text = fetch_bytes(tr["id"]).decode("utf-8", errors="replace")
                     except StorageError as e:
@@ -879,34 +888,18 @@ def render_audio_section(m: dict, files: list[dict]):
                         long_text = text.count("\n") > 20
                         with st.container(height=460 if long_text else "content", border=False):
                             render_transcript(text)
+            else:
+                st.caption(":orange[Pas encore transcrit]")
 
     for t in orphans:
         with st.container(border=True, horizontal=True, vertical_alignment="center"):
-            st.markdown(
-                f":material/article: **{md(strip_prefix(t['name']))}** &nbsp; :gray[audio supprimé]",
-                width="stretch",
-            )
+            st.markdown(f":material/article: {md(strip_prefix(t['name']))} &nbsp; :gray[audio supprimé]",
+                        width="stretch")
             st.download_button(
-                "Transcription .txt", data=lambda fid=t["id"]: store().download(fid),
+                "", data=lambda fid=t["id"]: store().download(fid),
                 file_name=strip_prefix(t["name"]), mime="text/plain", on_click="ignore",
-                icon=":material/download:", key=f"dl_{t['id']}",
+                icon=":material/download:", key=f"dl_{t['id']}", help="Télécharger", type="tertiary",
             )
-
-    with st.expander("Ajouter un échange audio", icon=":material/mic:", expanded=not audios):
-        with st.form(f"audio_{m['id']}", border=False, clear_on_submit=True):
-            up = st.file_uploader("Enregistrement audio", type=AUDIO_TYPES)
-            label = st.text_input("Intitulé (facultatif)", placeholder="Ex : Échange avec le manager, Échange RH…")
-            st.caption("L'audio est enregistré sur le Drive puis transcrit intégralement (locuteurs + horodatage).")
-            if st.form_submit_button("Ajouter et transcrire", type="primary", icon=":material/upload:"):
-                if up is None:
-                    st.error("Choisissez un fichier audio.")
-                else:
-                    try:
-                        ok = add_audio(m, up, label)
-                    except StorageError as e:
-                        st.error(str(e))
-                    else:
-                        refresh_and_rerun("Audio ajouté et transcrit." if ok else "Audio ajouté — transcription à relancer.")
 
 
 def fiche_text_for_scorecard(f: dict) -> str:
@@ -926,79 +919,83 @@ def fiche_text_for_scorecard(f: dict) -> str:
 
 
 def render_scorecard_section(m: dict, files: list[dict]):
-    st.subheader("Scorecard")
     scorecards = sorted([f for f in files if f["kind"] == "scorecard"], key=lambda f: f["created"], reverse=True)
-    for sc in scorecards:
-        with st.container(border=True, horizontal=True, vertical_alignment="center", gap="small"):
-            st.markdown(
-                f":material/assignment: **{md(strip_prefix(sc['name']))}** &nbsp; "
-                f":gray[enregistrée le {fmt_datetime(sc['created'])}]",
-                width="stretch",
-            )
-            st.download_button(
-                "Télécharger", data=lambda fid=sc["id"]: store().download(fid),
-                file_name=sc["name"], mime="text/html", on_click="ignore",
-                icon=":material/download:", key=f"dl_{sc['id']}",
-                help="Fichier HTML : ouvrez-le dans le navigateur pour l'imprimer en PDF, "
-                     "ou chargez-le dans Dossier Candidature.",
-            )
-            with st.popover("", icon=":material/delete:", help="Supprimer cette scorecard"):
-                st.markdown("Supprimer cette scorecard ?")
-                if st.button("Oui, supprimer", type="primary", key=f"del_{sc['id']}"):
-                    delete_file(sc["id"], "Scorecard supprimée.")
-
     transcripts = sorted([f for f in files if f["kind"] == "transcript"], key=lambda f: f["created"])
     fiches = [f for f in files if f["kind"] == "fiche" and not f["name"].lower().endswith(".doc")]
     sources = {f"Transcription — {f['props'].get('label') or strip_prefix(f['name'])}": f for f in transcripts}
     sources.update({f"Fiche de poste — {strip_prefix(f['name'])}": f for f in fiches})
 
-    with st.container(border=True):
-        if not sources:
-            st.caption("Ajoutez une fiche de poste ou un échange audio transcrit pour générer la scorecard.")
-            return
-        st.markdown("**Générer la scorecard de ce mandat**")
-        st.caption(
-            "Ouvre la rubrique Scorecard avec l'entreprise, le responsable et les éléments "
-            "ci-dessous déjà chargés. Une fois la version finale validée, elle est enregistrée "
-            "dans ce mandat et envoyée sur Leonar."
-        )
-        chosen = st.multiselect(
-            "Éléments à utiliser", list(sources), default=list(sources), key=f"sc_src_{m['id']}",
-        )
-        if st.button("Ouvrir dans Scorecard", type="primary", icon=":material/arrow_outward:",
-                     disabled=not chosen, key=f"sc_go_{m['id']}"):
-            parts = []
-            try:
-                with st.spinner("Préparation des éléments…"):
-                    for label in chosen:
-                        f = sources[label]
-                        text = (
-                            fetch_bytes(f["id"]).decode("utf-8", errors="replace")
-                            if f["kind"] == "transcript" else fiche_text_for_scorecard(f)
-                        )
-                        if text.strip():
-                            parts.append(f"══════ {label.upper()} ══════\n\n{text.strip()}")
-            except Exception as e:
-                st.error(f"Impossible de lire les éléments : {e}")
-                return
-            if not parts:
-                st.error("Les éléments choisis ne contiennent pas de texte exploitable.")
-                return
-            st.session_state["scorecard_mandat"] = {
-                "id": m["id"], "nom": m.get("nom", ""), "leonar_project_id": m.get("leonar_project_id"),
-            }
-            st.session_state["scorecard_prefill"] = {
-                "mandat_id": m["id"],
-                "mandat_nom": m.get("nom", ""),
-                "client": m.get("entreprise", ""),
-                "commercial": m.get("responsable", ""),
-                "text": "\n\n".join(parts),
-                "sources": chosen,
-            }
-            for k in ["scorecard_html", "scorecard_raw_html", "scorecard_transcription",
-                      "scorecard_client", "scorecard_commercial", "scorecard_saved_id", "scorecard_client_input"]:
-                st.session_state.pop(k, None)
-            st.switch_page("pages/2_Scorecard.py")
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.subheader("3 · Scorecard", width="stretch")
+        if sources:
+            with st.popover("", icon=":material/tune:", help="Éléments utilisés pour la scorecard", type="tertiary"):
+                chosen = st.multiselect(
+                    "Éléments utilisés", list(sources), default=list(sources), key=f"sc_src_{m['id']}",
+                )
+            go = st.button(
+                "Nouvelle scorecard" if scorecards else "Générer la scorecard",
+                type="secondary" if scorecards else "primary",
+                icon=":material/arrow_outward:", disabled=not chosen, key=f"sc_go_{m['id']}",
+            )
+        else:
+            chosen, go = [], False
+
+    for sc in scorecards:
+        with st.container(border=True, horizontal=True, vertical_alignment="center", gap="small"):
+            st.markdown(
+                f":material/task_alt: {md(strip_prefix(sc['name']))} &nbsp; "
+                f":gray[version finale · {fmt_date(sc['created'][:10])}]",
+                width="stretch",
+            )
+            st.download_button(
+                "", data=lambda fid=sc["id"]: store().download(fid),
+                file_name=sc["name"], mime="text/html", on_click="ignore",
+                icon=":material/download:", key=f"dl_{sc['id']}", type="tertiary",
+                help="Télécharger (HTML, utilisable dans Dossier Candidature)",
+            )
+            with st.popover("", icon=":material/delete:", help="Supprimer", type="tertiary"):
+                if st.button("Supprimer la scorecard", type="primary", key=f"del_{sc['id']}"):
+                    delete_file(sc["id"], "Scorecard supprimée.")
+
+    if not sources:
+        st.caption("Ajoutez une fiche de poste ou un audio transcrit pour générer la scorecard.")
+        return
+    if not go:
+        return
+
+    parts = []
+    try:
+        with st.spinner("Préparation des éléments…"):
+            for label in chosen:
+                f = sources[label]
+                text = (
+                    fetch_bytes(f["id"]).decode("utf-8", errors="replace")
+                    if f["kind"] == "transcript" else fiche_text_for_scorecard(f)
+                )
+                if text.strip():
+                    parts.append(f"══════ {label.upper()} ══════\n\n{text.strip()}")
+    except Exception as e:
+        st.error(f"Impossible de lire les éléments : {e}")
+        return
+    if not parts:
+        st.error("Les éléments choisis ne contiennent pas de texte exploitable.")
+        return
+    st.session_state["scorecard_mandat"] = {
+        "id": m["id"], "nom": m.get("nom", ""), "leonar_project_id": m.get("leonar_project_id"),
+    }
+    st.session_state["scorecard_prefill"] = {
+        "mandat_id": m["id"],
+        "mandat_nom": m.get("nom", ""),
+        "client": m.get("entreprise", ""),
+        "commercial": m.get("responsable", ""),
+        "text": "\n\n".join(parts),
+        "sources": chosen,
+    }
+    for k in ["scorecard_html", "scorecard_raw_html", "scorecard_transcription", "scorecard_client",
+              "scorecard_commercial", "scorecard_saved_id", "scorecard_client_input",
+              "scorecard_images", "scorecard_validated_hash"]:
+        st.session_state.pop(k, None)
+    st.switch_page("pages/2_Scorecard.py")
 
 
 def delete_file(file_id: str, flash: str):

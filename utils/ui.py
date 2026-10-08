@@ -55,12 +55,16 @@ _GLOBAL_CSS = """
 
     .block-container,
     [data-testid="stMainBlockContainer"] {
-        padding-top: 2.6rem !important;
-        padding-bottom: 5rem !important;
-        max-width: 1200px !important;
+        padding-top: 1.6rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 1100px !important;
     }
 
     ::selection { background: rgba(255, 215, 0, 0.35); }
+
+    /* Espacement vertical plus serré entre les éléments */
+    [data-testid="stMain"] [data-testid="stVerticalBlock"] { gap: 0.7rem; }
+    [data-testid="stMain"] [data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] { gap: 0.5rem; }
 
     /* ========================================
        TITRES
@@ -85,8 +89,8 @@ _GLOBAL_CSS = """
     [data-testid="stMain"] h3 {
         letter-spacing: -0.015em !important;
         color: var(--ent-black) !important;
-        padding-top: 0.9rem !important;
-        padding-bottom: 0.35rem !important;
+        padding-top: 0.6rem !important;
+        padding-bottom: 0.2rem !important;
     }
 
     [data-testid="stMain"] h4,
@@ -122,7 +126,7 @@ _GLOBAL_CSS = """
        DIVIDERS
        ======================================== */
     [data-testid="stMain"] hr {
-        margin: 1.75rem 0 !important;
+        margin: 1rem 0 !important;
         border: none !important;
         height: 1px !important;
         background: var(--ent-border) !important;
@@ -138,8 +142,8 @@ _GLOBAL_CSS = """
         font-weight: 700 !important;
         font-size: 0.9rem !important;
         letter-spacing: 0.005em;
-        min-height: 2.6rem;
-        padding: 0.5rem 1.15rem !important;
+        min-height: 2.35rem;
+        padding: 0.4rem 1rem !important;
         transition: background .18s var(--ent-ease), border-color .18s var(--ent-ease),
                     box-shadow .18s var(--ent-ease), transform .18s var(--ent-ease),
                     color .18s var(--ent-ease) !important;
@@ -183,6 +187,27 @@ _GLOBAL_CSS = """
         color: var(--ent-black) !important;
         box-shadow: var(--ent-shadow-md);
         transform: translateY(-1px);
+    }
+
+    /* Tertiaire — discret (actions secondaires, boutons icône) */
+    .stButton > button[kind="tertiary"],
+    .stDownloadButton > button[kind="tertiary"],
+    [data-testid="stPopover"] button[kind="tertiary"],
+    .stLinkButton > a[kind="tertiary"] {
+        background: transparent !important;
+        color: #3F3F46 !important;
+        border: none !important;
+        box-shadow: none !important;
+        min-height: 2.1rem;
+        padding: 0.3rem 0.6rem !important;
+    }
+    .stButton > button[kind="tertiary"]:hover,
+    .stDownloadButton > button[kind="tertiary"]:hover,
+    [data-testid="stPopover"] button[kind="tertiary"]:hover,
+    .stLinkButton > a[kind="tertiary"]:hover {
+        background: rgba(0, 0, 0, 0.05) !important;
+        color: var(--ent-black) !important;
+        transform: none;
     }
 
     .stButton > button:focus-visible,
@@ -274,8 +299,8 @@ _GLOBAL_CSS = """
     }
     [data-testid="stExpander"] summary {
         font-weight: 700 !important;
-        padding-top: 0.85rem !important;
-        padding-bottom: 0.85rem !important;
+        padding-top: 0.6rem !important;
+        padding-bottom: 0.6rem !important;
     }
     [data-testid="stExpander"] summary p { font-weight: 700 !important; }
     [data-testid="stExpander"] details[open] > summary {

@@ -771,6 +771,12 @@ def check_scores_match(html: str, criteria_scores: list[dict]) -> list[str]:
     return []
 
 
+@st.cache_data(max_entries=6, show_spinner=False)
+def dossier_pdf(html: str) -> bytes:
+    from utils.pdf_export import html_to_pdf
+    return html_to_pdf(html)
+
+
 def finalize_dossier(pages12_html: str, logo_b64: str, linkedin_url: str, pdf_bytes: bytes) -> str:
     """Pages 1+2 (placeholders intacts) → dossier complet prêt à télécharger."""
     html = inject_logo_and_linkedin(pages12_html, logo_b64, linkedin_url)
@@ -792,8 +798,7 @@ PRINT_BUTTON_HTML = """
 # ============================================================
 # PAGE
 # ============================================================
-st.title("📄 Générateur de Dossier de Candidature")
-st.caption("Crée un dossier Entourage à partir du CV PDF + Score Card + tes observations d'entretien.")
+st.title("Dossier de candidature")
 
 if not claude_api_key:
     st.error("❌ Clé API Claude manquante (ANTHROPIC_API_KEY ou CLAUDE_API_KEY)")
@@ -811,42 +816,35 @@ if not st.session_state.get("dossier_logo_b64"):
     if _default_logo:
         st.session_state["dossier_logo_b64"] = _default_logo
 
-with st.expander(
-    "🖼 Logo Entourage" + (" ✓" if st.session_state.get("dossier_logo_b64") else " — à uploader une fois"),
-    expanded=not st.session_state.get("dossier_logo_b64"),
-):
+with st.sidebar.expander("Remplacer le logo", expanded=not st.session_state.get("dossier_logo_b64")):
     logo_file = st.file_uploader(
         "Logo Entourage Recrutement (.png / .jpg)",
         type=["png", "jpg", "jpeg"],
         key="dossier_logo_upload",
+        label_visibility="collapsed",
     )
     if logo_file:
         st.session_state["dossier_logo_b64"] = base64.b64encode(logo_file.read()).decode()
-        st.success("Logo chargé et conservé pour la session ✓")
-    elif st.session_state.get("dossier_logo_b64"):
-        st.info("Logo déjà chargé en session ✓")
-
-st.divider()
+        st.success("Logo chargé ✓")
 
 # --- FICHIERS + INFOS ---
 col_left, col_right = st.columns(2)
 
 with col_left:
-    cv_file = st.file_uploader("📎 CV du candidat (PDF)", type=["pdf"], key="dossier_cv")
+    cv_file = st.file_uploader("CV du candidat (PDF)", type=["pdf"], key="dossier_cv")
     linkedin_url = st.text_input(
-        "🔗 LinkedIn du candidat",
+        "LinkedIn du candidat",
         placeholder="https://www.linkedin.com/in/prenom-nom/",
         key="dossier_linkedin",
     )
     commercial = st.radio(
-        "👤 Responsable de chasse",
+        "Responsable de chasse",
         ["Warren", "Helder"],
         horizontal=True,
         key="dossier_commercial",
     )
 
 with col_right:
-    st.markdown("**📊 Score Card du poste**")
 
     # Scorecards enregistrées dans les mandats (rubrique Mandats / Scorecard)
     try:
@@ -857,21 +855,24 @@ with col_right:
     saved_idx = None
     if saved_scorecards:
         saved_idx = st.selectbox(
-            "Scorecard d'un mandat",
+            "Score card du poste",
             list(range(len(saved_scorecards))),
             format_func=lambda i: saved_scorecards[i]["label"],
             index=None,
             placeholder="Choisir un mandat…",
             key="dossier_scorecard_saved",
         )
-        st.caption("…ou chargez le fichier de la score card (anciens mandats) :")
+        with st.expander("Ancien mandat : charger un fichier"):
+            scorecard_file = st.file_uploader(
+                "Score card (.html ou .pdf)", type=["html", "htm", "pdf"],
+                key="dossier_scorecard", label_visibility="collapsed",
+            )
     else:
-        st.caption("Upload la score card HTML générée par l'outil Entourage. Les critères seront extraits automatiquement.")
-    scorecard_file = st.file_uploader(
-        "Score Card (.html ou .pdf)",
-        type=["html", "htm", "pdf"],
-        key="dossier_scorecard",
-    )
+        scorecard_file = st.file_uploader(
+            "Score card du poste (.html ou .pdf)",
+            type=["html", "htm", "pdf"],
+            key="dossier_scorecard",
+        )
 
     # Le fichier chargé est prioritaire ; sinon, la scorecard choisie dans la liste
     sc_source = None
@@ -909,7 +910,7 @@ with col_right:
                     st.error(f"Erreur extraction critères : {e}")
         else:
             n = len(st.session_state.get("dossier_criteria", []))
-            st.success(f"{sc_source['name']} ✓ — {n} critères extraits")
+            st.caption(f":green[✓] {n} critères extraits de la score card")
 
 st.divider()
 
@@ -917,7 +918,7 @@ st.divider()
 criteria = st.session_state.get("dossier_criteria", [])
 
 if not criteria:
-    st.info("⬆️ Choisis ou charge la Score Card pour accéder au formulaire d'évaluation.")
+    st.caption("Choisis la score card du poste pour accéder à l'évaluation.")
     st.stop()
 
 st.subheader("📝 Brief & Évaluation")
@@ -1098,25 +1099,9 @@ if st.session_state.get("dossier_html"):
         for problem in notice.get("problems", []):
             st.warning(f"⚠️ {problem}")
 
-    st.info(
-        "**Comment obtenir le PDF :**  \n"
-        "1. Télécharge le fichier HTML ci-dessous  \n"
-        "2. Ouvre-le dans **Chrome**  \n"
-        "3. Clique le bouton **🖨️ Enregistrer en PDF** en haut à droite de la page  \n"
-        "4. Dans la boîte de dialogue : format A4, sans marges → Enregistrer"
-    )
-
     version_suffix = f"_v{version}" if version > 1 else ""
-    st.download_button(
-        label=f"⬇️ Télécharger le Dossier (v{version}) (.html → PDF via Chrome)",
-        data=html_content,
-        file_name=f"dossier_{candidate_name}{version_suffix}.html",
-        mime="text/html",
-        type="primary",
-        key="dossier_download_html",
-    )
 
-    # --- PDF direct + validation de la version finale (envoi sur la fiche Leonar) ---
+    # --- Validation de la version finale (envoi sur la fiche Leonar) + PDF ---
     import hashlib
     from utils.pdf_export import html_to_pdf, PdfExportError
     from utils import leonar
@@ -1130,29 +1115,34 @@ if st.session_state.get("dossier_html"):
     if notice_final:
         getattr(st, notice_final[0])(notice_final[1])
 
-    with st.container(horizontal=True, gap="small"):
-        st.download_button(
-            "⬇️ Télécharger en PDF",
-            data=lambda h=html_content: html_to_pdf(h),
-            file_name=pdf_name,
-            mime="application/pdf",
-            on_click="ignore",
-            key="dossier_download_pdf",
-        )
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
         validate = st.button(
-            "✅ Version finale validée" if validated
-            else "✅ Valider la nouvelle version finale" if st.session_state.get("dossier_validated_hash")
-            else "✅ Valider la version finale",
+            "Version finale validée" if validated
+            else "Valider la nouvelle version finale" if st.session_state.get("dossier_validated_hash")
+            else "Valider la version finale",
+            icon=":material/task_alt:",
             type="primary",
             key="dossier_validate_final",
             disabled=validated or not has_linkedin,
             help="Envoie le dossier en PDF sur la fiche Leonar du candidat (retrouvée par son URL LinkedIn). "
-                 "Une nouvelle validation remplace la version précédente.",
+                 "Rien n'est envoyé avant ; une nouvelle validation remplace la précédente.",
         )
+        try:
+            with st.spinner("Préparation du PDF…"):
+                pdf_bytes = dossier_pdf(html_content)
+            st.download_button(
+                "PDF", data=pdf_bytes, file_name=pdf_name, mime="application/pdf",
+                icon=":material/download:", on_click="ignore", key="dossier_download_pdf", type="tertiary",
+            )
+        except Exception:
+            # Repli : HTML à imprimer en PDF depuis Chrome (bouton intégré au document)
+            st.download_button(
+                "HTML (à imprimer en PDF)", data=html_content, mime="text/html",
+                file_name=f"dossier_{candidate_name}{version_suffix}.html",
+                icon=":material/download:", key="dossier_download_html", type="tertiary",
+            )
     if not has_linkedin:
-        st.caption("Renseigne l'URL LinkedIn du candidat (en haut) pour pouvoir valider la version finale.")
-    elif not validated:
-        st.caption("Rien n'est envoyé sur Leonar tant que la version finale n'est pas validée.")
+        st.caption("Renseigne l'URL LinkedIn du candidat (en haut) pour valider la version finale.")
     if validate:
         try:
             with st.spinner("Recherche du candidat dans Leonar…"):
@@ -1161,7 +1151,7 @@ if st.session_state.get("dossier_html"):
                 st.error("Aucune fiche Leonar ne correspond à cette URL LinkedIn. Vérifie l'URL ou crée le contact dans Leonar.")
             else:
                 with st.spinner("Conversion en PDF et envoi sur la fiche Leonar…"):
-                    leonar.replace_contact_file(contact["id"], pdf_name, html_to_pdf(html_content))
+                    leonar.replace_contact_file(contact["id"], pdf_name, dossier_pdf(html_content))
                 full_name = f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip()
                 st.session_state["dossier_validated_hash"] = current_hash
                 st.session_state["dossier_validation_notice"] = (
@@ -1173,10 +1163,8 @@ if st.session_state.get("dossier_html"):
             st.error(f"Envoi sur Leonar impossible : {e}")
 
     # Ouvert d'office après une révision pour que le changement soit visible tout de suite.
-    with st.expander("👁 Aperçu du dossier", expanded=bool(notice)):
+    with st.expander("Aperçu du dossier", expanded=bool(notice)):
         st.components.v1.html(html_content, height=900, scrolling=True)
-
-    st.divider()
 
     # --- MODE RÉVISION ---
     with st.expander(
