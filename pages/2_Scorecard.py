@@ -476,8 +476,11 @@ def restore_images(html: str, images: list[str]) -> str:
     return html
 
 
-def save_scorecard_to_leonar(project_id: str, filename: str):
-    """Joint la scorecard (PDF) au projet Leonar du mandat, en remplaçant la version précédente."""
+def save_scorecard_to_leonar(project_id: str, filename: str) -> str | None:
+    """Joint la scorecard (PDF) au projet Leonar du mandat, en remplaçant la version précédente.
+
+    Renvoie None si tout s'est bien passé, sinon le message d'erreur.
+    """
     from utils import leonar
     from utils.pdf_export import html_to_pdf, PdfExportError
 
@@ -486,9 +489,8 @@ def save_scorecard_to_leonar(project_id: str, filename: str):
             pdf = html_to_pdf(st.session_state.scorecard_html)
             leonar.replace_project_file(project_id, filename, pdf)
     except (PdfExportError, leonar.LeonarError) as e:
-        st.warning(f"Scorecard enregistrée sur le Drive, mais pas sur Leonar : {e}")
-    else:
-        st.toast("Scorecard (PDF) jointe au projet Leonar", icon="✅")
+        return str(e)
+    return None
 
 
 def open_saved_scorecard(entry: dict):
@@ -506,6 +508,8 @@ def open_saved_scorecard(entry: dict):
     resp = mandat.get("responsable", "")
     st.session_state.scorecard_commercial = resp if resp in COMMERCIAUX else next(iter(COMMERCIAUX))
     st.session_state.scorecard_saved_id = entry["file"]["id"]
+    import hashlib
+    st.session_state.scorecard_validated_hash = hashlib.sha1(html.encode("utf-8")).hexdigest()
     st.session_state.scorecard_mandat = {
         "id": mandat["id"], "nom": mandat.get("nom", ""), "leonar_project_id": mandat.get("leonar_project_id"),
     }
@@ -651,6 +655,7 @@ if uploaded_file or prefill:
                     st.session_state.scorecard_commercial = commercial
                     st.session_state.pop("scorecard_saved_id", None)
                     st.session_state.pop("scorecard_images", None)
+                    st.session_state.pop("scorecard_validated_hash", None)
                     if not prefill:
                         st.session_state.pop("scorecard_mandat", None)
                     st.rerun()
@@ -674,23 +679,37 @@ if "scorecard_html" in st.session_state:
     with col2:
         if st.button("🗑️ Réinitialiser", use_container_width=True):
             for k in (["scorecard_html", "scorecard_transcription", "scorecard_client", "scorecard_commercial",
-                       "scorecard_saved_id", "scorecard_images"]
+                       "scorecard_saved_id", "scorecard_images", "scorecard_validated_hash"]
                       + ([] if prefill else ["scorecard_mandat"])):
                 st.session_state.pop(k, None)
             st.rerun()
     target = st.session_state.get("scorecard_mandat")
     if target:
-        st.caption(f"📁 Scorecard rattachée au mandat « {target['nom']} »")
+        import hashlib
+        current_hash = hashlib.sha1(st.session_state.scorecard_html.encode("utf-8")).hexdigest()
+        validated = st.session_state.get("scorecard_validated_hash") == current_hash
+        st.caption(
+            f"📁 Scorecard rattachée au mandat « {target['nom']} ». "
+            "Rien n'est enregistré tant que la version finale n'est pas validée : "
+            "la validation l'enregistre dans le mandat et l'envoie sur Leonar."
+        )
+        notice = st.session_state.pop("scorecard_validation_notice", None)
+        if notice:
+            getattr(st, notice[0])(notice[1])
         with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
             saved_id = st.session_state.get("scorecard_saved_id")
-            label = "Mettre à jour dans le mandat" if saved_id else "Enregistrer dans le mandat"
-            if st.button(label, icon=":material/save:", type="primary"):
+            label = (
+                "Version finale validée" if validated
+                else "Valider la nouvelle version finale" if saved_id
+                else "Valider la version finale"
+            )
+            if st.button(label, icon=":material/task_alt:", type="primary", disabled=validated):
                 from mandats_store import StorageError
                 from utils.mandats_data import store as mandats_store, load_snapshot
                 name = f"Scorecard — {st.session_state.scorecard_client}.html".replace("/", "-")
                 data = st.session_state.scorecard_html.encode("utf-8")
                 try:
-                    with st.spinner("Enregistrement dans le mandat…"):
+                    with st.spinner("Enregistrement de la version finale dans le mandat…"):
                         if saved_id:
                             mandats_store().replace_content(saved_id, name, data, "text/html")
                         else:
@@ -699,10 +718,23 @@ if "scorecard_html" in st.session_state:
                 except StorageError as e:
                     st.error(str(e))
                 else:
+                    st.session_state["scorecard_validated_hash"] = current_hash
                     load_snapshot.clear()
-                    st.toast(f"Scorecard enregistrée dans le mandat « {target['nom']} »", icon="✅")
-                    if target.get("leonar_project_id"):
-                        save_scorecard_to_leonar(target["leonar_project_id"], name.replace(".html", ".pdf"))
+                    # Projet Leonar lu à jour (le mandat a pu être lié depuis l'ouverture)
+                    mandat = next((x for x in load_snapshot()["mandats"] if x["id"] == target["id"]), {})
+                    project_id = mandat.get("leonar_project_id") or target.get("leonar_project_id")
+                    if project_id:
+                        err = save_scorecard_to_leonar(project_id, name.replace(".html", ".pdf"))
+                        notice = (
+                            ("success", "Version finale enregistrée dans le mandat et envoyée sur Leonar (PDF).")
+                            if not err else
+                            ("warning", f"Version finale enregistrée dans le mandat, mais pas envoyée sur Leonar : {err}")
+                        )
+                    else:
+                        notice = ("info", "Version finale enregistrée dans le mandat. Ce mandat n'est pas lié à Leonar : "
+                                          "liez-le depuis sa fiche (« Lier à Leonar ») et la scorecard y sera envoyée.")
+                    st.session_state["scorecard_validation_notice"] = notice
+                    st.rerun()
             st.page_link("app_streamlit.py", label="Retour au mandat", icon=":material/arrow_back:",
                          query_params={"mandat": target["id"]})
 

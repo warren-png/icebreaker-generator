@@ -177,6 +177,25 @@ def find_contact_by_linkedin(url: str) -> dict | None:
     return None
 
 
+def list_contact_files(contact_id: str) -> list[dict]:
+    return (_request("GET", f"/contacts/{contact_id}/files") or {}).get("data") or []
+
+
+def delete_contact_file(contact_id: str, file_id: str) -> None:
+    _request("DELETE", f"/contacts/{contact_id}/files/{file_id}")
+
+
+def replace_contact_file(contact_id: str, filename: str, data: bytes, content_type: str = "application/pdf") -> dict:
+    """Envoie le fichier sur la fiche en retirant d'abord les fichiers portant le même nom."""
+    for f in list_contact_files(contact_id):
+        if (f.get("filename") or "") == filename[:255]:
+            try:
+                delete_contact_file(contact_id, f["id"])
+            except LeonarError:
+                pass  # l'ancienne version reste, sans gravité
+    return upload_contact_file(contact_id, filename, data, content_type)
+
+
 def upload_contact_file(contact_id: str, filename: str, data: bytes, content_type: str = "application/pdf") -> dict:
     return _request("POST", f"/contacts/{contact_id}/files", json={
         "filename": filename[:255],

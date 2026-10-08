@@ -363,7 +363,7 @@ class LocalStore:
     def snapshot(self) -> dict:
         mandats, by_mandat = [], {}
         for folder in sorted(self.root.iterdir()):
-            if not folder.is_dir() or folder.name.startswith("."):
+            if not folder.is_dir() or folder.name.startswith(".") or not (folder / ".id").exists():
                 continue
             mandat_id = (folder / ".id").read_text()
             for p in folder.iterdir():

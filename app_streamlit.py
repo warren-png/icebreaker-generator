@@ -942,15 +942,6 @@ def render_scorecard_section(m: dict, files: list[dict]):
                 help="Fichier HTML : ouvrez-le dans le navigateur pour l'imprimer en PDF, "
                      "ou chargez-le dans Dossier Candidature.",
             )
-            if m.get("leonar_project_id"):
-                if st.button("Envoyer sur Leonar", icon=":material/cloud_upload:", key=f"sc_leonar_{sc['id']}",
-                             help="Joint cette scorecard en PDF au projet Leonar (remplace la version précédente)."):
-                    with st.spinner("Conversion en PDF et envoi sur Leonar…"):
-                        sent, errors = push_scorecards_to_leonar(m["leonar_project_id"], [sc])
-                    if sent:
-                        st.toast("Scorecard jointe au projet Leonar", icon="✅")
-                    for err in errors:
-                        st.error(f"Envoi impossible — {err}")
             with st.popover("", icon=":material/delete:", help="Supprimer cette scorecard"):
                 st.markdown("Supprimer cette scorecard ?")
                 if st.button("Oui, supprimer", type="primary", key=f"del_{sc['id']}"):
@@ -968,7 +959,8 @@ def render_scorecard_section(m: dict, files: list[dict]):
         st.markdown("**Générer la scorecard de ce mandat**")
         st.caption(
             "Ouvre la rubrique Scorecard avec l'entreprise, le responsable et les éléments "
-            "ci-dessous déjà chargés. La scorecard pourra ensuite être enregistrée dans ce mandat."
+            "ci-dessous déjà chargés. Une fois la version finale validée, elle est enregistrée "
+            "dans ce mandat et envoyée sur Leonar."
         )
         chosen = st.multiselect(
             "Éléments à utiliser", list(sources), default=list(sources), key=f"sc_src_{m['id']}",

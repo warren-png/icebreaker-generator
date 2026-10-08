@@ -1069,6 +1069,7 @@ if st.button("✨ Générer le Dossier", type="primary", key="dossier_generate")
                 )
 
                 st.session_state["dossier_html"] = final_html
+                st.session_state.pop("dossier_validated_hash", None)  # nouveau dossier : rien de validé
                 status.update(label="✅ Dossier généré !", state="complete")
 
             except Exception as e:
@@ -1115,11 +1116,20 @@ if st.session_state.get("dossier_html"):
         key="dossier_download_html",
     )
 
-    # --- PDF direct + enregistrement sur la fiche Leonar du candidat ---
+    # --- PDF direct + validation de la version finale (envoi sur la fiche Leonar) ---
+    import hashlib
     from utils.pdf_export import html_to_pdf, PdfExportError
     from utils import leonar
 
-    pdf_name = f"Dossier de candidature — {candidate_name.replace('_', ' ')}{version_suffix}.pdf"
+    pdf_name = f"Dossier de candidature — {candidate_name.replace('_', ' ')}.pdf"
+    current_hash = hashlib.sha1(html_content.encode("utf-8")).hexdigest()
+    validated = st.session_state.get("dossier_validated_hash") == current_hash
+    has_linkedin = bool(leonar.linkedin_slug(st.session_state.get("dossier_linkedin", "")))
+
+    notice_final = st.session_state.pop("dossier_validation_notice", None)
+    if notice_final:
+        getattr(st, notice_final[0])(notice_final[1])
+
     with st.container(horizontal=True, gap="small"):
         st.download_button(
             "⬇️ Télécharger en PDF",
@@ -1129,28 +1139,38 @@ if st.session_state.get("dossier_html"):
             on_click="ignore",
             key="dossier_download_pdf",
         )
-        save_leonar = st.button(
-            "📎 Enregistrer sur la fiche Leonar du candidat",
-            key="dossier_save_leonar",
-            disabled=not leonar.linkedin_slug(st.session_state.get("dossier_linkedin", "")),
-            help="Retrouve le candidat dans Leonar grâce à son URL LinkedIn et joint le dossier en PDF.",
+        validate = st.button(
+            "✅ Version finale validée" if validated
+            else "✅ Valider la nouvelle version finale" if st.session_state.get("dossier_validated_hash")
+            else "✅ Valider la version finale",
+            type="primary",
+            key="dossier_validate_final",
+            disabled=validated or not has_linkedin,
+            help="Envoie le dossier en PDF sur la fiche Leonar du candidat (retrouvée par son URL LinkedIn). "
+                 "Une nouvelle validation remplace la version précédente.",
         )
-    if not leonar.linkedin_slug(st.session_state.get("dossier_linkedin", "")):
-        st.caption("Renseigne l'URL LinkedIn du candidat (en haut) pour enregistrer le dossier sur Leonar.")
-    if save_leonar:
+    if not has_linkedin:
+        st.caption("Renseigne l'URL LinkedIn du candidat (en haut) pour pouvoir valider la version finale.")
+    elif not validated:
+        st.caption("Rien n'est envoyé sur Leonar tant que la version finale n'est pas validée.")
+    if validate:
         try:
             with st.spinner("Recherche du candidat dans Leonar…"):
                 contact = leonar.find_contact_by_linkedin(st.session_state["dossier_linkedin"])
             if not contact:
                 st.error("Aucune fiche Leonar ne correspond à cette URL LinkedIn. Vérifie l'URL ou crée le contact dans Leonar.")
             else:
-                with st.spinner("Conversion en PDF et envoi sur Leonar…"):
-                    leonar.upload_contact_file(contact["id"], pdf_name, html_to_pdf(html_content))
+                with st.spinner("Conversion en PDF et envoi sur la fiche Leonar…"):
+                    leonar.replace_contact_file(contact["id"], pdf_name, html_to_pdf(html_content))
                 full_name = f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip()
-                st.success(f"Dossier joint à la fiche Leonar de **{full_name}**.")
-                st.link_button("Ouvrir la fiche dans Leonar", leonar.contact_url(contact["id"]))
+                st.session_state["dossier_validated_hash"] = current_hash
+                st.session_state["dossier_validation_notice"] = (
+                    "success", f"Version finale envoyée sur la fiche Leonar de **{full_name}** "
+                               f"([ouvrir]({leonar.contact_url(contact['id'])})).",
+                )
+                st.rerun()
         except (PdfExportError, leonar.LeonarError) as e:
-            st.error(f"Enregistrement sur Leonar impossible : {e}")
+            st.error(f"Envoi sur Leonar impossible : {e}")
 
     # Ouvert d'office après une révision pour que le changement soit visible tout de suite.
     with st.expander("👁 Aperçu du dossier", expanded=bool(notice)):
