@@ -357,6 +357,34 @@ def _rendre_controles(etat: dict) -> None:
         st.markdown(f":orange[:material/error:] **{titre}** : " + " ; ".join(items))
 
 
+ROLES_CLIENT = {"rh": "RH", "manager": "manager", "autre": ""}
+
+
+def _rendre_liens_suivi(suivi: dict) -> None:
+    """La page de suivi du client : chacun son lien.
+
+    Côté Entourage, un bouton par consultant du mandat ouvre la même page ;
+    ce qu'il y écrit est signé de son nom, au nom du cabinet. Côté client,
+    chaque personne a son lien : la page sait qui répond (la RH ou le
+    manager). Les emails du site portent déjà ce lien personnel."""
+    st.markdown(f"**Page de suivi du client** · Réf. {suivi.get('reference', '')}")
+    equipe_liens = suivi.get("equipe") or []
+    if equipe_liens:
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.caption("Ouvrir côté Entourage :", width="content")
+            for e in equipe_liens:
+                st.link_button(e["prenom"], e["lien"], icon=":material/visibility:", type="tertiary")
+    membres = suivi.get("membres") or []
+    if membres:
+        st.caption("À transmettre au client, un lien par personne : la page sait ainsi qui répond.")
+        for mb in membres:
+            role = ROLES_CLIENT.get(mb.get("role") or "", "")
+            st.markdown(f"{mb['nom']}{' · ' + role if role else ''}")
+            st.code(mb["lien"], language=None)
+    else:
+        st.code(suivi["lien"], language=None)
+
+
 def render(m: dict, enregistrer_meta, rafraichir) -> None:
     """La rubrique « 4 · Site » de la fiche mandat.
 
@@ -418,8 +446,7 @@ def render(m: dict, enregistrer_meta, rafraichir) -> None:
     if etat:
         _rendre_controles(etat)
         if etat.get("suivi"):
-            st.caption(f"Lien de la page de suivi du client (Réf. {etat['suivi'].get('reference', '')}) :")
-            st.code(etat["suivi"]["lien"], language=None)
+            _rendre_liens_suivi(etat["suivi"])
         if etat.get("migrationManquante"):
             st.caption(":gray[Le site attend sa migration 0045 : l'offre reste modifiable dans son administration.]")
 
