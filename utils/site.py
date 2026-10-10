@@ -137,6 +137,12 @@ def envoyer_candidature(m: dict, contact_id: str, mot: str = "") -> dict:
     })["envoi"]
 
 
+def supprimer(m: dict) -> str | None:
+    """Supprime l'offre du mandat sur le site (publiée ou brouillon) et sa
+    page de suivi. Renvoie l'intitulé supprimé, ou None s'il n'y avait rien."""
+    return _appel("POST", corps={"action": "supprimer", "mandat": corps_mandat(m)}).get("supprime")
+
+
 def consultants() -> list[dict]:
     """Les coordonnées de l'équipe, telles qu'enregistrées sur le site."""
     return _appel("GET", params={"action": "consultants"}).get("consultants") or []

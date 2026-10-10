@@ -130,6 +130,17 @@ def create_project(name: str, company_name: str, owner_first_names: list[str]) -
     return project
 
 
+def delete_project(project_id: str) -> bool:
+    """Supprime le projet (et son pipeline). False s'il n'existait déjà plus."""
+    try:
+        _request("DELETE", f"/projects/{project_id}")
+    except LeonarError as e:
+        if "(404)" in str(e):
+            return False
+        raise
+    return True
+
+
 def upload_project_file(project_id: str, filename: str, data: bytes, content_type: str = "application/pdf") -> dict:
     return _request("POST", f"/projects/{project_id}/files", json={
         "filename": filename[:255],

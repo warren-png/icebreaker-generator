@@ -617,16 +617,14 @@ def view_detail(m: dict, files: list[dict]):
         else:
             render_leonar_link_popover(m, files)
         with st.popover("", icon=":material/delete:", help="Supprimer le mandat", type="tertiary"):
-            st.markdown("Supprimer ce mandat et **tous ses fichiers** ?")
-            st.caption("Corbeille du Drive partagé, récupérables 30 jours.")
-            if st.button("Oui, supprimer", type="primary", key="del_mandat"):
-                try:
-                    store().trash(m["id"])
-                except StorageError as e:
-                    st.error(str(e))
-                else:
-                    del st.query_params["mandat"]
-                    refresh_and_rerun("Mandat supprimé.")
+            st.markdown("Supprimer ce mandat **partout** ?")
+            st.caption(
+                "Le dossier du Drive (corbeille, récupérable 30 jours) ; sur le site, l'offre, publiée ou en "
+                "brouillon, et la page de suivi du client avec ses échanges ; dans Leonar, le projet et son "
+                "pipeline. Sur le site et dans Leonar, c'est définitif."
+            )
+            if st.button("Oui, tout supprimer", type="primary", key="del_mandat"):
+                supprimer_partout(m)
 
     if st.session_state.get("_mandats_editing"):
         with st.container(border=True):
@@ -657,6 +655,32 @@ def view_detail(m: dict, files: list[dict]):
     render_audio_section(m, files)
     render_scorecard_section(m, files)
     fiche_site.render(m, store().save_meta, refresh_and_rerun)
+
+
+def supprimer_partout(m: dict) -> None:
+    """Site, puis Leonar, puis Drive (Warren, 11 octobre 2026). Une étape qui
+    échoue arrête la suite et le dit : on peut relancer, les étapes déjà
+    faites ne bloquent pas (rien à supprimer)."""
+    fait = []
+    try:
+        if site.configure() and (m.get("site_etat") or m.get("leonar_project_id")):
+            with st.spinner("Suppression sur le site…"):
+                if site.supprimer(m):
+                    fait.append("le site")
+        if m.get("leonar_project_id"):
+            with st.spinner("Suppression du projet Leonar…"):
+                if leonar.delete_project(m["leonar_project_id"]):
+                    fait.append("Leonar")
+                leonar_mandate_projects.clear()
+        with st.spinner("Suppression sur le Drive…"):
+            store().trash(m["id"])
+        fait.append("le Drive")
+    except (site.SiteError, leonar.LeonarError, StorageError) as e:
+        deja = f" Déjà supprimé : {', '.join(fait)}." if fait else ""
+        st.error(f"Suppression interrompue : {e}{deja} Corrigez puis relancez.")
+        return
+    del st.query_params["mandat"]
+    refresh_and_rerun("Mandat supprimé : " + ", ".join(fait) + ".")
 
 
 def sync_site(m: dict) -> str:
