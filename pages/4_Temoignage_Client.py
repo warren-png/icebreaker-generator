@@ -26,16 +26,9 @@ if not check_password():
 # COMMERCIAUX
 # ---------------------------------------------------------------------------
 
-COMMERCIAUX = {
-    "Warren": {
-        "linkedin": "https://www.linkedin.com/in/warren-elbaz/",
-        "tel": "06 50 60 22 61"
-    },
-    "Helder": {
-        "linkedin": "https://www.linkedin.com/in/helder-alturas-48010463/",
-        "tel": "06 22 30 96 11"
-    }
-}
+# Les coordonnées viennent de la fiche consultant du site (utils/equipe.py).
+from utils import equipe
+COMMERCIAUX = equipe.commerciaux()
 
 ENTOURAGE_URL = "https://entouragerecrutement.com/"
 

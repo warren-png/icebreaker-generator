@@ -25,6 +25,7 @@ from utils.ui import inject_global_styles
 from mandats_store import StorageError
 from utils.mandats_data import store, load_snapshot, fetch_bytes
 from utils import leonar
+from utils import fiche_site, site
 
 
 st.set_page_config(page_title="Mandats | Entourage", page_icon="🗂️", layout="wide")
@@ -647,7 +648,7 @@ def view_detail(m: dict, files: list[dict]):
                         st.error(str(e))
                     else:
                         st.session_state["_mandats_editing"] = False
-                        refresh_and_rerun("Mandat mis à jour.")
+                        refresh_and_rerun("Mandat mis à jour." + sync_site({**m, **meta}))
 
     if m.get("notes"):
         st.caption(md(m["notes"]).replace("\n", "  \n"))
@@ -655,6 +656,21 @@ def view_detail(m: dict, files: list[dict]):
     render_fiche_section(m, files)
     render_audio_section(m, files)
     render_scorecard_section(m, files)
+    fiche_site.render(m, store().save_meta, refresh_and_rerun)
+
+
+def sync_site(m: dict) -> str:
+    """Le mandat est déjà sur le site : responsable, sourceur et statut y
+    suivent la fiche (Pourvu et Clos ferment l'annonce). Renvoie la fin du
+    message affiché."""
+    if not m.get("site_etat") or not site.configure():
+        return ""
+    try:
+        etat = site.enregistrer(m)
+        store().save_meta({**m, "site_etat": etat})
+    except (site.SiteError, StorageError) as e:
+        return f" Site non mis à jour : {e}"
+    return " Site à jour."
 
 
 def push_scorecards_to_leonar(project_id: str, scorecards: list[dict]) -> tuple[int, list[str]]:

@@ -21,18 +21,9 @@ inject_global_styles()
 if not check_password():
     st.stop()
 
-COMMERCIAUX = {
-    "Warren Elbaz": {
-        "linkedin": "https://www.linkedin.com/in/warren-elbaz/",
-        "tel": "06 50 60 22 61",
-        "titre": "Président"
-    },
-    "Helder Alturas": {
-        "linkedin": "https://www.linkedin.com/in/helder-alturas-48010463/",
-        "tel": "06 22 30 96 11",
-        "titre": "Directeur Général"
-    }
-}
+# Les coordonnées viennent de la fiche consultant du site (utils/equipe.py).
+from utils import equipe
+COMMERCIAUX = equipe.commerciaux(noms_complets=True)
 
 SECTIONS_PER_PAGE = 2
 

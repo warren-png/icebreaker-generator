@@ -88,8 +88,8 @@ I. RÈGLES HTML — NON NÉGOCIABLES (FORME INTOUCHABLE)
 
 4. PIED DE PAGE
    Remplacer {{PIED_DE_PAGE_COMMERCIAL}} dans les deux pages par :
-   - "Commercial : Warren" → Responsable de chasse : <a href="https://www.linkedin.com/in/warren-elbaz/">Warren</a> - 06 50 60 22 61
-   - "Commercial : Helder" → Responsable de chasse : <a href="https://www.linkedin.com/in/helder-alturas-48010463/">Helder</a> - 06 22 30 96 11
+   - "Commercial : Warren" → §PIED_WARREN§
+   - "Commercial : Helder" → §PIED_HELDER§
    C'est la SEULE mention du cabinet autorisée dans tout le dossier. Elle appartient au gabarit : tu la reproduis à l'identique, sans jamais la commenter ni l'étendre.
 
 5. OUTPUT
@@ -231,6 +231,11 @@ PAGE 2 — SCORE CARD + PROJETS PHARES (les deux sur la même page A4, dans cet 
     - Si possible, structure ainsi : 1ère phrase = contexte + action ; 2ème phrase courte = résultat/impact concret.
     INTERDITS : répéter la trajectoire globale de [A], reprendre les faits déjà cités en [B], reformuler le tableau [C], aller chercher un projet ou un chiffre dans le CV, inventer un résultat absent du brief, dépasser 150 mots au total, dépasser 55 mots pour un projet, mettre moins ou plus de 3 projets, mentionner le chasseur ou le brief.
 """
+
+# Le pied de page reprend la fiche consultant du site (utils/equipe.py).
+from utils import equipe as _equipe
+DOSSIER_SYSTEM_PROMPT = DOSSIER_SYSTEM_PROMPT.replace("§PIED_WARREN§", _equipe.ligne_pied_de_page("Warren")).replace(
+    "§PIED_HELDER§", _equipe.ligne_pied_de_page("Helder"))
 
 REVISION_SYSTEM_PROMPT = """Tu corriges les dossiers de présentation candidats d'Entourage Recrutement, cabinet de chasse spécialisé en finance et technologie.
 Tu reçois les pages 1 et 2 d'un dossier HTML existant (page 1 : Analyse + Points Clés ; page 2 : Score Card + Projets Phares), le brief initial, les notes par critère, et des instructions de correction.
@@ -796,6 +801,76 @@ PRINT_BUTTON_HTML = """
 
 
 # ============================================================
+# ENVOI AU CLIENT (Warren, 10 octobre 2026)
+# ============================================================
+
+
+def render_envoi_client(current_hash: str) -> None:
+    """Après la version finale : l'envoi du dossier au client, par le site.
+
+    L'email part au nom du RESPONSABLE DU MANDAT (pas de celui qui clique),
+    aux interlocuteurs cochés « Reçoit le suivi », dossier en pièce jointe ;
+    le responsable en reçoit la copie et le candidat passe en Send-out.
+    Le site refuse tant que quelque chose manque, et dit quoi."""
+    from utils import site
+    from utils.mandats_data import load_snapshot
+
+    with st.container(border=True):
+        st.markdown("**Envoyer au client**")
+        fait = st.session_state.get("dossier_envoi")
+        if fait and fait.get("hash") == current_hash:
+            st.success(fait["message"])
+            return
+
+        mandat_id = st.session_state.get("dossier_mandat_id")
+        contact = st.session_state.get("dossier_contact")
+        mandat = next((x for x in load_snapshot()["mandats"] if x["id"] == mandat_id), None) if mandat_id else None
+        if not mandat:
+            st.caption("Choisissez la score card du mandat dans la liste, en haut : c'est elle qui relie le dossier au client.")
+            return
+        if not mandat.get("site_etat"):
+            st.caption("Enregistrez d'abord la rubrique « 4 · Site » du mandat : interlocuteurs et espace candidat.")
+            return
+        if not contact:
+            st.caption("Validez la version finale : le dossier part de la fiche Leonar du candidat.")
+            return
+
+        destinataires = [i.get("nom") or i.get("email") for i in (mandat.get("site") or {}).get("interlocuteurs") or []
+                         if i.get("suivi") and i.get("email")]
+        responsable = (mandat.get("site_etat") or {}).get("responsable") or mandat.get("responsable", "")
+        if not destinataires:
+            st.caption("Aucun interlocuteur du client n'est coché « Reçoit le suivi » dans la rubrique « 4 · Site » du mandat.")
+            return
+        st.caption(
+            f"Au nom de {responsable}, à {', '.join(destinataires)}. Le dossier part en pièce jointe, "
+            "vous en recevez la copie et le candidat passe en Send-out dans Leonar."
+        )
+        mot = st.text_area("Un mot pour le client (facultatif)", key="dossier_mot", height=80,
+                           placeholder="Par exemple : son préavis est d'un mois, il est disponible dès la semaine prochaine.")
+        with st.popover("Envoyer au client", icon=":material/send:", type="primary"):
+            st.markdown(f"Envoyer la candidature de **{contact['nom']}** à {', '.join(destinataires)} ?")
+            if st.button("Confirmer l'envoi", type="primary", key="dossier_envoi_ok"):
+                try:
+                    with st.spinner("Envoi…"):
+                        r = site.envoyer_candidature(mandat, contact["id"], (mot or "").strip())
+                except site.SiteError as e:
+                    st.error(str(e))
+                    return
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                quand = datetime.fromisoformat(r["le"].replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Paris"))
+                message = (
+                    f"Envoyé le {quand.strftime('%d/%m à %H:%M')} à {', '.join(r['destinataires'])}, "
+                    f"au nom de {r['responsable']}. La copie est dans sa boîte"
+                    + (" et le candidat est passé en Send-out." if r.get("deplace") else ".")
+                )
+                if r.get("avertissement"):
+                    message += " " + r["avertissement"]
+                st.session_state["dossier_envoi"] = {"hash": current_hash, "message": message}
+                st.rerun()
+
+
+# ============================================================
 # PAGE
 # ============================================================
 st.title("Dossier de candidature")
@@ -854,6 +929,15 @@ with col_right:
         saved_scorecards = []
     saved_idx = None
     if saved_scorecards:
+        def _aligner_responsable():
+            """Le responsable de chasse est celui du mandat choisi : c'est en
+            son nom que le dossier partira chez le client."""
+            i = st.session_state.get("dossier_scorecard_saved")
+            if i is not None and i < len(saved_scorecards):
+                resp = saved_scorecards[i]["mandat"].get("responsable")
+                if resp in ("Warren", "Helder"):
+                    st.session_state["dossier_commercial"] = resp
+
         saved_idx = st.selectbox(
             "Score card du poste",
             list(range(len(saved_scorecards))),
@@ -861,6 +945,7 @@ with col_right:
             index=None,
             placeholder="Choisir un mandat…",
             key="dossier_scorecard_saved",
+            on_change=_aligner_responsable,
         )
         with st.expander("Ancien mandat : charger un fichier"):
             scorecard_file = st.file_uploader(
@@ -877,6 +962,7 @@ with col_right:
     # Le fichier chargé est prioritaire ; sinon, la scorecard choisie dans la liste
     sc_source = None
     if scorecard_file:
+        st.session_state.pop("dossier_mandat_id", None)
         sc_source = {
             "key": f"sc_{scorecard_file.name}_{scorecard_file.size}",
             "name": scorecard_file.name,
@@ -885,6 +971,7 @@ with col_right:
         }
     elif saved_idx is not None:
         _entry = saved_scorecards[saved_idx]
+        st.session_state["dossier_mandat_id"] = _entry["mandat"]["id"]
         sc_source = {
             "key": f"mandat_{_entry['file']['id']}",
             "name": _entry["label"],
@@ -1154,6 +1241,7 @@ if st.session_state.get("dossier_html"):
                     leonar.replace_contact_file(contact["id"], pdf_name, dossier_pdf(html_content))
                 full_name = f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip()
                 st.session_state["dossier_validated_hash"] = current_hash
+                st.session_state["dossier_contact"] = {"id": contact["id"], "nom": full_name}
                 st.session_state["dossier_validation_notice"] = (
                     "success", f"Version finale envoyée sur la fiche Leonar de **{full_name}** "
                                f"([ouvrir]({leonar.contact_url(contact['id'])})).",
@@ -1161,6 +1249,9 @@ if st.session_state.get("dossier_html"):
                 st.rerun()
         except (PdfExportError, leonar.LeonarError) as e:
             st.error(f"Envoi sur Leonar impossible : {e}")
+
+    if validated:
+        render_envoi_client(current_hash)
 
     # Ouvert d'office après une révision pour que le changement soit visible tout de suite.
     with st.expander("Aperçu du dossier", expanded=bool(notice)):
