@@ -28,14 +28,29 @@ class SiteError(Exception):
     """Réponse du site lisible par l'utilisateur."""
 
 
+def _dans_les_secrets(cle: str) -> str | None:
+    """La clé dans les secrets Streamlit, en tête OU dans une section : une
+    ligne collée en bas du fichier tombe dans la dernière section entre
+    crochets (vu le 10 octobre 2026). Majuscules ou minuscules."""
+    try:
+        import streamlit as st
+        secrets = st.secrets
+        noms = (cle, cle.lower())
+        for nom in noms:
+            if nom in secrets and isinstance(secrets[nom], str):
+                return secrets[nom]
+        for section in secrets.values():
+            if hasattr(section, "keys"):
+                for nom in noms:
+                    if nom in section and isinstance(section[nom], str):
+                        return section[nom]
+    except Exception:
+        return None
+    return None
+
+
 def _reglage(cle: str) -> str | None:
-    val = os.getenv(cle)
-    if not val:
-        try:
-            import streamlit as st
-            val = st.secrets.get(cle)
-        except Exception:
-            val = None
+    val = os.getenv(cle) or _dans_les_secrets(cle)
     if not val:
         from pathlib import Path
         from dotenv import load_dotenv
