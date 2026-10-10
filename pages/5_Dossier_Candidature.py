@@ -811,7 +811,7 @@ def render_envoi_client(current_hash: str) -> None:
 
     L'email part au nom du RESPONSABLE DU MANDAT (pas de celui qui clique),
     aux interlocuteurs cochés « Reçoit le suivi », dossier en pièce jointe ;
-    le responsable en reçoit la copie et le candidat passe en Send-out.
+    toute l'équipe du mandat en reçoit la copie et le candidat passe en Send-out.
     Le site refuse tant que quelque chose manque, et dit quoi."""
     from utils import site
     from utils.mandats_data import load_snapshot
@@ -844,7 +844,7 @@ def render_envoi_client(current_hash: str) -> None:
             return
         st.caption(
             f"Au nom de {responsable}, à {', '.join(destinataires)}. Le dossier part en pièce jointe, "
-            "vous en recevez la copie et le candidat passe en Send-out dans Leonar."
+            "toute l'équipe du mandat en reçoit la copie et le candidat passe en Send-out dans Leonar."
         )
         mot = st.text_area("Un mot pour le client (facultatif)", key="dossier_mot", height=80,
                            placeholder="Par exemple : son préavis est d'un mois, il est disponible dès la semaine prochaine.")
@@ -862,7 +862,7 @@ def render_envoi_client(current_hash: str) -> None:
                 quand = datetime.fromisoformat(r["le"].replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Paris"))
                 message = (
                     f"Envoyé le {quand.strftime('%d/%m à %H:%M')} à {', '.join(r['destinataires'])}, "
-                    f"au nom de {r['responsable']}. La copie est dans sa boîte"
+                    f"au nom de {r['responsable']}. Toute l'équipe du mandat en a reçu la copie"
                     + (" et le candidat est passé en Send-out." if r.get("deplace") else ".")
                 )
                 if r.get("avertissement"):

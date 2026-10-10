@@ -360,6 +360,17 @@ def _rendre_controles(etat: dict) -> None:
 ROLES_CLIENT = {"rh": "RH", "manager": "manager", "autre": ""}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _liens_actuels(mid: str, leonar_project_id: str | None) -> dict | None:
+    """Les liens de la page de suivi tels que le site les donne MAINTENANT
+    (membres et équipe à jour), sans attendre un nouvel enregistrement."""
+    try:
+        reprise = site.reprendre(mid, leonar_project_id)
+    except site.SiteError:
+        return None
+    return ((reprise or {}).get("etat") or {}).get("suivi")
+
+
 def _rendre_liens_suivi(suivi: dict) -> None:
     """La page de suivi du client : chacun son lien.
 
@@ -445,8 +456,9 @@ def render(m: dict, enregistrer_meta, rafraichir) -> None:
 
     if etat:
         _rendre_controles(etat)
-        if etat.get("suivi"):
-            _rendre_liens_suivi(etat["suivi"])
+        liens = _liens_actuels(mid, m.get("leonar_project_id")) or etat.get("suivi")
+        if liens:
+            _rendre_liens_suivi(liens)
         if etat.get("migrationManquante"):
             st.caption(":gray[Le site attend sa migration 0045 : l'offre reste modifiable dans son administration.]")
 
@@ -479,6 +491,7 @@ def _envoyer(m: dict, mid: str, publier: bool, enregistrer_meta, rafraichir) -> 
         st.error(str(e))
         return
     enregistrer_meta({**mandat, "site_etat": etat})
+    _liens_actuels.clear()
     for cle in ("logo", "pdf", "pdf_retirer"):
         st.session_state.pop(_k(mid, cle), None)
     rafraichir("Publié sur le site." if publier else "Enregistré, site à jour.")
