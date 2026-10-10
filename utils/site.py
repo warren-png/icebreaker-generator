@@ -137,6 +137,12 @@ def envoyer_candidature(m: dict, contact_id: str, mot: str = "") -> dict:
     })["envoi"]
 
 
+def envoyer_scorecard(m: dict, mot: str = "") -> int:
+    """Envoie la scorecard au client (pièce jointe et lien vers la page) ;
+    renvoie le nombre de destinataires."""
+    return _appel("POST", corps={"action": "envoyer-scorecard", "mandat": corps_mandat(m), "mot": mot})["envoi"]["destinataires"]
+
+
 def supprimer(m: dict) -> str | None:
     """Supprime l'offre du mandat sur le site (publiée ou brouillon) et sa
     page de suivi. Renvoie l'intitulé supprimé, ou None s'il n'y avait rien."""

@@ -371,6 +371,35 @@ def _liens_actuels(mid: str, leonar_project_id: str | None) -> dict | None:
     return ((reprise or {}).get("etat") or {}).get("suivi")
 
 
+def _rendre_scorecard(m: dict, suivi: dict) -> None:
+    """L'email de la scorecard au client : la scorecard du projet Leonar en
+    pièce jointe, un bouton vers la page pour la commenter ; copie à toute
+    l'équipe. Confirmation avant l'envoi : il part chez le client."""
+    deja = suivi.get("scorecardEnvoyeeLe")
+    membres = [mb["nom"] for mb in suivi.get("membres") or []]
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        if deja:
+            st.caption(f":green[:material/check_circle:] Scorecard envoyée au client le {_date_courte(deja)}.", width="content")
+        libelle = "Renvoyer la scorecard" if deja else "Envoyer la scorecard au client"
+        with st.popover(libelle, icon=":material/send:", type="secondary" if deja else "primary", disabled=not membres):
+            st.markdown(f"Envoyer la scorecard à **{', '.join(membres)}** ?")
+            st.caption("La scorecard du projet Leonar en pièce jointe, et un bouton qui ouvre la page sur la scorecard "
+                       "pour la commenter. Toute l'équipe du mandat en reçoit la copie.")
+            mot = st.text_area("Un mot pour le client (facultatif)", key=_k(m["id"], "sc_mot"), height=80)
+            if st.button("Confirmer l'envoi", type="primary", key=_k(m["id"], "sc_ok")):
+                try:
+                    with st.spinner("Envoi…"):
+                        n = site.envoyer_scorecard({**m, "site": collecter(m["id"])}, (mot or "").strip())
+                except site.SiteError as e:
+                    st.error(str(e))
+                else:
+                    _liens_actuels.clear()
+                    st.session_state["_mandats_flash"] = f"Scorecard envoyée à {n} personne{'s' if n > 1 else ''}."
+                    st.rerun()
+    if not membres:
+        st.caption("Pour l'envoyer, cochez « Reçoit le suivi » sur au moins un interlocuteur du client (avec son email), puis enregistrez.")
+
+
 def _rendre_liens_suivi(suivi: dict) -> None:
     """La page de suivi du client : chacun son lien.
 
@@ -459,6 +488,7 @@ def render(m: dict, enregistrer_meta, rafraichir) -> None:
         liens = _liens_actuels(mid, m.get("leonar_project_id")) or etat.get("suivi")
         if liens:
             _rendre_liens_suivi(liens)
+            _rendre_scorecard(m, liens)
         if etat.get("migrationManquante"):
             st.caption(":gray[Le site attend sa migration 0045 : l'offre reste modifiable dans son administration.]")
 
