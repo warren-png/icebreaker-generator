@@ -269,7 +269,8 @@ def _onglet_interlocuteurs(mid: str) -> None:
             st.checkbox(f["nom"], key=_k(mid, "eq", prenom, "on"), width=190)
             st.segmented_control("Rôle", ROLES, key=_k(mid, "eq", prenom, "role"), label_visibility="collapsed",
                                  disabled=not actif)
-            st.caption(" · ".join(x for x in (f.get("email"), f.get("tel")) if x))
+            lien = f"[:material/link: LinkedIn]({f['linkedin']})" if f.get("linkedin") else ""
+            st.caption(" · ".join(x for x in (lien, f.get("email"), f.get("tel")) if x))
 
     st.markdown("**Les interlocuteurs du client**")
     st.caption("Chaque personne une seule fois : vous la choisissez ensuite dans les étapes du process. "
