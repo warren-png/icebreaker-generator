@@ -35,7 +35,7 @@ if not check_password():
     st.stop()
 
 
-RESPONSABLES = ["Warren", "Helder"]          # commerciaux (pied de page scorecard / dossier)
+RESPONSABLES = ["Warren", "Helder", "Bruno"]  # responsables de chasse possibles (Warren, 10 octobre 2026)
 PROPRIETAIRES = ["Warren", "Helder", "Bruno"]  # propriétaires possibles du projet Leonar
 STATUTS = ["En cours", "Pourvu", "Clos"]
 STATUT_COLORS = {"En cours": "orange", "Pourvu": "green", "Clos": "gray"}

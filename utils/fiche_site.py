@@ -29,7 +29,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
-from utils import site
+from utils import equipe, site
 
 FORMATS = ["Visio", "Présentiel", "Téléphone", "Présentiel ou visio"]
 DUREES = ["", "30 min", "45 min", "1 h", "1 h 30", "2 h"]
@@ -45,6 +45,7 @@ CHAMPS = ["titre", "verticale", "contrat", "lieu", "remuneration", "typeEntrepri
           "contenu", "presentation", "adresse", "avantages", "documents"]
 CHAMPS_INTERLOCUTEUR = ["nom", "fonction", "linkedin", "email", "suivi"]
 CHAMPS_ETAPE = ["titre", "format", "duree", "intervenants", "objectif", "conseils"]
+ROLES = ["Responsable de chasse", "Sourceur"]
 
 PLACEHOLDER_CONTENU = (
     "Le poste\nNotre client, un groupe industriel de 350 collaborateurs…\n\n"
@@ -126,6 +127,28 @@ def _initialiser(m: dict) -> None:
                 valeur = [v for v in (valeur or []) if v in ids]
             st.session_state[_k(mid, "et", eid, champ)] = valeur if valeur is not None else ""
     st.session_state[_k(mid, "et_ids")] = eids
+
+
+def _initialiser_equipe(m: dict) -> None:
+    """L'équipe Entourage du mandat : le responsable de chasse et les
+    sourceurs, tirés du responsable et des propriétaires du mandat."""
+    mid = m["id"]
+    resp = m.get("responsable") or ""
+    proprios = m.get("proprietaires") or [resp]
+    for prenom in equipe.EQUIPE:
+        st.session_state.setdefault(_k(mid, "eq", prenom, "on"), prenom == resp or prenom in proprios)
+        st.session_state.setdefault(_k(mid, "eq", prenom, "role"), ROLES[0] if prenom == resp else ROLES[1])
+
+
+def equipe_choisie(mid: str) -> tuple[list[str], list[str]]:
+    """(responsables de chasse, sourceurs) cochés dans l'onglet Interlocuteurs."""
+    resp, sourceurs = [], []
+    for prenom in equipe.EQUIPE:
+        if not st.session_state.get(_k(mid, "eq", prenom, "on")):
+            continue
+        role = st.session_state.get(_k(mid, "eq", prenom, "role")) or ROLES[1]
+        (resp if role == ROLES[0] else sourceurs).append(prenom)
+    return resp, sourceurs
 
 
 def collecter(mid: str) -> dict:
@@ -237,6 +260,18 @@ def _onglet_entreprise(mid: str) -> None:
 
 
 def _onglet_interlocuteurs(mid: str) -> None:
+    st.markdown("**L'équipe Entourage**")
+    st.caption("Cochez qui mène le mandat. Les coordonnées viennent de la fiche consultant du site : rien à retaper.")
+    for prenom in equipe.EQUIPE:
+        f = equipe.fiche(prenom)
+        actif = bool(st.session_state.get(_k(mid, "eq", prenom, "on")))
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.checkbox(f["nom"], key=_k(mid, "eq", prenom, "on"), width=190)
+            st.segmented_control("Rôle", ROLES, key=_k(mid, "eq", prenom, "role"), label_visibility="collapsed",
+                                 disabled=not actif)
+            st.caption(" · ".join(x for x in (f.get("email"), f.get("tel")) if x))
+
+    st.markdown("**Les interlocuteurs du client**")
     st.caption("Chaque personne une seule fois : vous la choisissez ensuite dans les étapes du process. "
                "« Reçoit le suivi » lui envoie les candidatures et le lien de la page de suivi.")
     for iid in st.session_state.get(_k(mid, "int_ids"), []):
@@ -347,6 +382,7 @@ def render(m: dict, enregistrer_meta, rafraichir) -> None:
         return
 
     _initialiser(m)
+    _initialiser_equipe(m)
     if st.session_state.pop(_k(mid, "reprise"), False):
         st.info("Repris de l'offre déjà sur le site : vérifiez, puis enregistrez. Elle se modifiera ensuite ici seulement.")
     erreur_reprise = st.session_state.pop(_k(mid, "reprise_erreur"), None)
@@ -391,10 +427,15 @@ def render(m: dict, enregistrer_meta, rafraichir) -> None:
 
 
 def _envoyer(m: dict, mid: str, publier: bool, enregistrer_meta, rafraichir) -> None:
+    responsables, sourceurs = equipe_choisie(mid)
+    if len(responsables) != 1:
+        st.error("Choisissez un responsable de chasse, et un seul, dans l'onglet Interlocuteurs.")
+        return
     offre = collecter(mid)
     logo = st.session_state.get(_k(mid, "logo"))
     pdf = st.session_state.get(_k(mid, "pdf"))
-    mandat = {**m, "site": offre}
+    # Le responsable et les sourceurs SONT le responsable et les propriétaires du mandat.
+    mandat = {**m, "site": offre, "responsable": responsables[0], "proprietaires": responsables + sourceurs}
     try:
         with st.spinner("Mise à jour du site…"):
             etat = site.enregistrer(

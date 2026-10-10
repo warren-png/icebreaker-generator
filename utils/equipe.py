@@ -20,7 +20,15 @@ REPLI = {
                "tel": "06 50 60 22 61", "titre": "Président"},
     "Helder": {"nom": "Helder Alturas", "linkedin": "https://www.linkedin.com/in/helder-alturas-48010463/",
                "tel": "06 22 30 96 11", "titre": "Directeur Général"},
+    "Bruno": {"nom": "Bruno Dos Santos", "linkedin": "https://www.linkedin.com/in/bruno-dos-santos-86b878184/",
+              "tel": "06 76 77 94 26", "titre": ""},
 }
+
+# L'équipe qui mène un mandat : chacun peut être responsable de chasse ou
+# sourceur. Les documents commerciaux (contrat, témoignage, références)
+# restent signés de Warren ou d'Helder.
+EQUIPE = ("Warren", "Helder", "Bruno")
+COMMERCIAUX = ("Warren", "Helder")
 
 
 def _tel_lisible(tel: str) -> str:
@@ -40,21 +48,23 @@ def _du_site() -> list[dict]:
 
 
 def fiche(prenom: str) -> dict:
-    """{nom, linkedin, tel, titre} d'un responsable, le site d'abord."""
+    """{nom, email, linkedin, tel, titre} d'un consultant, le site d'abord."""
     base = dict(REPLI.get(prenom, {"nom": prenom, "linkedin": "", "tel": "", "titre": ""}))
     c = next((x for x in _du_site() if (x.get("prenom") or "").lower() == prenom.lower()), None)
+    base["email"] = ""
     if c:
         base["nom"] = f"{c.get('prenom', '')} {c.get('nom', '')}".strip() or base["nom"]
+        base["email"] = c.get("email") or ""
         base["linkedin"] = c.get("linkedin") or base["linkedin"]
         base["tel"] = _tel_lisible(c.get("telephone") or "") or base["tel"]
     return base
 
 
-def commerciaux(noms_complets: bool = False) -> dict:
+def commerciaux(noms_complets: bool = False, prenoms: tuple = COMMERCIAUX) -> dict:
     """Le dictionnaire des responsables, à la forme qu'attendent les rubriques :
     clé « Warren » (ou « Warren Elbaz »), valeur {linkedin, tel, titre}."""
     out = {}
-    for prenom in REPLI:
+    for prenom in prenoms:
         f = fiche(prenom)
         out[f["nom"] if noms_complets else prenom] = {"linkedin": f["linkedin"], "tel": f["tel"], "titre": f["titre"]}
     return out

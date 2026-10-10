@@ -90,6 +90,7 @@ I. RÈGLES HTML — NON NÉGOCIABLES (FORME INTOUCHABLE)
    Remplacer {{PIED_DE_PAGE_COMMERCIAL}} dans les deux pages par :
    - "Commercial : Warren" → §PIED_WARREN§
    - "Commercial : Helder" → §PIED_HELDER§
+   - "Commercial : Bruno" → §PIED_BRUNO§
    C'est la SEULE mention du cabinet autorisée dans tout le dossier. Elle appartient au gabarit : tu la reproduis à l'identique, sans jamais la commenter ni l'étendre.
 
 5. OUTPUT
@@ -235,7 +236,7 @@ PAGE 2 — SCORE CARD + PROJETS PHARES (les deux sur la même page A4, dans cet 
 # Le pied de page reprend la fiche consultant du site (utils/equipe.py).
 from utils import equipe as _equipe
 DOSSIER_SYSTEM_PROMPT = DOSSIER_SYSTEM_PROMPT.replace("§PIED_WARREN§", _equipe.ligne_pied_de_page("Warren")).replace(
-    "§PIED_HELDER§", _equipe.ligne_pied_de_page("Helder"))
+    "§PIED_HELDER§", _equipe.ligne_pied_de_page("Helder")).replace("§PIED_BRUNO§", _equipe.ligne_pied_de_page("Bruno"))
 
 REVISION_SYSTEM_PROMPT = """Tu corriges les dossiers de présentation candidats d'Entourage Recrutement, cabinet de chasse spécialisé en finance et technologie.
 Tu reçois les pages 1 et 2 d'un dossier HTML existant (page 1 : Analyse + Points Clés ; page 2 : Score Card + Projets Phares), le brief initial, les notes par critère, et des instructions de correction.
@@ -914,7 +915,7 @@ with col_left:
     )
     commercial = st.radio(
         "Responsable de chasse",
-        ["Warren", "Helder"],
+        ["Warren", "Helder", "Bruno"],
         horizontal=True,
         key="dossier_commercial",
     )
@@ -935,7 +936,7 @@ with col_right:
             i = st.session_state.get("dossier_scorecard_saved")
             if i is not None and i < len(saved_scorecards):
                 resp = saved_scorecards[i]["mandat"].get("responsable")
-                if resp in ("Warren", "Helder"):
+                if resp in ("Warren", "Helder", "Bruno"):
                     st.session_state["dossier_commercial"] = resp
 
         saved_idx = st.selectbox(

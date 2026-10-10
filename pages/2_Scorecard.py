@@ -28,7 +28,7 @@ if not check_password():
 
 # Les coordonnées viennent de la fiche consultant du site (utils/equipe.py).
 from utils import equipe
-COMMERCIAUX = equipe.commerciaux()
+COMMERCIAUX = equipe.commerciaux(prenoms=equipe.EQUIPE)
 
 # ---------------------------------------------------------------------------
 # LOGO — resize via Pillow (cached), sidebar upload en override
